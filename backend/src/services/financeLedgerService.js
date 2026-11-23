@@ -207,6 +207,7 @@ async function loadCostInputs(whereProject) {
         realizedAmount: true,
         supplier: true,
         paymentType: true,
+        currency: true,
       },
     }),
     prisma.purchaseOrder.findMany({
@@ -232,6 +233,7 @@ async function loadCostInputs(whereProject) {
         // (purchaseTotals), não de `totalValue`.
         requestType: true,
         paymentMode: true,
+        requestedByName: true,
         paymentTerm: true,
         creditDays: true,
         dueDate: true,
@@ -415,8 +417,29 @@ function isMerchandisePayment(payment, merchNeedIds) {
  * pago). O que ainda não saiu do caixa vai para `committed`, e o que já saiu
  * mas aguarda confirmação do financeiro fica em `pending`.
  */
-function aggregateCosts(projectId, inputs) {
+/**
+ * Custos de uma obra.
+ *
+ * Com `currency` (a moeda da obra), os pedidos extra, os lançamentos, as ordens
+ * de compra e os fretes numa **outra** moeda não entram nos totais — somar
+ * kwanzas a dólares dava um custo sem sentido — e ficam em `otherCurrency`,
+ * por moeda, para o ecrã os mostrar à parte. Não se converte: converter um
+ * custo antigo pelo câmbio de hoje não dá o custo que foi.
+ */
+function aggregateCosts(projectId, inputs, currency = null) {
   const bucket = newBucket({ stockConsumption: 0, atm: 0, stockPurchases: 0, realizedVat: 0, committedVat: 0 });
+  const obraMoeda = currency ? String(currency).toUpperCase() : null;
+  const outras = {};
+  /** Fica de fora (e conta à parte) o que está noutra moeda. */
+  const noutraMoeda = (moeda, realizado, comprometido) => {
+    const m = String(moeda || "").toUpperCase();
+    if (!obraMoeda || !m || m === obraMoeda) return false;
+    const x = (outras[m] = outras[m] || { realized: 0, committed: 0, count: 0 });
+    x.realized += realizado;
+    x.committed += comprometido;
+    x.count += 1;
+    return true;
+  };
 
   inputs.costPayments
     .filter((p) => p.projectId === projectId && p.status !== "CANCELADO")
@@ -451,6 +474,7 @@ function aggregateCosts(projectId, inputs) {
       // Líquido, igual aos pagamentos (que entram pelo `cashDueOf`): a retenção
       // não vai para o beneficiário, e o agregado não pode ter duas convenções.
       const amount = extraPayableAmount(e);
+      if (noutraMoeda(e.currency, e.status === "PAGO" ? amount : 0, e.status === "APROVADO" ? amount : 0)) return;
       if (e.status === "PAGO") {
         bucket.realized += amount;
         bucket.extraRequests += amount;
@@ -464,6 +488,15 @@ function aggregateCosts(projectId, inputs) {
     .forEach((t) => {
       const amount = toNumber(t.amount);
       const realized = toNumber(t.realizedAmount) || amount;
+      if (
+        noutraMoeda(
+          t.currency,
+          t.status === "PAID" ? realized : 0,
+          t.status !== "PAID" && t.status !== "CANCELLED" ? amount : 0
+        )
+      ) {
+        return;
+      }
       if (t.status === "PAID") {
         bucket.realized += realized;
         bucket.projectTransactions += realized;
@@ -476,6 +509,7 @@ function aggregateCosts(projectId, inputs) {
     .filter((o) => o.projectId === projectId)
     .forEach((o) => {
       const value = toNumber(o.totalValue);
+      if (noutraMoeda(o.currency, 0, value)) return;
       bucket.committed += value;
       bucket.purchaseOrders += value;
     });
@@ -484,6 +518,7 @@ function aggregateCosts(projectId, inputs) {
     .filter((a) => a.projectId === projectId)
     .forEach((a) => {
       const value = toNumber(a.amount);
+      if (noutraMoeda(a.freightOrder?.currency, 0, value)) return;
       bucket.committed += value;
       bucket.freight += value;
     });
@@ -510,6 +545,9 @@ function aggregateCosts(projectId, inputs) {
     realized: round2(bucket.realized),
     pending: round2(bucket.pending),
     committed: round2(bucket.committed),
+    otherCurrency: Object.fromEntries(
+      Object.entries(outras).map(([m, x]) => [m, { realized: round2(x.realized), committed: round2(x.committed), count: x.count }])
+    ),
     realizedVat: round2(bucket.realizedVat),
     committedVat: round2(bucket.committedVat),
     // Mercadoria paga ainda em stock (não é custo da obra até sair para obra).
@@ -664,7 +702,7 @@ async function buildProjectFinancials({ projectIds, includeInactive = true } = {
     const projectTasks = tasks.filter((t) => t.projectId === project.id);
 
     const { saleBudget, saleBudgetSource } = computeSaleBudget(projectTasks, project);
-    const costInputs = aggregateCosts(project.id, inputs);
+    const costInputs = aggregateCosts(project.id, inputs, currency);
     const costPlan = costBudgetByProject.get(project.id) || { budget: 0, committedMarket: 0, settled: 0 };
 
     const invoiced = round2(projectInvoices.reduce((a, i) => a + toNumber(i.grossAmount), 0));
@@ -720,6 +758,8 @@ async function buildProjectFinancials({ projectIds, includeInactive = true } = {
       costs: {
         realized: costInputs.realized,
         pending: costInputs.pending,
+        // Custos noutra moeda que não a da obra: fora dos totais, por moeda.
+        otherCurrency: costInputs.otherCurrency || {},
         // Comprometido (ainda não gasto) = pedidos de compra abertos +
         // pedidos extra aprovados por pagar + lançamentos por liquidar.
         committed: costInputs.committed,
@@ -902,6 +942,8 @@ function purchaseRequestFields(order) {
     fundName: order.pettyCashFund?.name || null,
     beneficiary: PT.beneficiary(order),
     shortDescription: PT.shortDescription(order),
+    // Quem pediu: o P1 do protótipo filtra por «Pedido por».
+    requestedBy: order.requestedByName || null,
     derivedStatus: status.code,
     derivedStatusLabel: status.label,
     derivedStatusSeverity: status.severity,
@@ -1089,7 +1131,10 @@ async function buildCostLedger({ projectId, status, source, from, to } = {}) {
       payable: paid ? 0 : round2(t.amount),
       dueDate: t.date,
       payStage: paid ? null : "A_PAGAR",
-      currency: project.currency || "AOA",
+      // A moeda do próprio lançamento, como nos pedidos extra e nas ordens de
+      // compra. Antes era sempre a da obra: os lançamentos em kwanzas da obra
+      // do Sumbe (em dólares) apareciam como 3 474 000 USD.
+      currency: t.currency || project.currency || "AOA",
     });
   });
 

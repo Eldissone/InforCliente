@@ -16,6 +16,7 @@ import { checkAuth } from "/services/auth.js";
 import { guardPageAccess, initPermissionLayer, can } from "/shared/permissions.js";
 import { wireLogout, wireUsersNav } from "/shared/session.js";
 import { initMobileMenu } from "/shared/ui.js";
+import { ligarAcoesEcra, VOLTAR_HTML, ACOES_HTML } from "/shared/acoesEcra.js";
 
 checkAuth();
 
@@ -44,7 +45,56 @@ export async function initComercialPage({ perm = "view", onReady } = {}) {
   }
 
   if (typeof onReady === "function") await onReady();
+  ligarAcoesComercial();
   return true;
+}
+
+/**
+ * «← Voltar», «? Dúvidas», «⤓ PDF» e «⤓ Word», como no protótipo.
+ *
+ * Os ecrãs do Comercial redesenham-se a si próprios (trocar de folha no
+ * orçamento, filtrar a lista), por isso as acções voltam a pôr-se sempre que o
+ * cabeçalho do ecrã muda. O cabeçalho do ecrã é o `.cm-head` com o título em
+ * `h2` (no orçamento, o `h1` é o do orçamento inteiro, não o da folha).
+ */
+function cabecalhoComercial() {
+  const heads = [...document.querySelectorAll("main .cm-head")].filter((h) => h.offsetParent !== null);
+  return heads.find((h) => h.querySelector("h2")) || heads[0] || null;
+}
+
+function ligarAcoesComercial() {
+  const por = () => {
+    const h = cabecalhoComercial();
+    if (!h || h.querySelector(".pexp")) return;
+    h.insertAdjacentHTML("beforeend", ACOES_HTML);
+    // O «Voltar» só quando o ecrã não tem já o seu («‹ Todos os orçamentos»).
+    const temVoltar = [...document.querySelectorAll("main button, main a")].some(
+      (b) => b.offsetParent !== null && /^\s*‹/.test(b.textContent || "")
+    );
+    if (!temVoltar && !document.querySelector("main .pexp-voltar")) {
+      h.insertAdjacentHTML("beforebegin", VOLTAR_HTML);
+    }
+  };
+  ligarAcoesEcra({
+    info: () => {
+      const h = cabecalhoComercial();
+      const num = h?.querySelector(".cm-head-num")?.textContent?.trim() || "";
+      return {
+        // Só é código quando é curto (03, 16, T3); o número do orçamento vai à parte.
+        codigo: num.length <= 4 ? num : "",
+        titulo: (h?.querySelector("h2, h1")?.textContent || document.title.replace(/^Info Gestor — /, "")).trim(),
+        lead: h?.querySelector(".cm-lead")?.textContent?.trim() || document.querySelector("main .cm-lead")?.textContent?.trim() || "",
+        area: "Comercial",
+        extra: [["Orçamento", document.querySelector("main .cm-head .cm-head-num")?.textContent?.trim() || ""]].filter(
+          (x) => x[1] && x[1].length > 4
+        ),
+      };
+    },
+    raiz: () => document.querySelector("main") || document.body,
+  });
+  por();
+  const main = document.querySelector("main");
+  if (main) new MutationObserver(() => por()).observe(main, { childList: true, subtree: true });
 }
 
 /** O utilizador pode criar/alterar no módulo Comercial? */

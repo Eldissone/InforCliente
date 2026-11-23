@@ -8,6 +8,8 @@ const catalog = require("../services/ai/catalog");
 const { listProviders, getProvider } = require("../services/ai/providers");
 const { getAdminView, updateSettings, getSettings, resolveApiKey } = require("../services/ai/settingsService");
 const { usageSummary } = require("../services/ai/usageService");
+const PAGE_HELP = require("../services/ai/pageHelp");
+const { generate } = require("../services/ai/client");
 
 /**
  * Gestão da IA (separador "Inteligência Artificial" da Gestão do Sistema).
@@ -538,6 +540,49 @@ aiRoutes.post(
       details: { alertId: alert.id, title: alert.title },
     });
     return res.json({ ok: true });
+  })
+);
+
+/**
+ * «? Dúvidas» — o assistente da página em que o utilizador está.
+ *
+ * O ecrã manda só a estrutura (títulos, colunas, botões, notas), sem valores;
+ * por isso não precisa de nenhuma categoria de dados.
+ */
+aiRoutes.post(
+  "/page-help",
+  notCliente,
+  asyncHandler(async (req, res) => {
+    const body = z
+      .object({
+        pagina: z.object({
+          codigo: z.string().max(12).optional().nullable(),
+          titulo: z.string().min(1).max(160),
+          lead: z.string().max(1200).optional().nullable(),
+          area: z.string().max(40).optional().nullable(),
+        }),
+        estrutura: z.string().max(12000).default(""),
+        pergunta: z.string().trim().min(1).max(1000),
+        historico: z.array(z.object({ r: z.enum(["u", "a"]), t: z.string().max(4000) })).max(12).default([]),
+      })
+      .parse(req.body || {});
+    try {
+      const out = await generate({
+        feature: PAGE_HELP.FEATURE,
+        userId: req.user.sub,
+        categories: [],
+        system: PAGE_HELP.SYSTEM,
+        prompt: PAGE_HELP.buildPrompt(body),
+        maxOutputTokens: 900,
+        timeoutMs: 45_000,
+        io: req.app.get("io"),
+      });
+      return res.json({ resposta: String(out.text || "").trim(), modelo: out.model || null });
+    } catch (err) {
+      return res
+        .status(err.status || 503)
+        .json({ error: err.code || "IA_INDISPONIVEL", errors: [err.message || "O assistente não está disponível."] });
+    }
   })
 );
 

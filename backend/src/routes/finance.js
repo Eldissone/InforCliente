@@ -30,6 +30,44 @@ const {
 } = require("../services/financeLedgerService");
 const { listPendingFinanceScheduling } = require("../services/needInstallmentSchedulingService");
 const { syncNeedPaymentStatus } = require("../services/needPaymentStatusService");
+const FCAL = require("../services/financeCalendarService");
+const { buildClientAccounts, clientStatement } = require("../services/finance/clientAccounts");
+const FLX = require("../services/finance/flows");
+const TES = require("../services/finance/treasury");
+const { treasurySummary } = TES;
+const { costCenterSummary } = require("../services/finance/costCenters");
+const { dscLines, DECISOES: DSC_DECISOES } = require("../services/finance/dsc");
+const OBR = require("../services/finance/projects");
+const DSB = require("../services/finance/dashboard");
+const { planear } = require("../services/finance/autosPrevistos");
+
+/** Autos previstos (R3) com a forma dos autos, para a previsão de recebimentos. */
+async function loadPlannedAsReports(where = {}) {
+  const rows = await prisma.plannedMeasurement.findMany({
+    where,
+    select: {
+      id: true,
+      number: true,
+      plannedDate: true,
+      value: true,
+      project: { select: { id: true, code: true, name: true, currency: true, client: { select: { id: true, name: true } } } },
+    },
+    orderBy: { plannedDate: "asc" },
+  });
+  return rows.map((r) => ({
+    id: `plan-${r.id}`,
+    planId: r.id,
+    planned: true,
+    reportNumber: String(r.number).padStart(2, "0"),
+    reportDate: r.plannedDate,
+    periodValTotal: r.value,
+    project: r.project,
+  }));
+}
+const { custosEmpresa } = require("../services/finance/companyCosts");
+
+/** Tipos de fatura do R1 (protótipo): Auto de Medição, Fatura Única/Final, Marco, Adiantamento, Retenção, Devolução de Retenção, Revisão de Preços, Serviços. */
+const INVOICE_TYPES = ["AM", "FU", "MC", "ADI", "RET", "DRET", "REV", "SERV"];
 
 const financeRoutes = express.Router();
 
@@ -151,6 +189,8 @@ function mapInvoice(invoice) {
       : Number(invoice.documentSize),
     documentUploadedAt: invoice.documentUploadedAt || null,
     hasDocument: Boolean(invoice.documentPath),
+    // Tipo de fatura; as antigas com auto contam como «AM».
+    invoiceType: invoice.invoiceType || (invoice.measurementId ? "AM" : null),
     scanSource: invoice.scanSource || null,
     scanModel: invoice.scanModel || null,
   };
@@ -827,6 +867,47 @@ financeRoutes.get(
     const items = rows.map(mapInvoice);
     const filtered = status ? items.filter((i) => i.status === status) : items;
 
+    // R1: recebido no mês corrente e autos aprovados ainda sem fatura («Previsto»).
+    const mesAtual = todayKeyLocal().slice(0, 7);
+    const [ry, rm] = mesAtual.split("-").map(Number);
+    const projWhere = { ...(projectId ? { id: String(projectId) } : {}), ...(clientId ? { clientId: String(clientId) } : {}) };
+    const [recMes, autosSemFatura] = await Promise.all([
+      prisma.invoiceReceipt.findMany({
+        where: {
+          receivedDate: { gte: new Date(Date.UTC(ry, rm - 1, 1)), lt: new Date(Date.UTC(ry, rm, 1)) },
+          invoice: { ...(projectId ? { projectId: String(projectId) } : {}), ...(clientId ? { clientId: String(clientId) } : {}) },
+        },
+        select: { amount: true, invoice: { select: { project: { select: { currency: true } } } } },
+      }),
+      prisma.measurementReport.findMany({
+        where: { status: "APPROVED", invoices: { none: {} }, project: projWhere },
+        select: {
+          id: true,
+          reportNumber: true,
+          reportDate: true,
+          periodValTotal: true,
+          project: { select: { id: true, code: true, name: true, currency: true, client: { select: { id: true, name: true } } } },
+        },
+        orderBy: { reportDate: "asc" },
+      }),
+    ]);
+    const receivedThisMonth = {};
+    for (const r of recMes) {
+      const m = String(r.invoice?.project?.currency || "AOA").toUpperCase();
+      receivedThisMonth[m] = round2((receivedThisMonth[m] || 0) + toNumber(r.amount));
+    }
+    const planeados = await loadPlannedAsReports(projectId || clientId ? { project: projWhere } : {});
+    const forecast = [...autosSemFatura, ...planeados].map((a) => ({
+      planned: Boolean(a.planned),
+      id: a.id,
+      reportNumber: a.reportNumber,
+      reportDate: a.reportDate,
+      value: round2(toNumber(a.periodValTotal)),
+      project: a.project,
+      client: a.project?.client || null,
+      currency: a.project?.currency || "AOA",
+    }));
+
     const totals = filtered.reduce(
       (acc, i) => {
         acc.gross += i.grossAmount;
@@ -843,7 +924,7 @@ financeRoutes.get(
     );
     Object.keys(totals).forEach((k) => (totals[k] = round2(totals[k])));
 
-    return res.json({ items: filtered, totals });
+    return res.json({ items: filtered, totals, receivedThisMonth, forecast, invoiceTypes: INVOICE_TYPES });
   })
 );
 
@@ -857,6 +938,7 @@ financeRoutes.post(
         clientId: z.string().nullable().optional(),
         measurementId: z.string().nullable().optional(),
         docNumber: z.string().nullable().optional(),
+        invoiceType: z.enum(INVOICE_TYPES).nullable().optional(),
         docDate: z.string(),
         dueDate: z.string().nullable().optional(),
         grossAmount: z.number().positive(),
@@ -935,6 +1017,7 @@ financeRoutes.post(
         clientId: body.clientId ?? project.clientId ?? null,
         measurementId: body.measurementId || null,
         docNumber,
+        invoiceType: body.invoiceType || (body.measurementId ? "AM" : null),
         docDate,
         dueDate,
         grossAmount: amounts.grossAmount,
@@ -1008,6 +1091,7 @@ financeRoutes.patch(
         clientId: z.string().nullable().optional(),
         measurementId: z.string().nullable().optional(),
         docNumber: z.string().nullable().optional(),
+        invoiceType: z.enum(INVOICE_TYPES).nullable().optional(),
         docDate: z.string().optional(),
         dueDate: z.string().nullable().optional(),
         grossAmount: z.number().positive().optional(),
@@ -1061,6 +1145,7 @@ financeRoutes.patch(
         data: {
           ...(body.clientId !== undefined ? { clientId: body.clientId } : {}),
           ...(body.docNumber !== undefined ? { docNumber: body.docNumber } : {}),
+          ...(body.invoiceType !== undefined ? { invoiceType: body.invoiceType } : {}),
           ...(body.dueDate !== undefined ? { dueDate: parseOptionalDate(body.dueDate) } : {}),
           ...(body.notes !== undefined ? { notes: body.notes } : {}),
         },
@@ -1116,6 +1201,7 @@ financeRoutes.patch(
         ...(body.clientId !== undefined ? { clientId: body.clientId } : {}),
         ...(body.measurementId !== undefined ? { measurementId: body.measurementId } : {}),
         ...(body.docNumber !== undefined ? { docNumber: body.docNumber } : {}),
+        ...(body.invoiceType !== undefined ? { invoiceType: body.invoiceType } : {}),
         ...(body.docDate ? { docDate: parseOptionalDate(body.docDate) } : {}),
         ...(body.dueDate !== undefined ? { dueDate: parseOptionalDate(body.dueDate) } : {}),
         ...(body.notes !== undefined ? { notes: body.notes } : {}),
@@ -2140,6 +2226,7 @@ async function buildPayables(ledgerArg) {
       shortDescription: e.shortDescription || null,
       derivedStatusLabel: e.derivedStatusLabel || null,
       derivedStatusSeverity: e.derivedStatusSeverity || null,
+      requestedBy: e.requestedBy || null,
     }))
     .sort((a, b) => (a.dueDate ? new Date(a.dueDate) : Infinity) - (b.dueDate ? new Date(b.dueDate) : Infinity));
 }
@@ -2175,12 +2262,9 @@ financeRoutes.get(
     // o consumo de stock não é pagamento, a compra de mercadoria é.
     const monthly = lastMonthKeys(12).map((key) => ({ key, label: monthLabelOf(key), paid: 0 }));
     const index = new Map(monthly.map((m, i) => [m.key, i]));
-    ledger.items.forEach((e) => {
-      if (e.source === "CONSUMO_STOCK") return;
-      const value = e.kind === "STOCK" ? toNumber(e.stockValue) : toNumber(e.paidAmount);
-      if (!(value > 0)) return;
-      const i = index.get(monthKeyOf(e.paidAt || e.date));
-      if (i !== undefined) monthly[i].paid = round2(monthly[i].paid + value);
+    FLX.paidOutflows(ledger.items).forEach(({ valor, data }) => {
+      const i = index.get(monthKeyOf(data));
+      if (i !== undefined) monthly[i].paid = round2(monthly[i].paid + valor);
     });
     return res.json({
       items,
@@ -2259,6 +2343,861 @@ financeRoutes.get(
   })
 );
 
+/** AAAA-MM-DD de hoje, na hora local — como o `startOfToday` da Área Financeira. */
+function todayKeyLocal() {
+  const a = new Date();
+  return `${a.getFullYear()}-${String(a.getMonth() + 1).padStart(2, "0")}-${String(a.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * As linhas do Calendário Financeiro: a pagar, a receber e os autos aprovados
+ * sem fatura. Servem o calendário e os mapas de fluxos.
+ */
+async function loadCalendarItems(hoje, ledgerArg) {
+  const [payables, receivables, autos] = await Promise.all([
+    buildPayables(ledgerArg),
+    buildReceivables(),
+    prisma.measurementReport.findMany({
+      where: { status: "APPROVED", invoices: { none: {} } },
+      select: {
+        id: true,
+        reportNumber: true,
+        reportDate: true,
+        periodValTotal: true,
+        project: { select: { code: true, name: true, currency: true, client: { select: { name: true } } } },
+      },
+      orderBy: { reportDate: "asc" },
+    }),
+  ]);
+  // Os autos previstos (R3) entram como os autos por faturar.
+  const previstos = await loadPlannedAsReports();
+  return {
+    itens: [
+      ...FCAL.fromPayables(payables, hoje),
+      ...FCAL.fromReceivables(receivables, hoje),
+      ...FCAL.fromOpenMeasurements([...autos, ...previstos], hoje, DEFAULT_INVOICE_TERM_DAYS),
+    ],
+    fontes: { pagar: payables.length, faturas: receivables.length, autos: autos.length },
+  };
+}
+
+/**
+ * Calendário Financeiro (F1 do protótipo; P2 e R2 são o mesmo, só de um lado):
+ * a pagar, a receber e o previsto (autos aprovados sem fatura), numa lista só,
+ * pela data em que vencem. O ecrã agrupa por mês ou por semana.
+ */
+financeRoutes.get(
+  "/calendar",
+  view,
+  asyncHandler(async (_req, res) => {
+    const hoje = todayKeyLocal();
+    const { itens, fontes } = await loadCalendarItems(hoje);
+    return res.json({ hoje, prazoPadraoDias: DEFAULT_INVOICE_TERM_DAYS, itens, fontes });
+  })
+);
+
+/**
+ * F0 Painel Financeiro (`V.fhome` do protótipo): resultado do período e posição
+ * atual. `?p=mes|trimestre|ano|12m|intervalo&ano=&mes=AAAA-MM&de=&ate=&obra=&moeda=`.
+ */
+financeRoutes.get(
+  "/dashboard",
+  view,
+  asyncHandler(async (req, res) => {
+    const hoje = todayKeyLocal();
+    const q = req.query;
+    const okD = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || "")) ? String(v) : null);
+    const P = DSB.periodo({
+      p: ["mes", "trimestre", "ano", "12m", "intervalo"].includes(q.p) ? q.p : "ano",
+      ano: /^\d{4}$/.test(String(q.ano || "")) ? String(q.ano) : null,
+      mes: /^\d{4}-\d{2}$/.test(String(q.mes || "")) ? String(q.mes) : null,
+      de: okD(q.de),
+      ate: okD(q.ate),
+      hoje,
+    });
+    const ledger = await buildCostLedger();
+    const [invoices, receipts, porReceber, balances, fin] = await Promise.all([
+      prisma.invoice.findMany({
+        select: { docDate: true, grossAmount: true, vatAmount: true, projectId: true, project: { select: { currency: true } } },
+      }),
+      prisma.invoiceReceipt.findMany({
+        select: { amount: true, receivedDate: true, invoice: { select: { projectId: true, project: { select: { currency: true } } } } },
+      }),
+      buildReceivables(),
+      loadBankBalances(),
+      buildProjectFinancials({ includeInactive: false }),
+    ]);
+    const [porPagar, movimentos] = await Promise.all([
+      buildPayables(ledger),
+      // Só contas bancárias (os cartões são caixa pequena, não extrato do banco).
+      prisma.bankMovement.findMany({
+        where: { cardId: null, movementDate: { gte: new Date(`${P.de}T00:00:00Z`), lte: new Date(`${P.ate}T23:59:59Z`) } },
+        select: { movementType: true, direction: true, amount: true, movementDate: true },
+      }),
+    ]);
+    const moedas = [...new Set(fin.items.map((o) => o.currency).concat(balances.items.map((b) => b.currency)).map((m) => String(m || "AOA").toUpperCase()))]
+      .sort((a, b) => (a === "AOA" ? -1 : b === "AOA" ? 1 : a.localeCompare(b)));
+    const moeda = String(q.moeda || "AOA").toUpperCase();
+    const obra = q.obra ? String(q.obra) : null;
+    const base = {
+      moeda,
+      obra,
+      faturas: invoices.map((i) => ({ docDate: i.docDate, gross: i.grossAmount, vat: i.vatAmount, projectId: i.projectId, moeda: i.project?.currency })),
+      recebimentos: receipts.map((r) => ({ receivedDate: r.receivedDate, amount: r.amount, projectId: r.invoice?.projectId, moeda: r.invoice?.project?.currency })),
+      saidas: FLX.paidOutflows(ledger.items),
+      porReceber: porReceber.map((x) => ({ missingAmount: x.missingAmount, daysLate: x.daysLate, projectId: x.project?.id || x.projectId, moeda: x.project?.currency })),
+      porPagar: porPagar.map((x) => ({ payable: x.payable, daysLate: x.daysLate, stage: x.stage, projectId: x.projectId, moeda: x.currency })),
+      saldos: balances.items,
+      obras: fin.items,
+    };
+    const dados = DSB.painel({ P, ...base });
+    const anterior = DSB.painel({ P: DSB.periodoAnterior(P), ...base }).resultado;
+    return res.json({
+      anterior,
+      // Os movimentos bancários são em kwanzas; numa obra só, não há fluxos por natureza.
+      fluxos: moeda === "AOA" && !obra ? DSB.fluxosNatureza(movimentos, P) : null,
+      hoje,
+      moedas: moedas.length ? moedas : ["AOA"],
+      listaObras: fin.items.map((o) => ({ id: o.project.id, codigo: o.project.code, nome: o.project.name, moeda: o.currency })),
+      ...dados,
+    });
+  })
+);
+
+/** A1 Custos da Empresa (`?de&ate&base=aprov|pago&t=SEDE|FROTA|OBRA&moeda`). */
+financeRoutes.get(
+  "/company-costs",
+  view,
+  asyncHandler(async (req, res) => {
+    const q = req.query;
+    const hoje = todayKeyLocal();
+    const okD = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || "")) ? String(v) : null);
+    const F = {
+      de: okD(q.de) || `${hoje.slice(0, 4)}-01-01`,
+      ate: okD(q.ate),
+      base: q.base === "pago" ? "pago" : "aprov",
+      t: ["SEDE", "FROTA", "OBRA"].includes(q.t) ? q.t : "",
+      moeda: String(q.moeda || "AOA").toUpperCase(),
+    };
+    const [ledger, gerais] = await Promise.all([
+      buildCostLedger(),
+      prisma.extraRequest.findMany({
+        where: { type: "GERAL", status: { in: ["PAGO", "APROVADO"] } },
+        select: { amount: true, currency: true, status: true, paidAt: true, approvedAt: true, requestedAt: true, generalCostCenter: { select: { code: true, name: true, kind: true } } },
+      }),
+    ]);
+    const moedas = [...new Set(ledger.items.map((e) => String(e.currency || "AOA").toUpperCase()))].sort((a, b) =>
+      a === "AOA" ? -1 : b === "AOA" ? 1 : a.localeCompare(b)
+    );
+    return res.json({
+      hoje,
+      moedas: moedas.length ? moedas : ["AOA"],
+      ...custosEmpresa({
+        ledger: ledger.items,
+        pagos: FLX.paidOutflows(ledger.items),
+        gerais: gerais.map((g) => ({
+          amount: g.amount,
+          paid: g.status === "PAGO",
+          date: g.status === "PAGO" ? g.paidAt || g.approvedAt : g.approvedAt || g.requestedAt,
+          center: g.generalCostCenter,
+          currency: g.currency || "AOA",
+        })),
+        F,
+      }),
+    });
+  })
+);
+
+// ─── F-2: conta corrente de clientes, contas e saldos, fluxos, centros de custo, DSC ───
+
+/** Faturas com o que é preciso para a conta corrente: valor líquido, vencimento efetivo e recebimentos. */
+async function loadInvoicesForAccounts() {
+  const rows = await prisma.invoice.findMany({
+    include: {
+      client: { select: { id: true, name: true } },
+      project: { select: { code: true, name: true, currency: true, client: { select: { id: true, name: true } } } },
+      measurement: { select: { reportNumber: true } },
+      receipts: { select: { amount: true, receivedDate: true, method: true }, orderBy: { receivedDate: "asc" } },
+    },
+  });
+  return rows.map((inv) => {
+    const m = mapInvoice(inv);
+    return {
+      id: inv.id,
+      docNumber: inv.docNumber,
+      docDate: inv.docDate,
+      due: m.effectiveDueDate,
+      net: m.netAmount,
+      received: m.receivedAmount,
+      currency: inv.project?.currency || "AOA",
+      client: m.client,
+      project: inv.project,
+      measurement: inv.measurement,
+      receipts: inv.receipts,
+    };
+  });
+}
+
+/** R4 Conta Corrente de Clientes — saldo e antiguidade por cliente. */
+financeRoutes.get(
+  "/client-accounts",
+  view,
+  asyncHandler(async (req, res) => {
+    const hoje = todayKeyLocal();
+    const invoices = await loadInvoicesForAccounts();
+    return res.json({ hoje, ...buildClientAccounts(invoices, hoje, req.query.moeda) });
+  })
+);
+
+/** R4 — extrato de um cliente (`?cliente=` é o id, ou `nome:<nome>` sem cliente registado). */
+financeRoutes.get(
+  "/client-accounts/statement",
+  view,
+  asyncHandler(async (req, res) => {
+    const chave = String(req.query.cliente || "");
+    if (!chave) return res.status(400).json({ error: "CLIENTE_EM_FALTA", errors: ["Indique o cliente."] });
+    const hoje = todayKeyLocal();
+    const invoices = await loadInvoicesForAccounts();
+    const moeda = String(req.query.moeda || "AOA").toUpperCase();
+    const conta = buildClientAccounts(invoices, hoje, moeda).clientes.find((c) => (c.id || `nome:${c.nome}`) === chave);
+    if (!conta) return res.status(404).json({ error: "NOT_FOUND", errors: [`Cliente sem faturas em ${moeda}.`] });
+    return res.json({ hoje, moeda, conta, linhas: clientStatement(invoices, chave, hoje, moeda) });
+  })
+);
+
+/** T1 Contas e Saldos (`?mes=AAAA-MM`, por omissão o atual). */
+financeRoutes.get(
+  "/treasury/summary",
+  view,
+  asyncHandler(async (req, res) => {
+    const hoje = todayKeyLocal();
+    const pedido = String(req.query.mes || "");
+    const q = req.query;
+    const okD = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || "")) ? String(v) : undefined);
+    const periodo = TES.tesRange({
+      p: ["dia", "mes", "ano", "12m", "int"].includes(q.p) ? q.p : "mes",
+      d: okD(q.d),
+      mes: /^\d{4}-\d{2}$/.test(pedido) ? pedido : undefined,
+      ano: /^\d{4}$/.test(String(q.ano || "")) ? String(q.ano) : undefined,
+      d1: okD(q.d1),
+      d2: okD(q.d2),
+      hoje,
+    });
+    const mes = periodo.ate.slice(0, 7);
+    const [balances, movimentos] = await Promise.all([
+      loadBankBalances(),
+      prisma.bankMovement.findMany({
+        where: { cardId: { not: null } },
+        select: { cardId: true, direction: true, amount: true, movementDate: true, movementType: true, costAssigned: true },
+      }),
+    ]);
+    return res.json({
+      hoje,
+      asOf: balances.asOf,
+      ...treasurySummary({ contas: balances.items, movimentos, mes, periodo, moeda: req.query.moeda }),
+    });
+  })
+);
+
+/**
+ * F2 Mapa de Fluxos e T8 Mapa de Fluxo de Caixa: o realizado (recebimentos e
+ * pagamentos já feitos), os compromissos (por receber e por pagar) e os
+ * previstos (autos sem fatura), mais o saldo das contas hoje, de onde parte o T8.
+ */
+financeRoutes.get(
+  "/flows",
+  view,
+  asyncHandler(async (_req, res) => {
+    const hoje = todayKeyLocal();
+    const ledger = await buildCostLedger();
+    const [receipts, calendario, balances] = await Promise.all([
+      prisma.invoiceReceipt.findMany({
+        select: {
+          amount: true,
+          receivedDate: true,
+          method: true,
+          invoice: {
+            select: {
+              docNumber: true,
+              client: { select: { name: true } },
+              project: { select: { code: true, name: true, currency: true, client: { select: { name: true } } } },
+            },
+          },
+        },
+      }),
+      loadCalendarItems(hoje, ledger),
+      loadBankBalances(),
+    ]);
+    const { registos, moedas } = FLX.flowRecords({
+      receipts,
+      ledgerItems: ledger.items,
+      calendarItems: calendario.itens,
+    });
+    // Saldo de hoje por moeda: o T8 parte daqui.
+    const saldos = {};
+    for (const b of balances.items) {
+      const m = String(b.currency || "AOA").toUpperCase();
+      const x = (saldos[m] = saldos[m] || { saldo: 0, contas: 0, estimado: false });
+      x.saldo = round2(x.saldo + toNumber(b.balance));
+      x.contas += 1;
+      if (b.source === "CARTAO") x.estimado = true;
+    }
+    return res.json({ hoje, registos, moedas, saldos, saldoDesde: balances.asOf });
+  })
+);
+
+/** RG8 Centros de Custo — previsto, realizado, pago e por pagar por centro. */
+financeRoutes.get(
+  "/cost-centers/summary",
+  view,
+  asyncHandler(async (_req, res) => {
+    const [ledger, centrosObra, centrosGerais, custosGerais, adjudicados, linhas] = await Promise.all([
+      buildCostLedger(),
+      prisma.costCenter.findMany({
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          currency: true,
+          active: true,
+          projectId: true,
+          project: { select: { id: true, code: true, name: true } },
+        },
+      }),
+      prisma.generalCostCenter.findMany({
+        select: { id: true, code: true, name: true, active: true, kind: true, annualBudget: true, _count: { select: { extraRequests: true } } },
+      }),
+      loadGeneralCosts(),
+      prisma.budget.findMany({
+        where: { awardedProjectId: { not: null }, costCenterCode: { not: null } },
+        select: { awardedProjectId: true, costCenterCode: true },
+      }),
+      prisma.projectBudgetLine.findMany({ select: { projectId: true, version: true, total: true } }),
+    ]);
+    const pedidosGerais = await prisma.extraRequest.findMany({
+      where: { type: "GERAL", status: { in: ["PAGO", "APROVADO"] }, generalCostCenterId: { not: null } },
+      select: { generalCostCenterId: true, amount: true, status: true, costCategory: { select: { name: true } } },
+    });
+
+    // Previsto da obra: o custo da última versão das linhas de orçamento,
+    // posto no centro de custo que nasceu da adjudicação.
+    const ultima = new Map();
+    for (const l of linhas) ultima.set(l.projectId, Math.max(ultima.get(l.projectId) || 0, l.version || 0));
+    const custoObra = new Map();
+    for (const l of linhas) {
+      if ((l.version || 0) !== ultima.get(l.projectId)) continue;
+      custoObra.set(l.projectId, (custoObra.get(l.projectId) || 0) + toNumber(l.total));
+    }
+    const previsto = new Map();
+    for (const b of adjudicados) {
+      const cc = centrosObra.find((c) => c.projectId === b.awardedProjectId && c.code === b.costCenterCode);
+      if (cc && custoObra.has(b.awardedProjectId)) previsto.set(cc.id, custoObra.get(b.awardedProjectId));
+    }
+
+    return res.json(
+      costCenterSummary({
+        centrosObra,
+        centrosGerais: centrosGerais.map((g) => ({ ...g, annualBudget: g.annualBudget === null ? null : toNumber(g.annualBudget), usos: g._count.extraRequests })),
+        ledgerItems: ledger.items,
+        custosGerais,
+        previsto,
+        pedidosGerais: pedidosGerais.map((x) => ({
+          generalCostCenterId: x.generalCostCenterId,
+          amount: x.amount,
+          paid: x.status === "PAGO",
+          categoria: x.costCategory?.name || null,
+        })),
+      })
+    );
+  })
+);
+
+// ─── RG8: criar, editar e apagar centros de custo ───────────────────────────
+
+const NATUREZAS_CC = ["SEDE", "FROTA", "OUTRO"];
+
+/** RG8 › Adicionar: novo centro de custo geral (Sede, Frota ou outro). */
+financeRoutes.post(
+  "/cost-centers/general",
+  edit,
+  asyncHandler(async (req, res) => {
+    const body = z
+      .object({
+        code: z.string().trim().min(2).max(40),
+        name: z.string().trim().min(2).max(120),
+        kind: z.enum(NATUREZAS_CC).default("SEDE"),
+        annualBudget: z.number().min(0).nullable().optional(),
+      })
+      .parse(req.body);
+    const code = body.code.toUpperCase().replace(/\s+/g, "_");
+    const existe = await prisma.generalCostCenter.findUnique({ where: { code } });
+    if (existe) return res.status(409).json({ error: "CODIGO_REPETIDO", errors: [`Já existe o centro ${code}.`] });
+    const item = await prisma.generalCostCenter.create({
+      data: { code, name: body.name, kind: body.kind, annualBudget: body.annualBudget ?? null },
+    });
+    return res.status(201).json({ item });
+  })
+);
+
+/** RG8 › Editar um centro geral: nome, tipo, orçamento anual, ativo. */
+financeRoutes.patch(
+  "/cost-centers/general/:id",
+  edit,
+  asyncHandler(async (req, res) => {
+    const body = z
+      .object({
+        name: z.string().trim().min(2).max(120).optional(),
+        kind: z.enum(NATUREZAS_CC).optional(),
+        annualBudget: z.number().min(0).nullable().optional(),
+        active: z.boolean().optional(),
+      })
+      .parse(req.body);
+    const item = await prisma.generalCostCenter.update({ where: { id: String(req.params.id) }, data: body });
+    return res.json({ item });
+  })
+);
+
+/** RG8 › Apagar: só um centro geral que nunca foi usado. */
+financeRoutes.delete(
+  "/cost-centers/general/:id",
+  edit,
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const usos = await prisma.extraRequest.count({ where: { generalCostCenterId: id } });
+    if (usos) return res.status(409).json({ error: "EM_USO", errors: [`Este centro tem ${usos} pedido(s): desative-o em vez de o apagar.`] });
+    await prisma.generalCostCenter.delete({ where: { id } });
+    return res.json({ ok: true });
+  })
+);
+
+/** RG8 › Editar um centro de obra: nome e ativo (o código é o do orçamento). */
+financeRoutes.patch(
+  "/cost-centers/project/:id",
+  edit,
+  asyncHandler(async (req, res) => {
+    const body = z.object({ name: z.string().trim().min(2).max(120).optional(), active: z.boolean().optional() }).parse(req.body);
+    const item = await prisma.costCenter.update({ where: { id: String(req.params.id) }, data: body });
+    return res.json({ item });
+  })
+);
+
+/** P3 Despesas sem Comprovativo — linhas DSC e AF dos pedidos de pagamento. */
+financeRoutes.get(
+  "/dsc",
+  view,
+  asyncHandler(async (_req, res) => {
+    const orders = await prisma.purchaseOrder.findMany({
+      where: { items: { some: { docException: { not: null } } } },
+      select: {
+        id: true,
+        number: true,
+        status: true,
+        createdAt: true,
+        supplierName: true,
+        supplier: { select: { name: true } },
+        project: { select: { code: true, name: true } },
+        costCenter: { select: { code: true, name: true } },
+        items: true,
+      },
+    });
+    return res.json(dscLines(orders));
+  })
+);
+
+/** P3 › decisão de uma linha: `{ decisao: null | "DSC" | "AF" | "FATURA" }`. */
+financeRoutes.patch(
+  "/dsc/:itemId",
+  edit,
+  asyncHandler(async (req, res) => {
+    const body = z.object({ decisao: z.enum(DSC_DECISOES).nullable() }).parse(req.body);
+    const item = await prisma.purchaseOrderItem.findUnique({ where: { id: String(req.params.itemId) }, select: { id: true, docException: true } });
+    if (!item || !item.docException) return res.status(404).json({ error: "NOT_FOUND", errors: ["Linha sem comprovativo não encontrada."] });
+    const actor = req.user?.name || req.user?.email || null;
+    await prisma.purchaseOrderItem.update({
+      where: { id: item.id },
+      data: {
+        dscDecision: body.decisao,
+        dscDecidedAt: body.decisao ? new Date() : null,
+        dscDecidedBy: body.decisao ? actor : null,
+        // A marca do pedido acompanha a decisão (DSC ↔ AF); «apareceu a fatura» guarda a marca original.
+        ...(body.decisao === "DSC" || body.decisao === "AF" ? { docException: body.decisao } : {}),
+      },
+    });
+    return res.json({ ok: true });
+  })
+);
+
+/** P3 › anexar a fatura que apareceu (ou o documento da autofaturação). */
+financeRoutes.post(
+  "/dsc/:itemId/document",
+  edit,
+  documentUpload.single("file"),
+  asyncHandler(async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "NO_FILE_UPLOADED", message: "Escolha o PDF ou a imagem." });
+    const mimeType = String(req.file.mimetype || "").toLowerCase();
+    if (mimeType && !ALLOWED_INVOICE_DOC_MIME.has(mimeType)) {
+      return res.status(415).json({ error: "UNSUPPORTED_FILE_TYPE", message: "Anexe em PDF, JPG, PNG ou WEBP." });
+    }
+    const item = await prisma.purchaseOrderItem.findUnique({
+      where: { id: String(req.params.itemId) },
+      select: { id: true, docException: true, dscDecision: true, dscDocPath: true },
+    });
+    if (!item || !item.docException) return res.status(404).json({ error: "NOT_FOUND", errors: ["Linha sem comprovativo não encontrada."] });
+    const extension = path.extname(req.file.originalname || "").toLowerCase() || ".pdf";
+    const storagePath = `finance/dsc/${item.id}/${Date.now()}-${safeFileName(req.file.originalname, extension)}`;
+    const dscDocPath = await uploadToSupabase(storagePath, req.file.buffer, req.file.mimetype);
+    const actor = req.user?.name || req.user?.email || null;
+    await prisma.purchaseOrderItem.update({
+      where: { id: item.id },
+      data: {
+        dscDocPath,
+        dscDocName: req.file.originalname || null,
+        // Sem decisão, o documento é a fatura que apareceu; com AF, é o documento da autofaturação.
+        ...(item.dscDecision === "AF" ? {} : { dscDecision: "FATURA", dscDecidedAt: new Date(), dscDecidedBy: actor }),
+      },
+    });
+    if (item.dscDocPath && item.dscDocPath !== dscDocPath) await deleteStoredFile(item.dscDocPath).catch(() => null);
+    return res.status(201).json({ ok: true, documento: dscDocPath });
+  })
+);
+
+// ─── F-3: Controlo de Obras (O1–O5) e R3 Autos de Medição ───
+
+/**
+ * O que é preciso, por obra, para a tesouraria da obra (O3), o dinheiro do
+ * resumo (O1) e as previsões (O4): faturas, recebimentos, saídas do razão e
+ * movimentos dos fundos de maneio da obra.
+ */
+async function loadProjectCash(ledger, projectIds) {
+  const where = projectIds ? { projectId: { in: projectIds } } : {};
+  const [faturas, recebimentos, fundos] = await Promise.all([
+    prisma.invoice.findMany({
+      where,
+      select: { projectId: true, docDate: true, grossAmount: true, netAmount: true },
+    }),
+    prisma.invoiceReceipt.findMany({
+      where: projectIds ? { invoice: { projectId: { in: projectIds } } } : {},
+      select: { amount: true, receivedDate: true, invoice: { select: { projectId: true } } },
+    }),
+    prisma.pettyCashFund.findMany({
+      where: { projectId: projectIds ? { in: projectIds } : { not: null } },
+      select: {
+        projectId: true,
+        movements: { select: { type: true, amount: true, createdAt: true, extraRequestId: true } },
+      },
+    }),
+  ]);
+  const por = () => new Map();
+  const push = (m, k, v) => {
+    if (!k) return;
+    if (!m.has(k)) m.set(k, []);
+    m.get(k).push(v);
+  };
+  const F = por();
+  const R = por();
+  const S = por();
+  const MF = por();
+  faturas.forEach((f) => push(F, f.projectId, { docDate: f.docDate, net: toNumber(f.netAmount ?? f.grossAmount) }));
+  recebimentos.forEach((r) => push(R, r.invoice?.projectId, { receivedDate: r.receivedDate, amount: toNumber(r.amount) }));
+  FLX.paidOutflows(ledger.items).forEach((s) => push(S, s.item.project?.id, s));
+  fundos.forEach((f) => f.movements.forEach((m) => push(MF, f.projectId, m)));
+  return { faturas: F, recebimentos: R, saidas: S, movimentosFundo: MF };
+}
+
+function cashOf(cash, id, periodo = {}, moeda = null) {
+  return OBR.tesourariaObra({
+    moeda,
+    faturas: cash.faturas.get(id) || [],
+    recebimentos: cash.recebimentos.get(id) || [],
+    saidas: cash.saidas.get(id) || [],
+    movimentosFundo: cash.movimentosFundo.get(id) || [],
+    ...periodo,
+  });
+}
+
+/** Valor dos autos aprovados de cada obra. */
+async function loadMeasured() {
+  const rows = await prisma.measurementReport.groupBy({
+    by: ["projectId"],
+    where: { status: "APPROVED" },
+    _sum: { periodValTotal: true },
+  });
+  return new Map(rows.map((r) => [r.projectId, toNumber(r._sum.periodValTotal)]));
+}
+
+/** O1 Resumo das Obras e O2 Custos por Obra (lista): uma linha por obra. */
+financeRoutes.get(
+  "/project-summary",
+  view,
+  asyncHandler(async (_req, res) => {
+    const ledger = await buildCostLedger();
+    const [fin, medido, cash] = await Promise.all([buildProjectFinancials(), loadMeasured(), loadProjectCash(ledger)]);
+    const obras = fin.items.map((f) => {
+      const r = OBR.resumoObra(f, {
+        medido: medido.get(f.project.id) || 0,
+        saldoCaixa: cashOf(cash, f.project.id, {}, f.currency).totais.saldo,
+      });
+      return { ...r, alertas: OBR.alertasObra(r) };
+    });
+    const moedas = [...new Set(obras.map((o) => o.moeda))].sort((a, b) => (a === "AOA" ? -1 : b === "AOA" ? 1 : a.localeCompare(b)));
+    return res.json({ obras, moedas });
+  })
+);
+
+/** O2 — os custos de uma obra por categoria (`?por=cat`) ou fornecedor (`?por=forn`). */
+financeRoutes.get(
+  "/project-summary/:id/costs",
+  view,
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const ledger = await buildCostLedger();
+    const [fin, medido, cash] = await Promise.all([
+      buildProjectFinancials({ projectIds: [id] }),
+      loadMeasured(),
+      loadProjectCash(ledger, [id]),
+    ]);
+    const f = fin.items[0];
+    if (!f) return res.status(404).json({ error: "NOT_FOUND", errors: ["Obra não encontrada."] });
+    const resumo = OBR.resumoObra(f, { medido: medido.get(id) || 0, saldoCaixa: cashOf(cash, id, {}, f.currency).totais.saldo });
+    // Os custos noutra moeda não entram no quadro: estão no alerta da ficha.
+    const itens = ledger.items.filter(
+      (e) => e.project?.id === id && String(e.currency || f.currency).toUpperCase() === String(f.currency).toUpperCase()
+    );
+    return res.json({
+      resumo,
+      alertas: OBR.alertasObra(resumo),
+      custos: OBR.custosDaObra(itens, req.query.por === "forn" ? "forn" : "cat"),
+    });
+  })
+);
+
+/** O3 Tesouraria da Obra (`?de=` e `?ate=` em AAAA-MM-DD). */
+financeRoutes.get(
+  "/project-summary/:id/treasury",
+  view,
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const projeto = await prisma.project.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        currency: true,
+        pettyCashFunds: { select: { name: true, cards: { select: { label: true, lastDigits: true, currentBalance: true, active: true } } } },
+      },
+    });
+    if (!projeto) return res.status(404).json({ error: "NOT_FOUND", errors: ["Obra não encontrada."] });
+    const data = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || "")) ? String(v) : undefined);
+    const ledger = await buildCostLedger();
+    const cash = await loadProjectCash(ledger, [id]);
+    const cartoes = projeto.pettyCashFunds.flatMap((f) => f.cards.filter((c) => c.active));
+    return res.json({
+      obra: { id: projeto.id, codigo: projeto.code, nome: projeto.name, moeda: projeto.currency || "AOA" },
+      cartoes: cartoes.map((c) => ({ nome: c.label, digitos: c.lastDigits, saldo: toNumber(c.currentBalance) })),
+      saldoCartoes: round2(cartoes.reduce((s, c) => s + toNumber(c.currentBalance), 0)),
+      ...cashOf(cash, id, { de: data(req.query.de), ate: data(req.query.ate) }, projeto.currency || "AOA"),
+    });
+  })
+);
+
+/** O4 Previsões por Obra. */
+financeRoutes.get(
+  "/project-summary/:id/forecast",
+  view,
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const projeto = await prisma.project.findUnique({
+      where: { id },
+      select: { id: true, code: true, name: true, currency: true, startDate: true, dueDate: true },
+    });
+    if (!projeto) return res.status(404).json({ error: "NOT_FOUND", errors: ["Obra não encontrada."] });
+    const hoje = todayKeyLocal();
+    const ledger = await buildCostLedger();
+    const [fin, medido, cash, calendario] = await Promise.all([
+      buildProjectFinancials({ projectIds: [id] }),
+      loadMeasured(),
+      loadProjectCash(ledger, [id]),
+      loadCalendarItems(hoje, ledger),
+    ]);
+    const moedaObra = projeto.currency || "AOA";
+    const resumo = OBR.resumoObra(fin.items[0], {
+      medido: medido.get(id) || 0,
+      saldoCaixa: cashOf(cash, id, {}, moedaObra).totais.saldo,
+    });
+
+    // O que é desta obra no calendário: o «sub» das linhas leva o código da obra.
+    const daObra = (x) => String(x.sub || "").startsWith(`${projeto.code} ·`) || x.sub === projeto.code;
+    const previstos = calendario.itens.filter(daObra).map((x) => ({ data: x.data, lado: x.lado, valor: x.valor }));
+    const reais = [
+      ...(cash.recebimentos.get(id) || []).map((r) => ({ data: r.receivedDate, lado: "R", valor: r.amount })),
+      ...(cash.saidas.get(id) || [])
+        .filter((s) => String(s.item.currency || moedaObra).toUpperCase() === String(moedaObra).toUpperCase())
+        .map((s) => ({ data: s.data, lado: "P", valor: s.valor })),
+    ];
+    return res.json({
+      obra: { id: projeto.id, codigo: projeto.code, nome: projeto.name, moeda: projeto.currency || "AOA" },
+      ...OBR.previsoesObra({ resumo, projeto, reais, previstos }),
+    });
+  })
+);
+
+/** O5 Áreas de Negócio (`?ano=AAAA`, `?moeda=`). */
+financeRoutes.get(
+  "/business-areas",
+  view,
+  asyncHandler(async (req, res) => {
+    const ledger = await buildCostLedger();
+    const [faturas, projetos] = await Promise.all([
+      prisma.invoice.findMany({
+        select: {
+          docDate: true,
+          grossAmount: true,
+          vatAmount: true,
+          receivedAmount: true,
+          project: { select: { projectType: true, currency: true } },
+        },
+      }),
+      prisma.project.findMany({ select: { id: true, projectType: true, currency: true } }),
+    ]);
+    const pago = new Map();
+    FLX.paidOutflows(ledger.items).forEach((s) => {
+      const k = s.item.project?.id;
+      if (k) pago.set(k, (pago.get(k) || 0) + s.valor);
+    });
+    const ano = /^\d{4}$/.test(String(req.query.ano || "")) ? String(req.query.ano) : null;
+    const moedas = [...new Set(projetos.map((p) => String(p.currency || "AOA").toUpperCase()))].sort();
+    const anos = [...new Set(faturas.map((f) => new Date(f.docDate).toISOString().slice(0, 4)))].sort().reverse();
+    return res.json({
+      ano,
+      anos,
+      moedas,
+      ...OBR.areasDeNegocio({
+        faturas: faturas.map((f) => ({
+          docDate: f.docDate,
+          gross: toNumber(f.grossAmount),
+          vat: toNumber(f.vatAmount),
+          received: toNumber(f.receivedAmount),
+          moeda: f.project?.currency || "AOA",
+          tipo: f.project?.projectType,
+        })),
+        obras: projetos.map((p) => ({ tipo: p.projectType, moeda: p.currency || "AOA", custoPago: pago.get(p.id) || 0 })),
+        ano,
+        moeda: req.query.moeda,
+      }),
+    });
+  })
+);
+
+/** R3 Autos de Medição — os autos de todas as obras, com a faturação de cada um (`?moeda=`). */
+financeRoutes.get(
+  "/measurements",
+  view,
+  asyncHandler(async (req, res) => {
+    const [autos, fin] = await Promise.all([
+      prisma.measurementReport.findMany({
+        select: {
+          id: true,
+          reportNumber: true,
+          reportDate: true,
+          status: true,
+          periodValTotal: true,
+          project: { select: { id: true, code: true, name: true, currency: true } },
+          invoices: { select: { docNumber: true } },
+        },
+      }),
+      buildProjectFinancials(),
+    ]);
+    const moedaDe = (a) => String(a.project?.currency || "AOA").toUpperCase();
+    const moedas = [...new Set(autos.map(moedaDe))].sort((a, b) => (a === "AOA" ? -1 : b === "AOA" ? 1 : a.localeCompare(b)));
+    const moeda = String(req.query.moeda || moedas[0] || "AOA").toUpperCase();
+    const contratos = new Map(fin.items.map((f) => [f.project.id, toNumber(f.budget?.sale)]));
+    // R3: os autos previstos (planeados) aparecem na lista com o estado «Previsto».
+    const previstos = (await loadPlannedAsReports()).filter((a) => moedaDe(a) === moeda);
+    const base = OBR.autosDeMedicao(autos.filter((a) => moedaDe(a) === moeda), contratos);
+    return res.json({
+      moeda,
+      moedas,
+      ...base,
+      previstos: previstos.map((a) => ({
+        id: a.planId,
+        obraId: a.project?.id,
+        obra: [a.project?.code, a.project?.name].filter(Boolean).join(" · "),
+        numero: a.reportNumber,
+        data: toDateKeyUtc(a.reportDate),
+        valor: round2(toNumber(a.periodValTotal)),
+        pctAuto: contratos.get(a.project?.id) ? (toNumber(a.periodValTotal) / contratos.get(a.project?.id)) * 100 : null,
+      })),
+      obras: fin.items
+        .filter((f) => String(f.currency || "AOA").toUpperCase() === moeda)
+        .map((f) => ({ id: f.project.id, codigo: f.project.code, nome: f.project.name, contrato: round2(f.budget?.sale) })),
+    });
+  })
+);
+
+/** R3 · o plano de autos previstos de uma obra (`gravar: false` só pré-visualiza). */
+financeRoutes.post(
+  "/planned-measurements/plan",
+  edit,
+  asyncHandler(async (req, res) => {
+    const body = z
+      .object({
+        obra: z.string().min(1),
+        ini: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        per: z.enum(["S", "Q", "M"]).default("M"),
+        modo: z.enum(["P", "V"]).default("P"),
+        val: z.number().positive(),
+        nmax: z.number().int().min(0).max(200).default(0),
+        ate100: z.boolean().default(true),
+        substituir: z.boolean().default(true),
+        gravar: z.boolean().default(false),
+      })
+      .parse(req.body);
+    const [fin, autos, atuais] = await Promise.all([
+      buildProjectFinancials({ projectIds: [body.obra] }),
+      prisma.measurementReport.findMany({ where: { projectId: body.obra }, select: { reportNumber: true, status: true, periodValTotal: true } }),
+      prisma.plannedMeasurement.findMany({ where: { projectId: body.obra }, select: { number: true, value: true } }),
+    ]);
+    const f = fin.items[0];
+    if (!f) return res.status(404).json({ error: "NOT_FOUND", errors: ["Obra não encontrada."] });
+    const contam = autos.filter((a) => a.status !== "REJECTED");
+    const mantidos = body.substituir ? [] : atuais;
+    const medido = contam.reduce((s, a) => s + toNumber(a.periodValTotal), 0) + mantidos.reduce((s, a) => s + toNumber(a.value), 0);
+    const ultimoNumero = Math.max(0, ...autos.map((a) => parseInt(a.reportNumber, 10) || 0), ...mantidos.map((a) => a.number));
+    const plano = planear({ contrato: toNumber(f.budget?.sale), medido, ultimoNumero, ...body });
+    if (plano.erro) return res.status(400).json({ error: "PLANO_INVALIDO", errors: [plano.erro], ...plano });
+    if (!body.gravar) return res.json({ ...plano, moeda: f.currency, substituidos: body.substituir ? atuais.length : 0 });
+    const actor = req.user?.name || req.user?.email || null;
+    await prisma.$transaction([
+      ...(body.substituir ? [prisma.plannedMeasurement.deleteMany({ where: { projectId: body.obra } })] : []),
+      prisma.plannedMeasurement.createMany({
+        data: plano.L.map((x) => ({ projectId: body.obra, number: x.numero, plannedDate: new Date(`${x.data}T00:00:00Z`), value: x.valor, createdBy: actor })),
+      }),
+    ]);
+    return res.status(201).json({ ...plano, moeda: f.currency, gravados: plano.L.length });
+  })
+);
+
+/** R3 · cancelar um auto previsto (`/planned-measurements/:id`) ou todos os de uma obra (`?obra=`). */
+financeRoutes.delete(
+  "/planned-measurements/:id",
+  edit,
+  asyncHandler(async (req, res) => {
+    await prisma.plannedMeasurement.delete({ where: { id: String(req.params.id) } });
+    return res.json({ ok: true, apagados: 1 });
+  })
+);
+
+financeRoutes.delete(
+  "/planned-measurements",
+  edit,
+  asyncHandler(async (req, res) => {
+    if (!req.query.obra) return res.status(400).json({ error: "OBRA_EM_FALTA" });
+    const r = await prisma.plannedMeasurement.deleteMany({ where: { projectId: String(req.query.obra) } });
+    return res.json({ ok: true, apagados: r.count });
+  })
+);
+
 /**
  * Cash flow (base de caixa):
  *  - histórico: recebimentos de clientes vs dinheiro que saiu (pagamentos,
@@ -2288,11 +3227,8 @@ financeRoutes.get(
       if (i !== undefined) history[i][field] = round2(history[i][field] + toNumber(value));
     };
     receipts.forEach((r) => add("inflow", r.amount, r.receivedDate));
-    ledger.items.forEach((e) => {
-      if (e.source === "CONSUMO_STOCK") return;
-      // Saída de caixa na data em que foi liquidado (sem ela, a data do documento).
-      add("outflow", e.kind === "STOCK" ? e.stockValue : e.paidAmount, e.paidAt || e.date);
-    });
+    // Saída de caixa na data em que foi liquidado (sem ela, a data do documento).
+    FLX.paidOutflows(ledger.items).forEach(({ valor, data }) => add("outflow", valor, data));
     history.forEach((m) => {
       m.net = round2(m.inflow - m.outflow);
     });
@@ -2403,6 +3339,7 @@ async function loadGeneralPurchasePayables() {
       createdAt: true,
       requestType: true,
       paymentMode: true,
+      requestedByName: true,
       paymentTerm: true,
       creditDays: true,
       dueDate: true,
@@ -3714,4 +4651,11 @@ financeRoutes.get(
   })
 );
 
-module.exports = { financeRoutes };
+module.exports = {
+  financeRoutes,
+  // Usados também pela área Compras e Stock (C5, C6).
+  buildPayables,
+  loadGeneralPurchasePayables,
+  loadGeneralExtraPayables,
+  loadRecentPayments,
+};

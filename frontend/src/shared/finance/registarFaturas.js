@@ -27,7 +27,10 @@ const STATUS = {
 };
 
 const state = {
-  filters: { month: "", status: "", clientId: "", projectId: "" },
+  // Como no protótipo (R1): abre em «Por receber».
+  filters: { month: "", status: "__aberto", clientId: "", projectId: "", type: "", noPdf: false, until: "" },
+  forecast: [],
+  receivedThisMonth: {},
   query: "",
   projects: [],
   clients: [],
@@ -78,38 +81,59 @@ function addDays(dateKey, days) {
 
 /* ─── Estrutura ───────────────────────────────────────────────────────────── */
 
+/** Tipos de fatura (R1 do protótipo). */
+const TIPOS = [
+  ["AM", "Auto de Medição"],
+  ["FU", "Fatura Única / Final"],
+  ["MC", "Marco de Pagamento"],
+  ["ADI", "Adiantamento"],
+  ["RET", "Retenção"],
+  ["DRET", "Devolução de Retenção"],
+  ["REV", "Revisão de Preços"],
+  ["SERV", "Serviços / Manutenção"],
+];
+
+const ESTADOS = [
+  ["__aberto", "Por receber"],
+  ["ATRASADO", "Atrasados"],
+  ["EM_ABERTO", "Em aberto"],
+  ["PAGO_PARCIAL", "Recebidos em parte"],
+  ["PAGO_TOTAL", "Recebidos"],
+  ["prev", "Previstos"],
+  ["", "Todos"],
+];
+
+const POR_RECEBER = ["EM_ABERTO", "PAGO_PARCIAL", "ATRASADO"];
+const SHEETJS = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+
 function renderShell() {
   const root = document.getElementById("financeRoot");
   root.innerHTML = `
     <div class="ov">
-      <div id="invoiceKpis" class="ov-kpis">${skeletonHtml(4, "kpi")}</div>
-      <div id="invoiceStrip" class="ov-strip ov-strip--5">${skeletonHtml(5, "cell")}</div>
-
+      <div class="cp-filtros">
+        <input id="invSearch" class="finance-input" type="search" placeholder="Pesquisar n.º, cliente, obra, auto, valor…" autocomplete="off" />
+        <select id="invFilterType" class="finance-select inv-filter" title="Tipo de fatura">
+          <option value="">Todos os tipos de fatura</option>
+          ${TIPOS.map(([k, l]) => `<option value="${k}">${k} — ${esc(l)}</option>`).join("")}
+          <option value="PREV">Previstos (ainda sem fatura)</option>
+        </select>
+        <select id="invFilterClient" class="finance-select inv-filter" title="Cliente"></select>
+        <select id="invFilterProject" class="finance-select inv-filter" title="Obra"></select>
+        <input id="invFilterMonth" class="finance-input inv-filter" type="month" title="Mês do documento" />
+        <button id="invFilterClear" type="button" class="finance-btn">Limpar</button>
+      </div>
+      <div id="invFiltros2" class="cp-filtros"></div>
+      <div id="invCards"></div>
+      <p class="cp-resumo" id="invCount">—</p>
       <section class="finance-card ov-panel">
-        <header class="finance-chart-head finance-chart-head--row">
-          <div>
-            <h2 class="finance-chart-title">Faturas emitidas</h2>
-            <p class="finance-chart-subtitle" id="invCount">—</p>
-          </div>
-          <div class="ov-table-tools">
-            <label class="ov-search">
-              <span class="material-symbols-outlined">search</span>
-              <input id="invSearch" type="search" placeholder="Nº doc, obra ou cliente…" autocomplete="off" />
-            </label>
-            <input id="invFilterMonth" class="finance-input inv-filter" type="month" title="Mês do documento" />
-            <select id="invFilterClient" class="finance-select inv-filter" title="Cliente">
-              <option value="">Todos os clientes</option>
-            </select>
-            <select id="invFilterProject" class="finance-select inv-filter" title="Obra">
-              <option value="">Todas as obras</option>
-            </select>
-            <button id="invFilterClear" type="button" class="finance-btn finance-btn--ghost inv-filter-clear" title="Limpar filtros">
-              <span class="material-symbols-outlined">filter_alt_off</span>
-            </button>
-          </div>
-        </header>
         <div id="invoiceTable" class="finance-table-scroll"></div>
       </section>
+      <p class="fcal-nota">Tipos: AM Auto de Medição · FU Fatura Única / Final · MC Marco de Pagamento · ADI Adiantamento ·
+        RET Retenção · DRET Devolução de Retenção · REV Revisão de Preços · SERV Serviços / Manutenção.
+        Os recebimentos registam-se na linha da fatura (ou a partir do extrato, em T2). Clique numa linha para ver o detalhe.</p>
+
+      <h3 class="cp-sec">Análise</h3>
+      <div id="invoiceKpis" class="ov-kpis">${skeletonHtml(4, "kpi")}</div>
     </div>`;
 
   const clientSel = document.getElementById("invFilterClient");
@@ -125,6 +149,7 @@ function renderShell() {
   clientSel.value = state.filters.clientId;
   projectSel.value = state.filters.projectId;
   document.getElementById("invFilterMonth").value = state.filters.month;
+  document.getElementById("invFilterType").value = state.filters.type;
 
   clientSel.addEventListener("change", () => {
     state.filters.clientId = clientSel.value;
@@ -138,10 +163,15 @@ function renderShell() {
     state.filters.month = e.target.value;
     loadInvoices();
   });
+  document.getElementById("invFilterType").addEventListener("change", (e) => {
+    state.filters.type = e.target.value;
+    renderAll();
+  });
   document.getElementById("invFilterClear").addEventListener("click", () => {
-    state.filters = { month: "", status: "", clientId: "", projectId: "" };
+    state.filters = { month: "", status: "__aberto", clientId: "", projectId: "", type: "", noPdf: false, until: "" };
     state.query = "";
     document.getElementById("invFilterMonth").value = "";
+    document.getElementById("invFilterType").value = "";
     document.getElementById("invSearch").value = "";
     clientSel.value = "";
     projectSel.value = "";
@@ -157,15 +187,186 @@ function renderShell() {
     }, 150);
   });
 
+  // Segunda linha: estado, faturas sem PDF, receção até.
+  const f2 = document.getElementById("invFiltros2");
+  f2.addEventListener("change", (e) => {
+    if (e.target.id === "invEstado") state.filters.status = e.target.value;
+    if (e.target.id === "invNoPdf") state.filters.noPdf = e.target.checked;
+    if (e.target.id === "invAte") state.filters.until = e.target.value;
+    renderAll();
+  });
+  f2.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-ate]");
+    if (!b) return;
+    const hoje = toDateKey(new Date());
+    const fimMes = toDateKey(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0));
+    const v = { hoje, fim: fimMes, "": "" }[b.dataset.ate];
+    state.filters.until = state.filters.until === v ? "" : v;
+    renderAll();
+  });
+  document.getElementById("invCards").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-r1est]");
+    if (!b) return;
+    const v = b.dataset.r1est;
+    state.filters.status = state.filters.status === v && v !== "__aberto" ? "__aberto" : v;
+    renderAll();
+  });
+
   const actions = document.getElementById("financePageActions");
   if (actions) {
-    actions.innerHTML = canEdit()
-      ? `<button id="invNew" type="button" class="finance-btn finance-btn--primary">
-           <span class="material-symbols-outlined">add</span>Nova Fatura
-         </button>`
-      : "";
+    actions.innerHTML = `
+      <button id="invXlsx" type="button" class="finance-btn">Exportar Excel</button>
+      ${
+        canEdit()
+          ? `<label class="finance-btn" title="Lê cada PDF e abre o formulário já preenchido, para conferir e guardar">📄 Importar Faturas (PDF)
+               <input id="invImport" type="file" hidden multiple accept="application/pdf,.pdf" /></label>
+             <button id="invNew" type="button" class="finance-btn finance-btn--primary">+ Registar Fatura</button>`
+          : ""
+      }`;
     document.getElementById("invNew")?.addEventListener("click", () => openInvoiceModal(null));
+    document.getElementById("invXlsx")?.addEventListener("click", () =>
+      exportarExcel().catch((err) => toast(err.message || "Falha ao exportar.", { type: "error" }))
+    );
+    document.getElementById("invImport")?.addEventListener("change", (e) => {
+      const files = [...(e.target.files || [])];
+      e.target.value = "";
+      importarPdfs(files);
+    });
   }
+}
+
+/** Importar faturas em PDF: abre o formulário para cada uma, com o ficheiro já escolhido (e lido com IA, se houver). */
+function importarPdfs(files) {
+  if (!files.length) return;
+  const proximo = () => {
+    const file = files.shift();
+    if (!file) return;
+    openInvoiceModal(null, { file });
+    const overlays = document.querySelectorAll("[data-app-modal]");
+    const ov = overlays[overlays.length - 1];
+    if (!ov || !files.length) return;
+    toast(`Faltam ${files.length} fatura(s): abrem a seguir a esta.`);
+    const obs = new MutationObserver(() => {
+      if (!document.body.contains(ov)) {
+        obs.disconnect();
+        setTimeout(proximo, 300);
+      }
+    });
+    obs.observe(document.body, { childList: true, subtree: true });
+  };
+  proximo();
+}
+
+const vencDe = (inv) => toDateKey(inv.dueDate || inv.effectiveDueDate);
+
+function em7Dias(inv) {
+  const v = vencDe(inv);
+  if (!v || !POR_RECEBER.includes(inv.status)) return false;
+  const hoje = toDateKey(new Date());
+  return v >= hoje && v <= addDays(hoje, 7);
+}
+
+/** Soma por moeda (nunca se somam moedas diferentes). */
+function porMoeda(list, valor, moeda = (i) => i.project?.currency || "AOA") {
+  const m = {};
+  for (const i of list) {
+    const k = String(moeda(i) || "AOA").toUpperCase();
+    m[k] = (m[k] || 0) + num(valor(i));
+  }
+  return m;
+}
+
+function moedasHtml(m) {
+  const ks = Object.keys(m).sort((a, b) => (a === "AOA" ? -1 : b === "AOA" ? 1 : a.localeCompare(b)));
+  if (!ks.length) return esc(money(0, "AOA"));
+  return ks.map((k, i) => (i ? `<small class="fx2-mut"> + ${esc(money(m[k], k))}</small>` : esc(money(m[k], k)))).join("");
+}
+
+function renderCards() {
+  const base = filteredBase();
+  const ab = base.filter((i) => POR_RECEBER.includes(i.status));
+  const atr = base.filter((i) => i.status === "ATRASADO");
+  const v7 = base.filter(em7Dias);
+  const prev = forecastVisible();
+  const st = state.filters.status;
+  const mes = new Date().toLocaleDateString("pt-PT", { month: "long", year: "numeric" });
+  const card = (k, tom, titulo, valor, nota) =>
+    `<button type="button" class="fx2-k fx2-k--${tom}${st === k ? " on" : ""}" data-r1est="${k}"><span class="fx2-kt">${esc(titulo)}</span><b class="fx2-kv">${valor}</b><span class="fx2-kn">${esc(nota)}</span></button>`;
+  document.getElementById("invCards").innerHTML = `<div class="fx2-kpis">
+    ${card("__aberto", "neu", "Por Receber", moedasHtml(porMoeda(ab, (i) => i.missingAmount)), `${ab.length} fatura(s)`)}
+    ${card("ATRASADO", "bad", "Em Atraso", moedasHtml(porMoeda(atr, (i) => i.missingAmount)), `${atr.length} fatura(s)`)}
+    ${card("v7", "warn", "Recebe em 7 Dias", moedasHtml(porMoeda(v7, (i) => i.missingAmount)), `${v7.length} fatura(s)`)}
+    ${card("PAGO_TOTAL", "good", "Recebido Este Mês", moedasHtml(state.receivedThisMonth || {}), mes)}
+    ${card("prev", "blue", "Previsto (sem Fatura)", moedasHtml(porMoeda(prev, (a) => a.value, (a) => a.currency)), `${prev.length} auto(s) previsto(s)`)}
+  </div>`;
+}
+
+function renderFiltros2() {
+  const f = state.filters;
+  const semPdf = state.items.filter((i) => !invoiceHasDocument(i)).length;
+  const hoje = toDateKey(new Date());
+  const fimMes = toDateKey(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0));
+  document.getElementById("invFiltros2").innerHTML = `
+    <select id="invEstado" class="finance-select">${ESTADOS.map(([k, l]) => `<option value="${k}"${f.status === k ? " selected" : ""}>${l}</option>`).join("")}${
+      f.status === "v7" ? `<option value="v7" selected>Recebe em 7 dias</option>` : ""
+    }</select>
+    <label class="cp-venc"><input id="invNoPdf" type="checkbox"${f.noPdf ? " checked" : ""}> Faturas sem PDF${semPdf ? ` (${semPdf})` : ""}</label>
+    <span class="cp-venc inv-ate">Receção até
+      <button type="button" class="finance-btn finance-btn--sm${f.until === hoje ? " is-on" : ""}" data-ate="hoje">Hoje</button>
+      <button type="button" class="finance-btn finance-btn--sm${f.until === fimMes ? " is-on" : ""}" data-ate="fim">Fim do mês</button>
+      <input id="invAte" class="finance-input" type="date" value="${esc(f.until || "")}">
+      ${f.until ? `<button type="button" class="finance-btn finance-btn--sm" data-ate="" title="Sem limite">✕</button>` : ""}
+    </span>`;
+}
+
+/** Autos aprovados ainda sem fatura, com os mesmos filtros (pesquisa, receção até não se aplica). */
+function forecastVisible() {
+  const q = state.query.trim().toLowerCase();
+  if (state.filters.type && state.filters.type !== "PREV" && state.filters.type !== "AM") return [];
+  return (state.forecast || []).filter(
+    (a) => !q || [a.reportNumber, a.project?.name, a.project?.code, a.client?.name].some((v) => String(v || "").toLowerCase().includes(q))
+  );
+}
+
+async function exportarExcel() {
+  if (!window.XLSX) {
+    await new Promise((resolve, reject) => {
+      const sc = document.createElement("script");
+      sc.src = SHEETJS;
+      sc.onload = resolve;
+      sc.onerror = () => reject(new Error("não foi possível carregar o Excel"));
+      document.head.appendChild(sc);
+    });
+  }
+  const linhas = [
+    ["Fatura", "Data", "Receção", "Tipo", "Obra", "Cliente", "Auto", "Moeda", "V. ilíquido", "IVA", "V. a receber (líquido)", "Recebido", "Falta", "Estado"],
+  ];
+  for (const i of state.items) {
+    linhas.push([
+      i.docNumber || "",
+      toDateKey(i.docDate) || "",
+      vencDe(i) || "",
+      i.invoiceType || "",
+      [i.project?.code, i.project?.name].filter(Boolean).join(" · "),
+      i.client?.name || "",
+      i.measurement?.reportNumber || "",
+      i.project?.currency || "AOA",
+      num(i.grossAmount),
+      num(i.vatAmount),
+      num(i.netAmount),
+      num(i.receivedAmount),
+      num(i.missingAmount),
+      STATUS_LABEL[i.status] || i.status,
+    ]);
+  }
+  for (const a of state.forecast || []) {
+    linhas.push(["PREV", toDateKey(a.reportDate) || "", "", "AM", [a.project?.code, a.project?.name].filter(Boolean).join(" · "), a.client?.name || "", a.reportNumber || "", a.currency, "", "", a.value, 0, a.value, "Previsto"]);
+  }
+  const ws = window.XLSX.utils.aoa_to_sheet(linhas);
+  ws["!cols"] = [14, 11, 11, 6, 30, 30, 10, 7, 16, 14, 18, 16, 16, 14].map((w) => ({ wch: w }));
+  const wb = window.XLSX.utils.book_new();
+  window.XLSX.utils.book_append_sheet(wb, ws, "Recebimentos");
+  window.XLSX.writeFile(wb, "Centro de Recebimentos.xlsx");
 }
 
 /** Faturas do filtro do servidor, já com a pesquisa local aplicada. */
@@ -179,11 +380,28 @@ function searched() {
   );
 }
 
-/** Faturas visíveis na tabela (pesquisa + estado escolhido na faixa). */
-function visibleItems() {
-  const items = searched();
-  return state.filters.status ? items.filter((i) => i.status === state.filters.status) : items;
+/** Pesquisa + tipo + sem PDF + receção até (sem o estado). */
+function filteredBase() {
+  const f = state.filters;
+  return searched().filter(
+    (i) =>
+      (!f.type || (f.type === "PREV" ? false : i.invoiceType === f.type)) &&
+      (!f.noPdf || !invoiceHasDocument(i)) &&
+      (!f.until || (vencDe(i) || "9999") <= f.until)
+  );
 }
+
+/** Faturas visíveis na tabela. */
+function visibleItems() {
+  const items = filteredBase();
+  const s = state.filters.status;
+  if (s === "__aberto") return items.filter((i) => POR_RECEBER.includes(i.status));
+  if (s === "v7") return items.filter(em7Dias);
+  if (s === "prev") return [];
+  return s ? items.filter((i) => i.status === s) : items;
+}
+
+const STATUS_LABEL = { EM_ABERTO: "Em aberto", PAGO_PARCIAL: "Pago parcial", PAGO_TOTAL: "Pago total", ATRASADO: "Atrasado" };
 
 /* ─── Indicadores ─────────────────────────────────────────────────────────── */
 
@@ -264,41 +482,6 @@ function renderKpis() {
   document.getElementById("invoiceKpis").innerHTML = kpiCardsHtml(cards, "inv");
 }
 
-/** Faixa de estados: mostra contagem e valor e filtra a tabela ao clicar. */
-function renderStrip() {
-  const items = searched();
-  const of = (status) => items.filter((i) => !status || i.status === status);
-  const value = (list, key) => list.reduce((a, i) => a + num(i[key]), 0);
-  const cells = [
-    { status: "", label: "Todas", icon: "list_alt", list: of(""), key: "grossAmount", sub: "faturado" },
-    { status: "EM_ABERTO", label: "Em aberto", icon: "schedule", list: of("EM_ABERTO"), key: "missingAmount", sub: "por receber" },
-    { status: "PAGO_PARCIAL", label: "Pago parcial", icon: "hourglass_bottom", list: of("PAGO_PARCIAL"), key: "missingAmount", sub: "em falta" },
-    { status: "PAGO_TOTAL", label: "Pago total", icon: "task_alt", list: of("PAGO_TOTAL"), key: "receivedAmount", sub: "recebido" },
-    { status: "ATRASADO", label: "Atrasado", icon: "event_busy", list: of("ATRASADO"), key: "missingAmount", sub: "vencido", tone: "neg" },
-  ];
-
-  const wrap = document.getElementById("invoiceStrip");
-  wrap.innerHTML = stripHtml(
-    cells.map((c) => ({
-      label: c.label,
-      icon: c.icon,
-      value: String(c.list.length),
-      valueTone: c.tone && c.list.length ? c.tone : null,
-      sub: `${compact(value(c.list, c.key))} ${c.sub}`,
-      action: c.status || "ALL",
-      active: (state.filters.status || "") === c.status,
-    }))
-  );
-  wrap.querySelectorAll("[data-action]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      state.filters.status = btn.dataset.action === "ALL" ? "" : btn.dataset.action;
-      renderAll();
-    });
-  });
-}
-
-/* ─── Tabela ──────────────────────────────────────────────────────────────── */
-
 function statusBadge(status) {
   const s = STATUS[status] || { label: status, badge: "slate" };
   return `<span class="finance-badge finance-badge--${s.badge}">${esc(s.label)}</span>`;
@@ -336,10 +519,13 @@ function detailRow(inv, cur) {
 function renderTable() {
   const wrap = document.getElementById("invoiceTable");
   if (!wrap) return;
+  const showPrev = state.filters.status === "prev" || state.filters.type === "PREV";
+  if (showPrev) return renderForecastTable(wrap);
   const items = visibleItems();
   const count = document.getElementById("invCount");
   if (count) {
-    count.textContent = `${items.length} de ${state.items.length} faturas · clique numa linha para ver retenção, IVA, CAR e garantia`;
+    const falta = porMoeda(items, (i) => i.missingAmount);
+    count.innerHTML = `${items.length} documento(s) na lista · falta receber <b>${moedasHtml(falta)}</b>`;
   }
 
   if (!items.length) {
@@ -372,6 +558,7 @@ function renderTable() {
             </div>
           </div>
         </td>
+        <td><b>${esc(inv.invoiceType || "—")}</b></td>
         <td>
           <div class="ov-project">
             <span class="ov-project-name">${esc(inv.project?.name || "—")}</span>
@@ -423,7 +610,7 @@ function renderTable() {
         </td>
       </tr>
       <tr class="fin-subrow" ${open ? "" : "hidden"}>
-        <td colspan="9">${detailRow(inv, cur)}</td>
+        <td colspan="10">${detailRow(inv, cur)}</td>
       </tr>`;
     })
     .join("");
@@ -433,7 +620,7 @@ function renderTable() {
     <table class="fin-table inv-table">
       <thead>
         <tr>
-          <th>Documento</th><th>Obra · Cliente</th><th>Vencimento</th>
+          <th>Documento</th><th>Tipo</th><th>Obra · Cliente</th><th>Receção</th>
           <th style="text-align:right">V. Ilíquido</th>
           <th style="text-align:right">V. Líquido</th>
           <th style="text-align:right">Recebido</th>
@@ -445,7 +632,7 @@ function renderTable() {
       <tbody>${rows}</tbody>
       <tfoot>
         <tr>
-          <td colspan="3">Totais (${items.length} faturas)</td>
+          <td colspan="4">Totais (${items.length} faturas)</td>
           <td class="fin-num">${esc(money(sum("grossAmount")))}</td>
           <td class="fin-num">${esc(money(sum("netAmount")))}</td>
           <td class="fin-num">${esc(money(sum("receivedAmount")))}</td>
@@ -474,9 +661,27 @@ function renderTable() {
 }
 
 function renderAll() {
+  renderFiltros2();
+  renderCards();
   renderKpis();
-  renderStrip();
   renderTable();
+}
+
+function renderForecastTable(wrap) {
+  const L = forecastVisible();
+  const count = document.getElementById("invCount");
+  if (count) count.innerHTML = `${L.length} auto(s) sem fatura (aprovados e planeados) · previsto <b>${moedasHtml(porMoeda(L, (a) => a.value, (a) => a.currency))}</b>`;
+  if (!L.length) {
+    wrap.innerHTML = `<div class="ov-empty ov-empty--lg">Não há autos aprovados por faturar nem autos previstos.</div>`;
+    return;
+  }
+  wrap.innerHTML = `<table class="fin-table inv-table">
+    <thead><tr><th>Fatura</th><th>Data do auto</th><th>Tipo</th><th>Obra · Cliente</th><th>Auto</th><th style="text-align:right">Previsto</th><th>Estado</th></tr></thead>
+    <tbody>${L.map(
+      (a) => `<tr><td><span class="finance-chip finance-chip--blue">PREV</span></td><td>${esc(formatDateOnly(a.reportDate))}</td><td><b>AM</b></td>
+        <td><div class="ov-project"><span class="ov-project-name">${esc(a.project?.name || "—")}</span><span class="ov-project-meta">${esc(a.client?.name || a.project?.code || "")}</span></div></td>
+        <td>${esc(a.reportNumber || "")}</td><td class="fin-num"><strong>${esc(money(a.value, a.currency))}</strong></td><td>${a.planned ? "Previsto · planeado (R3)" : "Aprovado · por faturar"}</td></tr>`
+    ).join("")}</tbody></table>`;
 }
 
 /* ─── Carregamento ────────────────────────────────────────────────────────── */
@@ -502,6 +707,8 @@ async function loadInvoices() {
     const data = await apiRequest(`/finance/invoices?${params.toString()}`);
     state.items = data.items || [];
     state.totals = data.totals || null;
+    state.forecast = data.forecast || [];
+    state.receivedThisMonth = data.receivedThisMonth || {};
     renderAll();
   } catch (err) {
     if (wrap) wrap.innerHTML = `<div class="ov-empty ov-empty--lg">Falha ao carregar faturas: ${esc(err.message)}</div>`;
@@ -596,7 +803,7 @@ function stepTitle(n, title, sub = "") {
     </div>`;
 }
 
-async function openInvoiceModal(invoice) {
+async function openInvoiceModal(invoice, { file = null } = {}) {
   const isEdit = Boolean(invoice);
   const hasDoc = invoiceHasDocument(invoice);
   const aiReady = state.ai.configured;
@@ -654,6 +861,13 @@ async function openInvoiceModal(invoice) {
         <section class="inv-section">
           ${stepTitle(2, "Documento")}
           <div class="finance-form-grid finance-form-grid--3">
+            <div class="finance-field">
+              <label class="finance-label" for="inv_type">Tipo de fatura</label>
+              <select id="inv_type" class="finance-select">
+                <option value="">—</option>
+                ${TIPOS.map(([k, l]) => `<option value="${k}"${(invoice?.invoiceType || "") === k ? " selected" : ""}>${k} — ${esc(l)}</option>`).join("")}
+              </select>
+            </div>
             <div class="finance-field">
               <label class="finance-label" for="inv_docNumber">Nº documento</label>
               <input id="inv_docNumber" class="finance-input" type="text" placeholder="FT 2026/001" value="${esc(invoice?.docNumber || "")}" />
@@ -1090,6 +1304,21 @@ async function openInvoiceModal(invoice) {
 
       $("inv_pickBtn")?.addEventListener("click", () => docFileInput?.click());
 
+      // Vindo de «Importar Faturas (PDF)»: o ficheiro já vem escolhido e, havendo IA, é lido logo.
+      if (file && docFileInput) {
+        setTimeout(() => {
+          try {
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            docFileInput.files = dt.files;
+            docFileInput.dispatchEvent(new Event("change"));
+            if (aiReady) scanBtn?.click();
+          } catch {
+            toast("Escolha o ficheiro no formulário.", { type: "error" });
+          }
+        }, 0);
+      }
+
       if (docFileInput) {
         scanBtn.disabled = !aiReady;
         docFileInput.addEventListener("change", () => {
@@ -1207,6 +1436,7 @@ async function openInvoiceModal(invoice) {
       const $ = (id) => panel.querySelector(`#${id}`);
       const raw = {
         docNumber: $("inv_docNumber").value.trim() || null,
+        invoiceType: $("inv_type").value || null,
         docDate: $("inv_docDate").value,
         // Sem vencimento indicado, aplica-se o prazo padrão de 30 dias.
         dueDate: $("inv_dueDate").value || ($("inv_docDate").value ? addDays($("inv_docDate").value, 30) || null : null),

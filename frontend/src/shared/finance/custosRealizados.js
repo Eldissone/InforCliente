@@ -5,6 +5,7 @@ import { escapeFinanceHtml as esc } from "../financePage.js";
 import { chartCardHtml, compactMoney as compact, drawBarChart, drawDonutChart, destroyCharts, TONES } from "./charts.js";
 import { drawKpiSparks, kpiCardsHtml, meterHtml, num, skeletonHtml, stripHtml } from "./widgets.js";
 import { COST_TYPES } from "./costForm.js";
+import { renderCustosEmpresa } from "./custosEmpresa.js";
 
 /**
  * Ecrã «Custos Realizados» (Financeiro · Custos).
@@ -150,6 +151,8 @@ function aggregate(items) {
 
 function renderShell() {
   document.getElementById("financeRoot").innerHTML = `
+    <div id="a1Painel" class="f0"></div>
+    <h3 class="cp-sec">Análise por obra</h3>
     <div class="ov">
       <div class="rl-bar">
         <div class="finance-seg finance-seg--sm" id="rlPeriod">
@@ -636,5 +639,6 @@ export async function render() {
     toast(err.message || "Falha ao carregar obras.", { type: "error" });
   }
   renderShell();
-  await load();
+  // A1 do protótipo em cima (a empresa toda); a análise por obra por baixo.
+  await Promise.all([renderCustosEmpresa(document.getElementById("a1Painel")), load()]);
 }

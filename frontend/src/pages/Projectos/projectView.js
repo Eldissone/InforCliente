@@ -1257,9 +1257,26 @@ function computeNextReportNumber(reports) {
   return String((nums.length ? Math.max(...nums) : 0) + 1).padStart(2, "0");
 }
 
-function prepareNewMeasurementReport() {
+/**
+ * O «anterior até» de um auto novo é a data do último auto gravado. Sem ela o
+ * auto mede desde o início da obra, e somado aos anteriores conta tudo outra
+ * vez (foi o que aconteceu na obra do Sumbe). O servidor faz o mesmo quando a
+ * data não vem; aqui mostra-se, para quem mede ver de onde parte.
+ */
+function fillPrevDateFromLastReport() {
+  const input = el("measurementPrevDate");
+  if (!input) return;
+  const datas = (measurementState.savedReports || [])
+    .map((r) => (r.reportDate ? String(r.reportDate).slice(0, 10) : ""))
+    .filter(Boolean)
+    .sort();
+  input.value = datas.length ? datas[datas.length - 1] : "";
+}
+
+function prepareNewMeasurementReport({ resetPrevDate = false } = {}) {
   measurementState.currentReportId = null;
   measurementState.viewingSavedReport = false;
+  if (resetPrevDate) fillPrevDateFromLastReport();
   syncMeasurementReportNumberInput();
   renderMeasurementTable();
 }
@@ -1606,6 +1623,7 @@ async function loadMeasurements() {
     measurementState.nextReportNumber = reportsRes.nextReportNumber || "01";
     measurementState.currentReportId = null;
     measurementState.viewingSavedReport = false;
+    if (!el("measurementPrevDate")?.value) fillPrevDateFromLastReport();
     syncMeasurementReportNumberInput();
 
     const groups = [...new Set(measurementState.tasks.map((t) => t.itemGroup).filter(Boolean))].sort((a, b) =>
@@ -1632,7 +1650,7 @@ function wireMeasurements() {
     if (measurementState.viewingSavedReport) prepareNewMeasurementReport();
     else renderMeasurementTable();
   });
-  el("newMeasurementReportBtn")?.addEventListener("click", () => prepareNewMeasurementReport());
+  el("newMeasurementReportBtn")?.addEventListener("click", () => prepareNewMeasurementReport({ resetPrevDate: true }));
 
   el("showMeasurementReportsBtn")?.addEventListener("click", () => {
     el("measurementReportsList")?.classList.remove("hidden");

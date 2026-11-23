@@ -1,4 +1,5 @@
-import { guardPageAccess, initPermissionLayer } from "./permissions.js";
+import { ligarAcoesEcra, VOLTAR_HTML, ACOES_HTML } from "./acoesEcra.js";
+import { canPermission, guardPageAccess, initPermissionLayer } from "./permissions.js";
 import { wireLogout, wireUsersNav } from "./session.js";
 import { initMobileMenu } from "./ui.js";
 
@@ -10,31 +11,51 @@ export function escapeFinanceHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
-function renderPageHeader({ kicker, title, subtitle }) {
+function renderPageHeader({ kicker, title, subtitle, code }) {
   const slot = document.getElementById("financePageHeader");
   if (!slot) return;
+  // Como no protótipo: «← Voltar» por cima, o código do ecrã (F0, P1, R1…) por
+  // cima do título, e à direita Dúvidas · PDF · Word.
   slot.innerHTML = `
+    ${VOLTAR_HTML}
     <header class="finance-page-header">
       <div>
+        ${code ? `<span class="fcal-num" data-fcal-num>${escapeFinanceHtml(code)}</span>` : ""}
         <h1 class="finance-title">${escapeFinanceHtml(title || "Financeiro")}</h1>
         ${subtitle ? `<p class="finance-subtitle">${escapeFinanceHtml(subtitle)}</p>` : ""}
       </div>
-      <div id="financePageActions" class="finance-page-actions"></div>
+      <div class="finance-page-side">
+        ${ACOES_HTML}
+        <div id="financePageActions" class="finance-page-actions"></div>
+      </div>
     </header>`;
+  ligarAcoesEcra({
+    info: () => ({
+      codigo: slot.querySelector("[data-fcal-num]")?.textContent?.trim() || "",
+      titulo: slot.querySelector(".finance-title")?.textContent?.trim() || title || "Financeiro",
+      lead: slot.querySelector(".finance-subtitle")?.textContent?.trim() || subtitle || "",
+      area: "Financeiro",
+    }),
+    raiz: () => document.getElementById("financeRoot") || document.body,
+  });
 }
 
 /**
  * Bootstrap partilhado das páginas da Área Financeira.
  * Devolve `false` quando o acesso é negado (o utilizador já foi redirecionado).
  */
-export async function initFinancePage({ kicker = "Financeiro", title = "Financeiro", subtitle = "" } = {}) {
-  await initPermissionLayer();
-  const ok = await guardPageAccess("financeiro", "view");
+export async function initFinancePage({ kicker = "Financeiro", title = "Financeiro", subtitle = "", code = "", guards = null } = {}) {
+  const map = await initPermissionLayer();
+  // `guards`: lista de [módulo, ação] — basta uma (ecrãs partilhados por duas
+  // áreas, como os da área Compras e Stock). Sem lista, é o Financeiro.
+  const list = guards?.length ? guards : [["financeiro", "view"]];
+  const any = list.slice(0, -1).some(([m, a]) => canPermission(map, m, a));
+  const ok = any || (await guardPageAccess(...list[list.length - 1]));
   if (!ok) return false;
   wireLogout();
   wireUsersNav();
   initMobileMenu();
-  renderPageHeader({ kicker, title, subtitle });
+  renderPageHeader({ kicker, title, subtitle, code });
   return true;
 }
 

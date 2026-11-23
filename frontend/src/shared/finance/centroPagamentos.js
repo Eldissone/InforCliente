@@ -77,10 +77,25 @@ const COMMITMENT_LINK = {
 
 const LINKS = [
   { label: "Compras e Pedidos", href: "/Financeiro/centrodecompras", icon: "shopping_cart" },
-  { label: "Novo pedido", href: "/Financeiro/novoPedido", icon: "playlist_add" },
 ];
 
-const state = { stage: "pay", group: "priority", query: "", data: null };
+/**
+ * Filtros e cartões do P1 do protótipo (`V.fcp`): pesquisa, estado, tipo,
+ * pedido por, centro de custo, fornecedor e vencimento de/até; e os cinco
+ * cartões Por Pagar · Em Atraso · Vence em 7 Dias · A Crédito · Pago, que
+ * também filtram.
+ */
+const FILTROS0 = { estado: "", tipo: "", por: "", cc: "", forn: "", de: "", ate: "", chip: "", semComp: false };
+const state = { stage: "pay", group: "priority", query: "", data: null, f: { ...FILTROS0 } };
+
+const CHIPS = [
+  ["pagar", "Por Pagar", (p) => p.stage === "A_PAGAR"],
+  ["atraso", "Em Atraso", (p) => p.stage === "A_PAGAR" && p.daysLate > 0],
+  ["sete", "Vence em 7 Dias", (p) => p.stage === "A_PAGAR" && p.daysLate !== null && p.daysLate <= 0 && p.daysLate >= -7],
+  ["credito", "A Crédito", (p) => p.stage === "A_PAGAR" && p.paymentTerm === "CREDITO"],
+];
+
+const SHEETJS = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
 
 function money(value, currency) {
   return formatCurrency(Number(value) || 0, currency || "AOA");
@@ -154,15 +169,46 @@ function payableItems() {
 function renderShell() {
   const actions = document.getElementById("financePageActions");
   if (actions) {
-    actions.innerHTML = LINKS.map(
-      (l) => `<a class="finance-btn finance-btn--ghost" href="${l.href}"><span class="material-symbols-outlined">${l.icon}</span><span>${esc(l.label)}</span></a>`
-    ).join("");
+    actions.innerHTML =
+      `<button type="button" class="finance-btn finance-btn--ghost" id="cpXlsx">Exportar Excel</button>` +
+      LINKS.map(
+        (l) => `<a class="finance-btn finance-btn--ghost" href="${l.href}"><span class="material-symbols-outlined">${l.icon}</span><span>${esc(l.label)}</span></a>`
+      ).join("") +
+      `<a class="finance-btn finance-btn--primary" href="/Financeiro/novoPedido">+ Nova Requisição de Pagamento</a>`;
+    document.getElementById("cpXlsx")?.addEventListener("click", exportarExcel);
   }
 
   document.getElementById("financeRoot").innerHTML = `
     <div class="ov">
+      <div id="cpFiltros" class="cp-filtros"></div>
+      <div id="cpChips" class="fx2-chips"></div>
+      <section class="finance-card ov-panel">
+        <header class="finance-chart-head finance-chart-head--row">
+          <div>
+            <h2 class="finance-chart-title" id="cpTitle">A pagar</h2>
+            <p class="finance-chart-subtitle" id="cpHint">—</p>
+          </div>
+          <div class="ov-table-tools">
+            <div class="finance-seg finance-seg--sm" id="cpGroup">
+              <button type="button" data-group="priority" class="active"><span class="material-symbols-outlined">sort</span><span>Prioridade</span></button>
+              <button type="button" data-group="supplier"><span class="material-symbols-outlined">local_shipping</span><span>Fornecedor</span></button>
+              <button type="button" data-group="project"><span class="material-symbols-outlined">apartment</span><span>Obra</span></button>
+              <button type="button" data-group="type"><span class="material-symbols-outlined">category</span><span>Tipo</span></button>
+            </div>
+          </div>
+        </header>
+        <div id="cpStrip" class="ov-strip cp-etapas">${skeletonHtml(6, "cell")}</div>
+        <div id="cpResumo" class="cp-resumo"></div>
+        <div id="cpTable" class="finance-table-scroll"></div>
+      </section>
+      <p class="fcal-nota">
+        Estado: Por aprovar → Aprovado → Em pagamento → Pago (ou Atrasado, se passar a data de vencimento).
+        As etapas por cima da lista — agendar prestações, aprovar reforços, compromissos — são as da app.
+        Análise de custos: <a href="/Financeiro/obras-custos">O2 · Custos por Obra</a>.
+      </p>
+
+      <h3 class="cp-sec">Análise</h3>
       <div id="cpKpis" class="ov-kpis">${skeletonHtml(4, "kpi")}</div>
-      <div id="cpStrip" class="ov-strip">${skeletonHtml(6, "cell")}</div>
 
       <div class="ov-row ov-row--8-4">
         ${chartCardHtml({
@@ -186,27 +232,6 @@ function renderShell() {
         ${chartCardHtml({ id: "cpChartProjects", title: "A pagar por obra", subtitle: "Vencido e a vencer", height: 260 })}
       </div>
 
-      <section class="finance-card ov-panel">
-        <header class="finance-chart-head finance-chart-head--row">
-          <div>
-            <h2 class="finance-chart-title" id="cpTitle">A pagar</h2>
-            <p class="finance-chart-subtitle" id="cpHint">—</p>
-          </div>
-          <div class="ov-table-tools">
-            <div class="finance-seg finance-seg--sm" id="cpGroup">
-              <button type="button" data-group="priority" class="active"><span class="material-symbols-outlined">sort</span><span>Prioridade</span></button>
-              <button type="button" data-group="supplier"><span class="material-symbols-outlined">local_shipping</span><span>Fornecedor</span></button>
-              <button type="button" data-group="project"><span class="material-symbols-outlined">apartment</span><span>Obra</span></button>
-              <button type="button" data-group="type"><span class="material-symbols-outlined">category</span><span>Tipo</span></button>
-            </div>
-            <label class="ov-search">
-              <span class="material-symbols-outlined">search</span>
-              <input id="cpSearch" type="search" placeholder="Beneficiário, tipo, descrição ou obra…" autocomplete="off" />
-            </label>
-          </div>
-        </header>
-        <div id="cpTable" class="finance-table-scroll"></div>
-      </section>
     </div>`;
 
   document.querySelectorAll("#cpGroup button").forEach((btn) => {
@@ -216,13 +241,163 @@ function renderShell() {
       renderTable();
     });
   });
+  const root = document.getElementById("financeRoot");
   let timer = null;
-  document.getElementById("cpSearch").addEventListener("input", (e) => {
+  root.addEventListener("input", (e) => {
+    if (e.target.id !== "cpSearch") return;
     clearTimeout(timer);
     timer = setTimeout(() => {
       state.query = e.target.value;
       renderTable();
+      renderChips();
     }, 150);
+  });
+  root.addEventListener("change", (e) => {
+    if (e.target.dataset.cpsc !== undefined) {
+      state.f.semComp = e.target.checked;
+      if (state.f.semComp) state.stage = "paid";
+      renderStrip();
+      renderChips();
+      renderTable();
+      return;
+    }
+    const k = e.target.dataset.cpf;
+    if (!k) return;
+    state.f[k] = e.target.value;
+    renderTable();
+    renderChips();
+  });
+  root.addEventListener("click", (e) => {
+    const c = e.target.closest("[data-cpchip]");
+    if (c) {
+      const k = c.dataset.cpchip;
+      if (k === "pago") {
+        state.stage = "paid";
+        state.f.chip = "";
+      } else {
+        state.stage = "pay";
+        state.f.chip = state.f.chip === k ? "" : k;
+      }
+      renderStrip();
+      renderChips();
+      renderTable();
+      return;
+    }
+    if (e.target.closest("[data-cplimpar]")) {
+      state.f = { ...FILTROS0 };
+      state.query = "";
+      renderFiltros();
+      renderChips();
+      renderTable();
+    }
+  });
+}
+
+/* ─── Filtros e cartões do protótipo ─────────────────────────────────────── */
+
+const ESTADO_DE = (p) => p.derivedStatusLabel || STATUS_LABEL[p.status] || p.status || "—";
+const CC_DE = (p) => p.costCenter?.name || p.project?.name || "";
+
+function opcoes(lista, atual, todos) {
+  const v = [...new Set(lista.filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt"));
+  return `<option value="">${esc(todos)}</option>${v.map((x) => `<option value="${esc(x)}"${x === atual ? " selected" : ""}>${esc(x)}</option>`).join("")}`;
+}
+
+function renderFiltros() {
+  const all = state.data?.items || [];
+  const f = state.f;
+  document.getElementById("cpFiltros").innerHTML = `
+    <input id="cpSearch" type="search" placeholder="Pesquisar n.º, beneficiário, descrição…" value="${esc(state.query)}" autocomplete="off">
+    <select data-cpf="estado">${opcoes(all.map(ESTADO_DE), f.estado, "Todos os estados")}</select>
+    <select data-cpf="tipo">${opcoes(all.map((p) => typeOf(p)?.label || p.sourceLabel), f.tipo, "Todos os tipos")}</select>
+    <select data-cpf="por">${opcoes(all.map((p) => p.requestedBy), f.por, "Pedido por: todos")}</select>
+    <label class="cp-venc">Vencimento de <input type="date" data-cpf="de" value="${esc(f.de)}"> até <input type="date" data-cpf="ate" value="${esc(f.ate)}"></label>
+    <select data-cpf="cc">${opcoes(all.map(CC_DE), f.cc, "Todos os centros de custo")}</select>
+    <select data-cpf="forn">${opcoes(all.map(partyOf), f.forn, "Fornecedor: todos")}</select>
+    <button type="button" class="finance-btn" data-cplimpar>Limpar</button>
+    <span class="cp-pend">Pendências: <label><input type="checkbox" data-cpsc${f.semComp ? " checked" : ""}> Pagos sem comprovativo</label></span>`;
+}
+
+/** Os filtros do protótipo aplicados a uma conta. */
+function passaFiltros(p) {
+  const f = state.f;
+  if (f.estado && ESTADO_DE(p) !== f.estado) return false;
+  if (f.tipo && (typeOf(p)?.label || p.sourceLabel) !== f.tipo) return false;
+  if (f.por && p.requestedBy !== f.por) return false;
+  if (f.cc && CC_DE(p) !== f.cc) return false;
+  if (f.forn && partyOf(p) !== f.forn) return false;
+  const d = p.dueDate ? String(p.dueDate).slice(0, 10) : "";
+  if (f.de && (!d || d < f.de)) return false;
+  if (f.ate && (!d || d > f.ate)) return false;
+  if (f.chip) {
+    const c = CHIPS.find((x) => x[0] === f.chip);
+    if (c && !c[2](p)) return false;
+  }
+  return true;
+}
+
+function renderChips() {
+  const base = (state.data?.items || []).filter((p) => {
+    const chip = state.f.chip;
+    state.f.chip = "";
+    const ok = passaFiltros(p);
+    state.f.chip = chip;
+    return ok;
+  });
+  const pagos = state.data?.paid || [];
+  const soma = (L, k = "payable") => L.reduce((a, p) => a + num(p[k]), 0);
+  document.getElementById("cpChips").innerHTML =
+    CHIPS.map(([k, label, teste]) => {
+      const L = base.filter(teste);
+      const tom = k === "atraso" ? " bad" : "";
+      return `<button type="button" class="fx2-chip${tom}${state.f.chip === k && state.stage === "pay" ? " on" : ""}" data-cpchip="${k}">
+        <span>${esc(label)}</span><b>${esc(money(soma(L)))}</b><i>${L.length} pagamento(s)</i></button>`;
+    }).join("") +
+    `<button type="button" class="fx2-chip${state.stage === "paid" ? " on" : ""}" data-cpchip="pago"><span>Pago · 30 dias</span><b>${esc(money(soma(pagos, "amount")))}</b><i>${pagos.length} pagamento(s)</i></button>`;
+}
+
+/** «Exportar Excel» — a lista como está filtrada. */
+async function exportarExcel() {
+  if (!window.XLSX) {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = SHEETJS;
+      s.onload = resolve;
+      s.onerror = () => reject(new Error("não foi possível carregar o Excel"));
+      document.head.appendChild(s);
+    }).catch((e) => toast(e.message, { type: "error" }));
+  }
+  if (!window.XLSX) return;
+  const rows = linhasVisiveis().map((p) => ({
+    Vencimento: p.dueDate ? dateOnly(p.dueDate) : "",
+    "Dias de atraso": p.daysLate > 0 ? p.daysLate : "",
+    Beneficiário: partyOf(p),
+    Documento: p.docNumber || "",
+    Descrição: p.shortDescription || p.description || "",
+    Obra: p.project?.name || "",
+    "Centro de custo": p.costCenter?.name || "",
+    Tipo: typeOf(p)?.label || "",
+    Fonte: p.sourceLabel || p.source || "",
+    "Pedido por": p.requestedBy || "",
+    Condição: TERM_LABEL[p.paymentTerm] || "",
+    Valor: num(p.amount),
+    "Por pagar": num(p.payable),
+    Moeda: p.currency || "AOA",
+    Estado: ESTADO_DE(p),
+  }));
+  const ws = window.XLSX.utils.json_to_sheet(rows);
+  const wb = window.XLSX.utils.book_new();
+  window.XLSX.utils.book_append_sheet(wb, ws, "Centro de Pagamentos");
+  window.XLSX.writeFile(wb, `P1 Centro de Pagamentos — ${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+/** As contas que a lista está a mostrar agora (etapa + filtros + pesquisa). */
+function linhasVisiveis() {
+  return (state.data?.items || []).filter((p) => {
+    if (state.stage === "commitments" ? p.stage !== "COMPROMISSO" : p.stage !== "A_PAGAR") return false;
+    if (state.stage === "overdue" && !(p.daysLate > 0)) return false;
+    if (!passaFiltros(p)) return false;
+    return matches([p.supplier, p.beneficiary, p.description, p.shortDescription, p.docNumber, typeOf(p)?.label, p.project?.name, p.costCenter?.name, p.requestedBy]);
   });
 }
 
@@ -326,7 +501,9 @@ function renderStrip() {
   wrap.querySelectorAll("[data-action]").forEach((btn) => {
     btn.addEventListener("click", () => {
       state.stage = btn.dataset.action;
+      state.f.chip = "";
       renderStrip();
+      renderChips();
       renderTable();
       document.getElementById("cpTable")?.closest(".finance-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
@@ -724,7 +901,9 @@ function renderApprovals(wrap) {
 }
 
 function renderPaid(wrap) {
-  const rows = (state.data?.paid || []).filter((p) => matches([p.party, p.description, p.project?.name]));
+  const rows = (state.data?.paid || []).filter(
+    (p) => matches([p.party, p.description, p.project?.name]) && (!state.f.semComp || p.hasProof === false)
+  );
   if (!rows.length) {
     wrap.innerHTML = `<div class="ov-empty ov-empty--lg"><span class="material-symbols-outlined">task_alt</span>Sem pagamentos nos últimos 30 dias.</div>`;
     return;
@@ -766,22 +945,12 @@ function renderTable() {
   if (state.stage === "schedule") return renderSchedule(wrap);
   if (state.stage === "approve") return renderApprovals(wrap);
   if (state.stage === "paid") return renderPaid(wrap);
-  const items = (state.data?.items || []).filter((p) => {
-    if (state.stage === "commitments" ? p.stage !== "COMPROMISSO" : p.stage !== "A_PAGAR") return false;
-    if (state.stage === "overdue" && !(p.daysLate > 0)) return false;
-    return matches([
-      p.supplier,
-      p.beneficiary,
-      p.description,
-      p.shortDescription,
-      p.docNumber,
-      typeOf(p)?.label,
-      p.project?.name,
-      p.costCenter?.name,
-    ]);
-  });
+  const items = linhasVisiveis();
+  const total = items.reduce((a, p) => a + num(p.payable), 0);
+  const resumo = document.getElementById("cpResumo");
+  if (resumo) resumo.textContent = `${items.length} pedido(s) na lista · por pagar ${money(total)}`;
   if (!items.length) {
-    wrap.innerHTML = `<div class="ov-empty ov-empty--lg"><span class="material-symbols-outlined">task_alt</span>Nada nesta etapa.</div>`;
+    wrap.innerHTML = `<div class="ov-empty ov-empty--lg"><span class="material-symbols-outlined">task_alt</span>Nada com estes filtros nesta etapa.</div>`;
     return;
   }
   renderPayTable(wrap, items);
@@ -792,6 +961,8 @@ function renderTable() {
 async function load() {
   try {
     state.data = await apiRequest("/finance/payment-center");
+    renderFiltros();
+    renderChips();
     renderKpis();
     renderStrip();
     renderTable();

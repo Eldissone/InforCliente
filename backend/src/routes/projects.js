@@ -2350,6 +2350,20 @@ projectRoutes.get(
   })
 );
 
+/**
+ * A data do último auto até à data do novo (AAAA-MM-DD), ou `null` se for o
+ * primeiro. Exportada para os testes.
+ */
+function previousReportDate(reports, reportDate) {
+  const ate = String(reportDate || "").slice(0, 10);
+  const datas = (reports || [])
+    .map((r) => (r.reportDate ? new Date(r.reportDate).toISOString().slice(0, 10) : null))
+    .filter((d) => d && (!ate || d <= ate))
+    .sort();
+  return datas.length ? datas[datas.length - 1] : null;
+}
+projectRoutes.previousReportDate = previousReportDate;
+
 projectRoutes.post(
   "/:id/measurement-reports",
   requireRole(["admin", "operador"]),
@@ -2366,9 +2380,15 @@ projectRoutes.post(
 
     const existingReports = await prisma.measurementReport.findMany({
       where: { projectId: id },
-      select: { reportNumber: true },
+      select: { reportNumber: true, reportDate: true },
     });
     const reportNumber = body.reportNumber?.trim() || getNextReportNumber(existingReports);
+
+    // Um auto mede o período desde o auto anterior. Sem «anterior até», o auto
+    // media desde o início da obra e, somado aos outros, contava tudo outra vez:
+    // na obra do Sumbe os quatro autos chegaram a 204,6% do contrato. Quando a
+    // data não vem, vale a do último auto até à data deste.
+    const prevDate = body.prevDate || previousReportDate(existingReports, body.reportDate);
 
     const duplicate = await prisma.measurementReport.findFirst({
       where: { projectId: id, reportNumber },
@@ -2390,7 +2410,7 @@ projectRoutes.post(
     const snapshot = buildMeasurementSnapshot(tasks, history, {
       filterGroup: body.filterGroup || "all",
       currentDate: body.reportDate,
-      prevDate: body.prevDate || null,
+      prevDate,
       reportNumber,
       projectName: project?.name || "Obra",
       currency: project?.currency === "USD" ? "USD" : "Kz",
@@ -2401,7 +2421,7 @@ projectRoutes.post(
         projectId: id,
         reportNumber,
         reportDate: new Date(body.reportDate),
-        prevDate: body.prevDate ? new Date(body.prevDate) : null,
+        prevDate: prevDate ? new Date(prevDate) : null,
         notes: body.notes || null,
         status: "DRAFT",
         snapshotData: snapshot,

@@ -331,6 +331,7 @@ model Project {
   progressHistory     ProjectProgressHistory[]
   progressTasks       ProjectProgressTask[]
   measurementReports  MeasurementReport[]
+  plannedMeasurements PlannedMeasurement[]
   transactions        ProjectTransaction[]
   stockMovements      StockMovement[]
   warehouses          Warehouse[]
@@ -575,6 +576,21 @@ model MeasurementReport {
 
   @@unique([projectId, reportNumber])
   @@index([projectId, reportDate])
+}
+
+/// R3: auto previsto (planeado), à parte dos autos de medição — só entra na
+/// previsão de recebimentos, nunca no medido nem no progresso da obra.
+model PlannedMeasurement {
+  id          String   @id @default(cuid())
+  projectId   String
+  number      Int
+  plannedDate DateTime
+  value       Decimal  @db.Decimal(18, 2)
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, plannedDate])
 }
 
 model ProjectPayment {
@@ -1355,6 +1371,10 @@ model GeneralCostCenter {
   name        String
   description String?
   active      Boolean  @default(true)
+  /// RG8 do protótipo: SEDE, FROTA ou OUTRO (o A1 separa Sede de Frota por aqui).
+  kind         String   @default("SEDE")
+  /// Orçamento anual, para comparar com o realizado (RG8).
+  annualBudget Decimal? @db.Decimal(16, 2)
   createdAt   DateTime @default(now())
 
   extraRequests ExtraRequest[]
@@ -1897,6 +1917,8 @@ model PurchaseOrder {
   paymentPlan  PurchasePaymentPlan?
   history      PurchaseHistoryLog[]
   workNeeds    WorkNeed[]
+  /// Obrigação fiscal que este pedido paga (G1 Impostos)
+  taxObligation TaxObligation?
 
   @@index([status])
   @@index([requestedById])
@@ -1925,6 +1947,14 @@ model PurchaseOrderItem {
   discountPercent    Decimal? @db.Decimal(5, 2)
   /// Excepção documental: sem comprovativo (DSC) ou autofaturação (AF)
   docException       PurchaseDocException?
+  /// P3: decisão do financeiro sobre a linha sem comprovativo — null (por
+  /// decidir), DSC (mantém), AF (autofaturação) ou FATURA (apareceu a fatura).
+  dscDecision        String?
+  dscDecidedAt       DateTime?
+  dscDecidedBy       String?
+  /// P3: a fatura que apareceu (ou o documento da autofaturação).
+  dscDocPath         String?
+  dscDocName         String?
 
   createdAt       DateTime      @default(now())
 
@@ -2257,6 +2287,7 @@ model Invoice {
   clientId           String?
   measurementId      String? // Auto de Medição (AM) associado
   docNumber          String?
+  invoiceType        String? // AM, FU, MC, ADI, RET, DRET, REV, SERV (R1 do protótipo)
   docDate            DateTime
   dueDate            DateTime?
   grossAmount        Decimal       @db.Decimal(16, 2) // V. Ilíquido Doc
@@ -2868,4 +2899,61 @@ model MaterialRequisitionItem {
 
   @@index([requisitionId])
   @@index([productId])
+}
+
+// ─── Impostos (G1–G4 do protótipo) ───────────────────────────────────────────
+
+/// Uma obrigação fiscal: um imposto a entregar ao Estado, de um mês, com data
+/// limite. Existe antes de haver pedido de pagamento; quando se pede o
+/// pagamento, o pedido (tipo IMPOSTOS) fica ligado e o estado vem dele.
+/// As prestações dos planos de pagamento (PPP) são obrigações também.
+model TaxObligation {
+  id              String    @id @default(cuid())
+  /// IVA, IRT, IRT-B, INSS, RF, Imposto Industrial, Imposto de Selo, PPP…
+  type            String
+  /// Mês a que o imposto respeita (AAAA-MM)
+  referenceMonth  String
+  dueDate         DateTime?
+  amount          Decimal   @db.Decimal(16, 2)
+  /// N.º da nota de liquidação
+  liquidationNote String?
+  /// Referência Única de Pagamento ao Estado
+  rupe            String?
+  /// Pago fora de um pedido de pagamento (registo manual)
+  paidAt          DateTime?
+  paidNote        String?
+  notes           String?
+  planId          String?
+  installment     Int?
+  purchaseOrderId String?   @unique
+  createdBy       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  plan          TaxPaymentPlan? @relation(fields: [planId], references: [id], onDelete: Cascade)
+  purchaseOrder PurchaseOrder?  @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+
+  @@index([referenceMonth])
+  @@index([dueDate])
+  @@index([planId])
+}
+
+/// Plano de pagamento de impostos em prestações (PPP), acordado com a AGT ou
+/// outra entidade. Cada prestação é uma `TaxObligation` com `planId`.
+model TaxPaymentPlan {
+  id          String   @id @default(cuid())
+  name        String
+  entity      String   @default("AGT")
+  /// N.º do acordo / processo
+  reference   String?
+  /// O imposto em dívida que o plano paga
+  taxType     String?
+  totalAmount Decimal  @db.Decimal(16, 2)
+  startDate   DateTime
+  notes       String?
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  installments TaxObligation[]
 }

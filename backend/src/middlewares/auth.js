@@ -161,6 +161,33 @@ function requireStockViewOrClientePortal() {
   };
 }
 
+/**
+ * Passa com a primeira permissão que o utilizador tiver, de uma lista de
+ * `[módulo, ação]`. Serve os ecrãs partilhados por duas áreas (ex.: a conta
+ * corrente de fornecedores, vista pelas Compras e pelo Financeiro).
+ */
+function requireAnyPermission(pairs) {
+  return async (req, res, next) => {
+    const userId = req.user?.sub;
+    const userRole = (req.user?.role || "").toLowerCase();
+    if (!userId || !userRole) return res.status(401).json({ error: "UNAUTHORIZED" });
+    try {
+      for (const [moduleName, action] of pairs) {
+        const { allowed } = await checkUserPermission(userId, userRole, moduleName, action, req.method);
+        if (allowed === "true" || allowed === "own") return next();
+        if (allowed === "view" && req.method === "GET") {
+          req.permissionScope = "view";
+          return next();
+        }
+      }
+      return res.status(403).json({ error: "FORBIDDEN_BY_PERMISSION" });
+    } catch (error) {
+      console.error("Permission check error:", error);
+      return res.status(500).json({ error: "PERMISSION_CHECK_FAILED" });
+    }
+  };
+}
+
 module.exports = {
   authRequired,
   authRequiredAllowQuery,
@@ -168,4 +195,5 @@ module.exports = {
   requirePermission,
   requirePermissionOrLegacyRole,
   requireStockViewOrClientePortal,
+  requireAnyPermission,
 };

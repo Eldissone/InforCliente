@@ -15,6 +15,7 @@ const FEATURES = [
   { key: "budget_import", label: "Importar orçamento de uma folha de Excel", default: false },
   { key: "barem_assist", label: "Assistente de baremes (calcular e tirar dúvidas)", default: false },
   { key: "budget_compose", label: "Compor os custos a partir do mapa de quantidades", default: false },
+  { key: "page_help", label: "«Dúvidas» — assistente de cada página (sem valores)", default: false },
   { key: "documents_draft", label: "Rascunhos de documentos (autos e relatório mensal)", default: false },
   { key: "photos", label: "Análise de fotos", default: false },
 ];

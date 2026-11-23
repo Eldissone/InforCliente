@@ -1,4 +1,5 @@
 import { destroyCharts } from "./charts.js";
+import { markActiveDropdownTriggers, markTopNavActive } from "../appNav.js";
 
 /**
  * Ecrã «Contas a Receber / Pagar»: uma só página com três separadores —
@@ -13,6 +14,21 @@ const TABS = {
 };
 
 let current = null;
+
+/*
+ * Os três separadores aparecem no menu em sítios diferentes (Contas a Receber,
+ * Contas a Pagar e Tesouraria › Previsão), como no protótipo. O menu acende a
+ * entrada pelo `?tab=`, por isso o separador tem de estar sempre no endereço —
+ * também quando se chega sem ele — e o menu volta a ser marcado a cada troca.
+ */
+function marcarMenu() {
+  try {
+    markActiveDropdownTriggers();
+    markTopNavActive();
+  } catch {
+    // Sem menu (vista embebida): nada a marcar.
+  }
+}
 
 function renderTabs() {
   const actions = document.getElementById("financePageActions");
@@ -42,6 +58,7 @@ async function openTab(key) {
   // O filtro rápido (?view=) é de cada separador: não passa para o seguinte.
   if (key !== new URLSearchParams(window.location.search).get("tab")) url.searchParams.delete("view");
   window.history.replaceState({}, "", url);
+  marcarMenu();
   renderTabs();
   destroyCharts();
   const mod = await TABS[current].load();
@@ -51,6 +68,12 @@ async function openTab(key) {
 export async function render() {
   const params = new URLSearchParams(window.location.search);
   current = TABS[params.get("tab")] ? params.get("tab") : "receber";
+  if (params.get("tab") !== current) {
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", current);
+    window.history.replaceState({}, "", url);
+  }
+  marcarMenu();
   renderTabs();
   const mod = await TABS[current].load();
   await mod.render();

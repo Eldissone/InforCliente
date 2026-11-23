@@ -11,6 +11,7 @@ import {
   TONES,
 } from "./charts.js";
 import { AGING_TONES } from "./aging.js";
+import { renderPainelF0 } from "./painelF0.js";
 import {
   drawKpiSparks,
   kpiCardsHtml,
@@ -78,6 +79,8 @@ function renderShell() {
   const skeleton = (n, variant) => skeletonHtml(n, variant.replace("ov-skeleton--", ""));
 
   document.getElementById("financeRoot").innerHTML = `
+    <div id="f0Painel" class="f0"></div>
+    <h3 class="cp-sec">Análise das obras</h3>
     <div class="ov">
       <div id="ovKpis" class="ov-kpis">${skeleton(4, "ov-skeleton--kpi")}</div>
       <div id="ovStrip" class="ov-strip">${skeleton(6, "ov-skeleton--cell")}</div>
@@ -804,5 +807,6 @@ export async function render() {
   state.months = 12;
   state.table = { query: "", scope: "active", sort: "revenue", dir: "desc", expanded: false };
   renderShell();
-  await load();
+  // F0 do protótipo em cima; a análise das obras (o painel anterior) por baixo.
+  await Promise.all([renderPainelF0(document.getElementById("f0Painel")), load()]);
 }

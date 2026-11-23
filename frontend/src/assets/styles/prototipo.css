@@ -1,0 +1,708 @@
+/* ==========================================================================
+   Tema do protótipo MBT — Financeiro e Comercial
+
+   O aspecto dos ecrãs destas duas áreas segue o protótipo (prototipo.html),
+   medido no navegador e não de memória: as fontes, as cores, o código do ecrã
+   a verde por cima do título, os cartões de indicadores com a barra de cor à
+   esquerda, os segmentos com o activo a verde, as tabelas, os botões.
+
+   Só se carrega nas páginas do Financeiro e do Comercial, por isso pode tocar
+   nos componentes partilhados (finance-*, ov-*, fx2-*, fcal-*, cm-*) sem
+   afectar o resto da app. Não mexe na barra de topo nem no menu lateral, que
+   são de toda a app.
+   ========================================================================== */
+
+:root {
+  /* Valores medidos no protótipo (getComputedStyle) */
+  --pt-bg: #f6f7f9;
+  --pt-surface: #ffffff;
+  --pt-surface2: #f1f4f7;
+  --pt-line: #e3e7ec;
+  --pt-line-in: #d5dbe3;
+  --pt-fg: #1f2937;
+  --pt-muted: #667085;
+  --pt-muted2: #56636f;
+  --pt-brand: #168a5a;
+  --pt-brand2: #1fa36a;
+  --pt-accent: #1f5fd1;
+  --pt-good: #1d8a55;
+  --pt-good-bg: #e3f4ea;
+  --pt-warn: #a86800;
+  --pt-warn-bg: #fdf1d8;
+  --pt-bad: #c2352b;
+  --pt-bad-bg: #fbe5e3;
+  --pt-neutral-bg: #eceff3;
+  --pt-display: "Barlow Semi Condensed", "Arial Narrow", Arial, sans-serif;
+  --pt-body: "Source Sans 3", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  /* O Comercial já trabalha com variáveis: passam a ser as do protótipo. */
+  --cm-line: var(--pt-line);
+  --cm-ink: var(--pt-fg);
+  --cm-muted: var(--pt-muted);
+  --cm-good-bg: var(--pt-good-bg);
+  --cm-good-fg: var(--pt-good);
+  --cm-warn-bg: var(--pt-warn-bg);
+  --cm-warn-fg: var(--pt-warn);
+  --cm-bad-bg: var(--pt-bad-bg);
+  --cm-bad-fg: var(--pt-bad);
+  --cm-neutral-bg: var(--pt-neutral-bg);
+  --cm-neutral-fg: var(--pt-muted);
+}
+
+/* ─── Página ─────────────────────────────────────────────────────────────── */
+body {
+  background: var(--pt-bg) !important;
+}
+
+.finance-page,
+.cm-page {
+  font-family: var(--pt-body);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--pt-fg);
+}
+
+/* ─── Cabeçalho do ecrã: código a verde por cima do título ──────────────── */
+.finance-page-header {
+  align-items: flex-end;
+  margin-bottom: 0.5rem;
+}
+
+.fcal-num,
+.cm-head-num {
+  display: block;
+  margin: 0 0 2px;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  font-family: var(--pt-display);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: none;
+  color: var(--pt-brand);
+}
+
+.finance-title,
+.cm-title,
+.fx2-h2 {
+  font-family: var(--pt-display) !important;
+  font-size: 1.55rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--pt-fg);
+}
+
+.finance-subtitle,
+.cm-lead {
+  max-width: 90ch;
+  margin: 4px 0 16px;
+  font-weight: 400;
+  font-size: 14px;
+  color: var(--pt-muted);
+}
+
+/* Títulos de secção: maiúsculas pequenas, como «RESULTADO DO PERÍODO». */
+.fx2-blk h3,
+.fcal-h h3,
+.fcal-cab h3,
+.finance-card h2,
+.finance-card h3,
+.cm-panel-title {
+  font-family: var(--pt-display) !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--pt-muted2) !important;
+}
+
+/* No Comercial, o título que vem logo a seguir ao código (cabeçalho de uma
+   folha ou de um ecrã) é o título do ecrã, grande — como «Materiais» no
+   protótipo. Os outros `cm-panel-title` são títulos de secção. */
+.cm-head .cm-panel-title,
+.cm-head .cm-title {
+  font-family: var(--pt-display) !important;
+  font-size: 1.55rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  color: var(--pt-fg) !important;
+}
+
+/* ─── Blocos ─────────────────────────────────────────────────────────────── */
+.finance-card,
+.fx2-blk,
+.fcal-box,
+.cm-panel,
+.fcal-p {
+  border: 1px solid var(--pt-line) !important;
+  border-radius: 8px !important;
+  background: var(--pt-surface);
+  box-shadow: none !important;
+}
+
+.finance-card,
+.cm-panel {
+  padding: 16px;
+}
+
+/* ─── Indicadores: barra de cor à esquerda, rótulo pequeno, valor condensado ─ */
+.fx2-kpis,
+.ov-kpis {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)) !important;
+  gap: 8px !important;
+  margin-bottom: 10px;
+}
+
+.fx2-k,
+.ov-kpi {
+  padding: 6px 10px !important;
+  gap: 0 !important;
+  border: 1px solid var(--pt-line) !important;
+  border-left: 3px solid #9aa8b8 !important;
+  border-radius: 8px !important;
+  background: var(--pt-surface) !important;
+  box-shadow: none !important;
+}
+
+.fx2-k--good, .ov-kpi--emerald, .ov-kpi--green { border-left-color: var(--pt-good) !important; }
+.fx2-k--bad, .ov-kpi--red { border-left-color: var(--pt-bad) !important; }
+.fx2-k--warn, .ov-kpi--amber { border-left-color: var(--pt-warn) !important; }
+.fx2-k--blue, .fx2-k--neu, .ov-kpi--blue { border-left-color: var(--pt-accent) !important; }
+.ov-kpi--violet { border-left-color: #8a4fd1 !important; }
+.ov-kpi--slate { border-left-color: #9aa8b8 !important; }
+
+.fx2-kt,
+.ov-kpi-label {
+  font-family: var(--pt-body);
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.04em !important;
+  text-transform: uppercase;
+  color: var(--pt-muted) !important;
+}
+
+.fx2-kv,
+.ov-kpi-value,
+.ov-cell-value {
+  font-family: var(--pt-display) !important;
+  font-size: 19px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0 !important;
+  color: var(--pt-fg);
+}
+
+.fx2-kn,
+.ov-kpi-foot,
+.ov-kpi-body,
+.ov-cell-sub {
+  font-size: 11px !important;
+  color: var(--pt-muted) !important;
+}
+
+/* O protótipo não põe ícones nos indicadores. */
+.ov-kpi-icon {
+  display: none !important;
+}
+
+.ov-kpi-head {
+  gap: 0 !important;
+}
+
+.ov-cell {
+  border-radius: 8px !important;
+}
+
+.ov-cell-label {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.04em !important;
+  text-transform: uppercase;
+  color: var(--pt-muted) !important;
+}
+
+.ov-cell-label .material-symbols-outlined {
+  display: none;
+}
+
+/* ─── Segmentos: caixa com contorno, o activo a verde ──────────────────── */
+.finance-seg {
+  gap: 0 !important;
+  padding: 0 !important;
+  overflow: hidden;
+  border: 1px solid var(--pt-line);
+  border-radius: 8px !important;
+  background: var(--pt-surface) !important;
+}
+
+.finance-seg > button,
+.finance-seg > a {
+  height: auto !important;
+  padding: 5px 14px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-family: var(--pt-body);
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  color: var(--pt-fg) !important;
+}
+
+.finance-seg > button + button,
+.finance-seg > a + a {
+  border-left: 1px solid var(--pt-line) !important;
+}
+
+.finance-seg > button.active,
+.finance-seg > button.is-active,
+.finance-seg > button[aria-selected="true"] {
+  background: var(--pt-brand2) !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+}
+
+.finance-seg .material-symbols-outlined {
+  display: none;
+}
+
+/* ─── Botões ─────────────────────────────────────────────────────────────── */
+.finance-btn,
+.fcal-todos,
+.cm-chip:is(button, a) {
+  height: auto !important;
+  padding: 6px 11px !important;
+  border: 1px solid var(--pt-line) !important;
+  border-radius: 6px !important;
+  background: var(--pt-surface) !important;
+  box-shadow: none !important;
+  font-family: var(--pt-body);
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: var(--pt-fg) !important;
+}
+
+.finance-btn:hover,
+.fcal-todos:hover,
+.cm-chip:is(button, a):hover {
+  border-color: var(--pt-accent) !important;
+}
+
+.finance-btn--primary,
+.fcal-todos.on,
+.cm-chip.is-on:is(button, a) {
+  border-color: var(--pt-brand) !important;
+  background: var(--pt-brand) !important;
+  color: #fff !important;
+}
+
+/* ─── Campos ─────────────────────────────────────────────────────────────── */
+.finance-page :is(input[type="search"], input[type="text"], input[type="date"], select),
+.fcal-q,
+.fcal-ano {
+  height: auto !important;
+  padding: 4px 6px !important;
+  border: 1px solid var(--pt-line-in) !important;
+  border-radius: 4px !important;
+  background: var(--pt-surface) !important;
+  font-family: var(--pt-body);
+  font-size: 13px !important;
+  color: var(--pt-fg);
+}
+
+/* ─── Tabelas ────────────────────────────────────────────────────────────── */
+.fx2-tw,
+.finance-table-scroll,
+.cm-table-wrap,
+.imp-tabela {
+  border: 1px solid var(--pt-line) !important;
+  border-radius: 6px !important;
+  background: var(--pt-surface);
+}
+
+:is(.fx2-t, .fin-table, table.cm-table, .ac-table, .tz-table) th {
+  padding: 7px 8px !important;
+  border-bottom: 1px solid var(--pt-line) !important;
+  background: var(--pt-surface2) !important;
+  font-family: var(--pt-body);
+  font-size: 11.5px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  color: var(--pt-muted) !important;
+}
+
+:is(.fx2-t, .fin-table, table.cm-table, .ac-table, .tz-table) td {
+  border-bottom: 1px solid var(--pt-line) !important;
+  font-size: 13px;
+}
+
+:is(.fx2-t, .fin-table, table.cm-table, .ac-table, .tz-table) tfoot td {
+  background: var(--pt-surface2) !important;
+  font-weight: 700;
+}
+
+.fx2-mf th {
+  background: var(--pt-surface2) !important;
+  font-size: 11.5px !important;
+  color: var(--pt-muted) !important;
+}
+
+/* ─── Etiquetas (pills) ──────────────────────────────────────────────────── */
+.fcal-pill,
+.finance-badge,
+.finance-chip,
+.cm-pill {
+  padding: 1px 8px !important;
+  border-radius: 20px !important;
+  font-family: var(--pt-body);
+  font-size: 11.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.02em !important;
+  text-transform: none !important;
+}
+
+.fcal-pill--bad, .finance-chip--red, .finance-badge--red, .cm-pill.is-bad { background: var(--pt-bad-bg) !important; color: var(--pt-bad) !important; }
+.fcal-pill--warn, .finance-chip--amber, .finance-badge--amber, .cm-pill.is-warn { background: var(--pt-warn-bg) !important; color: var(--pt-warn) !important; }
+.fcal-pill--blue, .finance-chip--blue, .finance-badge--blue { background: #e8f0fe !important; color: var(--pt-accent) !important; }
+.finance-chip--emerald, .finance-badge--emerald, .cm-pill.is-good { background: var(--pt-good-bg) !important; color: var(--pt-good) !important; }
+.fcal-pill--slate, .finance-chip--slate, .finance-badge--slate { background: var(--pt-neutral-bg) !important; color: var(--pt-muted) !important; }
+
+/* Chips de filtro (contagens), como os `fcpchip` do protótipo. */
+.fx2-chip {
+  height: auto !important;
+  padding: 7px 15px !important;
+  border: 1px solid var(--pt-line) !important;
+  border-radius: 999px !important;
+  background: var(--pt-surface) !important;
+  font-size: 13px !important;
+  color: var(--pt-fg) !important;
+}
+
+.fx2-chip b {
+  padding: 0 !important;
+  background: none !important;
+  font-size: 15px !important;
+}
+
+.fx2-chip.bad b { color: var(--pt-bad) !important; }
+
+.fx2-chip.on {
+  border-color: var(--pt-brand) !important;
+  background: var(--pt-brand) !important;
+  color: #fff !important;
+}
+
+.fx2-chip.on b { color: #fff !important; }
+
+/* ─── Cores de valores ───────────────────────────────────────────────────── */
+.fcal-in { color: var(--pt-good) !important; }
+.fcal-out { color: var(--pt-bad) !important; }
+
+/* ─── Calendário: período escolhido e atual a verde, como no protótipo ──── */
+.fcal-p.on {
+  border: 2px solid var(--pt-brand) !important;
+}
+
+.fcal-t {
+  font-family: var(--pt-display);
+  font-size: 14px;
+}
+
+/* Valores das pastilhas de resumo do Comercial (custo, preço, margem). */
+.cm-chip b,
+.cm-budget-kpi b {
+  font-family: var(--pt-display);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* ─── Comercial: barra lateral de folhas ─────────────────────────────────── */
+.cm-sidenav-title {
+  font-family: var(--pt-display);
+  font-size: 12px;
+  color: var(--pt-muted2);
+}
+
+/* A folha aberta: fundo verde claro e o código a verde, como a entrada
+   activa do menu do protótipo. */
+.cm-sidenav-link.is-on {
+  border-color: transparent !important;
+  border-left: 3px solid var(--pt-brand) !important;
+  border-radius: 6px !important;
+  background: var(--pt-good-bg) !important;
+  color: var(--pt-fg) !important;
+  font-weight: 600;
+}
+
+.cm-sidenav-link.is-on .cm-sidenav-tag { color: var(--pt-brand) !important; }
+.cm-sidenav-link.is-on .cm-sidenav-total { color: var(--pt-muted) !important; }
+
+.cm-sidenav-tag {
+  font-family: var(--pt-display);
+  font-size: 12px !important;
+  font-weight: 600 !important;
+}
+
+/* ─── «← Voltar» e Dúvidas · PDF · Word (o `pexp` do protótipo) ─────────── */
+.pexp-voltar {
+  display: inline-block;
+  margin: 0 0 8px;
+  padding: 3px 9px;
+  border: 1px solid var(--pt-line);
+  border-radius: 6px;
+  background: var(--pt-surface);
+  font-family: var(--pt-body);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pt-fg);
+  cursor: pointer;
+}
+
+.pexp-voltar:hover { border-color: var(--pt-accent); }
+
+.finance-page-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.pexp {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.cm-head > .pexp { align-self: flex-start; }
+
+.pexp-b {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border: 1px solid var(--pt-line);
+  border-radius: 6px;
+  background: var(--pt-surface);
+  font-family: var(--pt-body);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pt-fg);
+  cursor: pointer;
+}
+
+.pexp-b:hover { border-color: var(--pt-accent); }
+.pexp-b[disabled] { opacity: 0.5; cursor: default; }
+
+.pexp-duvidas {
+  border-color: #b9e3cb;
+  background: var(--pt-good-bg);
+  color: var(--pt-brand);
+}
+
+.pexp-duvidas span {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--pt-brand);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.pexp-st { font-size: 12px; color: var(--pt-muted); }
+
+/* Painel «Dúvidas sobre a página» */
+#hlpPan {
+  position: fixed;
+  top: 84px;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  width: min(380px, calc(100vw - 32px));
+  overflow: hidden;
+  border: 1px solid var(--pt-line);
+  border-radius: 10px;
+  background: var(--pt-surface);
+  box-shadow: 0 12px 32px rgba(16, 24, 40, 0.18);
+  font-family: var(--pt-body);
+  font-size: 13px;
+  color: var(--pt-fg);
+}
+
+#hlpPan[hidden] { display: none; }
+
+.hlp-h {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #16212e;
+  color: #fff;
+}
+
+.hlp-h small { display: block; font-size: 11px; opacity: 0.8; }
+.hlp-h b { font-family: var(--pt-display); font-size: 15px; font-weight: 600; }
+
+.hlp-x {
+  border: 0;
+  background: none;
+  color: #fff;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.hlp-b {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.hlp-intro { margin: 0 0 10px; color: var(--pt-muted); }
+.hlp-sug { display: grid; gap: 6px; }
+.hlp-sug .finance-btn { justify-content: flex-start; text-align: left; white-space: normal; }
+
+.hlp-m {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  line-height: 1.45;
+}
+
+.hlp-m--u { margin-left: 30px; background: #e8f0fe; }
+.hlp-m--a { margin-right: 10px; background: var(--pt-surface2); }
+.hlp-m ul { margin: 4px 0; padding-left: 18px; }
+
+.hlp-f {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--pt-line);
+}
+
+.hlp-f textarea {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--pt-line-in);
+  border-radius: 6px;
+  font: inherit;
+  resize: vertical;
+}
+
+.hlp-f > div { display: flex; justify-content: flex-end; gap: 6px; }
+
+/* ─── P1 Centro de Pagamentos: filtros como no protótipo ──────────────────── */
+.cp-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.cp-filtros > input[type="search"] { width: min(240px, 100%); }
+.cp-filtros select { max-width: 220px; }
+.cp-venc { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--pt-muted); }
+.cp-pend { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--pt-muted); }
+.cp-pend label { display: inline-flex; align-items: center; gap: 4px; color: var(--pt-fg); }
+
+.fx2-chip i {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--pt-muted);
+}
+
+.fx2-chip.on i { color: rgba(255, 255, 255, 0.85); }
+
+.cp-etapas { margin: 0 0 8px; }
+.cp-resumo { margin: 4px 2px 8px; font-size: 12.5px; color: var(--pt-muted); }
+
+.cp-sec {
+  margin: 18px 0 8px;
+  font-family: var(--pt-display);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--pt-muted2);
+}
+
+/* ─── F0 Painel Financeiro ────────────────────────────────────────────────── */
+.f0-filtros { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; margin-bottom: 4px; }
+.f0-lbl { display: inline-flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--pt-muted); }
+.f0-ano { width: 90px; }
+.f0-obra { min-width: 240px; max-width: 100%; }
+.f0-rot { align-self: center; font-size: 12.5px; color: var(--pt-muted); }
+.f0-h3 {
+  margin: 14px 0 6px;
+  font-family: var(--pt-display);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #56636f;
+}
+.f0-h3 small { font-family: var(--pt-body, inherit); font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--pt-muted); }
+.f0-blk { margin-top: 12px; padding: 4px 14px 12px; }
+.f0-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 12px; margin-top: 12px; }
+.f0-grid > .finance-card { margin: 0; }
+@media (max-width: 900px) { .f0-grid { grid-template-columns: 1fr; } }
+.f0-vs--up { color: #1fa36a; }
+.f0-vs--down { color: #c0392b; }
+.f0-bar { height: 6px; margin-top: 3px; border-radius: 3px; background: #eef1f4; }
+.f0-bar i { display: block; height: 6px; border-radius: 3px; background: #1fa36a; }
+.f0-nat td { white-space: normal; vertical-align: top; }
+.f0-tot td { font-weight: 600; border-top: 1px solid var(--pt-line, #e3e7ec); }
+.f0-ind { padding-left: 18px !important; }
+.f0-neg { color: #b42318; }
+.f0-flx { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; align-items: start; }
+.f0-row { cursor: pointer; }
+.f0-row:hover td { background: #f6f7f9; }
+.f0-lbl .finance-input { width: auto; }
+.f0-lbl .f0-obra { width: 300px; min-width: 0; max-width: 100%; }
+.f0-grid > * { min-width: 0; }
+.f0-blk { overflow-x: auto; }
+@media (max-width: 1200px) { .f0-grid { grid-template-columns: 1fr; } }
+
+/* ─── R1 Centro de Recebimentos ───────────────────────────────────────────── */
+button.fx2-k { font: inherit; text-align: left; cursor: pointer; background: #fff; }
+button.fx2-k:hover { background: #f8fafc; }
+.fx2-k.on { box-shadow: 0 0 0 2px #1fa36a inset; }
+.inv-ate { gap: 6px; }
+.inv-ate .finance-input { width: auto; padding: 4px 8px; }
+.inv-ate .finance-btn.is-on { background: #1fa36a; border-color: #1fa36a; color: #fff; }
+#invSearch { width: min(300px, 100%); }
+
+/* ─── T4 Previsão de Tesouraria ───────────────────────────────────────────── */
+.fx2-lead { margin: 6px 0 10px; font-size: 13px; color: var(--pt-muted); }
+.t4-t td, .t4-t th { white-space: nowrap; }
+.t4-on td { background: #eaf6ef !important; }
+.t4-fora td { color: var(--pt-muted); font-style: italic; }
+.t4-atr td:first-child { color: #c0392b; font-weight: 600; }
+
+/* ─── A1 Custos da Empresa ────────────────────────────────────────────────── */
+.a1-sub td { background: #f6f7f9; font-size: 12.5px; }
+.a1-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+@media (max-width: 1000px) { .a1-grid { grid-template-columns: 1fr; } }
+
+/* ─── RG8 Centros de Custo ────────────────────────────────────────────────── */
+.rg-orc { width: 140px; text-align: right; padding: 3px 6px; }
+.rg-nome { width: min(280px, 100%); }
+.rg-acts { white-space: nowrap; }
+.rg-acts .finance-btn.is-on { background: #1fa36a; border-color: #1fa36a; color: #fff; }
+.rg-subs > td { background: #f6f7f9; padding: 8px 14px !important; }
+.rg-subt { max-width: 820px; }
+
+/* ─── P3 Despesas sem Comprovativo ────────────────────────────────────────── */
+.dsc-dec { width: auto; padding: 3px 6px; font-size: 12.5px; }
+
+/* ─── R3 Planear Autos Previstos ──────────────────────────────────────────── */
+.pl-out { max-height: 260px; overflow: auto; }

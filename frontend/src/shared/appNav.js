@@ -71,55 +71,143 @@ const APP_MENU = [
   },
   {
     type: "group",
-    label: "Logística",
+    label: "Compras e Stock",
     icon: "local_shipping",
+    /*
+     * Arrumado como a área Compras e Stock do protótipo (prototipo.html,
+     * NAV_COMP): Compras, Encomendas e Stock, com o código de cada ecrã.
+     * Onde a app já tinha o ecrã, a entrada leva lá (cotações, fornecedores,
+     * requisições, entregas, ferramentas, armazéns); os que faltavam estão
+     * em /compras/*. Os ecrãs que só a app tem ficam no fim, sem código.
+     */
     children: [
-      { label: "Produtos e Serviços", icon: "category", href: "/produtos" },
-      { label: "Equipamentos e Frotas", icon: "agriculture", href: "/equipamentos" },
-       { label: "Armazéns", icon: "warehouse", href: "/registos/armazens" },
-      { label: "Pedidos de Logística", icon: "inventory_2", selector: LOGISTICS_SELECTOR, href: "/Stock" },
-      { label: "Requisições de Material", icon: "assignment_add", href: "/requisicoes", perm: "obras:view" },
+      {
+        label: "Compras",
+        icon: "shopping_cart",
+        children: [
+          { label: "Pedidos de Cotação", badge: "C1", icon: "request_quote", href: "/Projectos/Cotacao", perm: "navlinks:nav_cotacao" },
+          { label: "Mapas Comparativos", badge: "C2", icon: "compare", href: "/compras/mapas-comparativos" },
+          { label: "Base de Preços", badge: "C3", icon: "sell", href: "/compras/base-precos" },
+          { label: "Fornecedores", badge: "C4", icon: "local_shipping", href: "/fornecedores" },
+        ],
+      },
+      {
+        label: "Encomendas",
+        icon: "assignment",
+        children: [
+          { label: "Compromissos Pendentes", badge: "C5", icon: "pending_actions", href: "/compras/compromissos" },
+          { label: "Conta Corrente de Fornecedores", badge: "C6", icon: "account_box", href: "/compras/conta-corrente-fornecedores" },
+        ],
+      },
+      {
+        label: "Stock",
+        icon: "warehouse",
+        children: [
+          { label: "Requisições Internas", badge: "S1", icon: "assignment_add", href: "/requisicoes", perm: "obras:view" },
+          { label: "Entregas por Confirmar", badge: "S2", icon: "fact_check", href: "/Stock?tab=deliveries" },
+          { label: "Stock por Armazém", badge: "S3", icon: "inventory", href: "/compras/stock-armazem", perm: "stock:view" },
+          { label: "Movimentos de Armazém", badge: "S4", icon: "history", href: "/compras/movimentos-armazem", perm: "stock:view" },
+          { label: "Ferramentas e Equipamentos", badge: "S5", icon: "handyman", href: "/equipamentos" },
+          { label: "Armazéns", badge: "S6", icon: "warehouse", href: "/registos/armazens" },
+          { label: "Pedidos de Logística", icon: "inventory_2", selector: LOGISTICS_SELECTOR, href: "/Stock" },
+          { label: "Produtos e Serviços", icon: "category", href: "/produtos" },
+        ],
+      },
     ],
   },
   {
     type: "group",
     label: "Financeiro",
     icon: "account_balance",
+    /*
+     * Arrumado como a área Financeira do protótipo (prototipo.html, NAV_FIN):
+     * os mesmos grupos, pela mesma ordem, e o código do ecrã do protótipo na
+     * etiqueta quando o ecrã da app faz o mesmo. Os ecrãs que só a app tem
+     * ficam no grupo a que pertencem, sem código. Os grupos do protótipo que a
+     * app ainda não tem (Impostos, Financiamentos, Importações, Documentação…)
+     * não aparecem: um menu com entradas mortas engana mais do que ajuda.
+     */
     children: [
-      { label: "Overview Financeiro", icon: "insights", href: "/Financeiro/overview", perm: "financeiro:view" },
       {
-        label: "Faturação",
-        icon: "request_quote",
+        label: "Painel",
+        icon: "insights",
         children: [
-          { label: "Registar Faturas", icon: "post_add", href: "/Financeiro/faturacao/registar", perm: "financeiro:view" },
+          { label: "Painel Financeiro", badge: "F0", icon: "insights", href: "/Financeiro/overview", perm: "financeiro:view" },
+          { label: "Calendário Financeiro", badge: "F1", icon: "calendar_month", href: "/Financeiro/calendario?ver=tudo", perm: "financeiro:view" },
+          { label: "Mapa de Fluxos", badge: "F2", icon: "table_chart", href: "/Financeiro/mapa-fluxos", perm: "financeiro:view" },
+          { label: "Previsto × Realizado", badge: "F3", icon: "query_stats", href: "/Financeiro/controlo", perm: "financeiro:view" },
+        ],
+      },
+      {
+        label: "Contas a Pagar",
+        icon: "north_east",
+        children: [
+          { label: "Centro de Pagamentos", badge: "P1", icon: "account_balance", href: "/Financeiro/centro-pagamentos", perm: "financeiro:view" },
+          { label: "Calendário de Pagamentos", badge: "P2", icon: "event", href: "/Financeiro/calendario?ver=pagar", perm: "financeiro:view" },
+          { label: "Despesas sem Comprovativo", badge: "P3", icon: "receipt", href: "/Financeiro/despesas-sem-comprovativo", perm: "financeiro:view" },
+          // O mesmo ecrã que C6 nas Compras: no protótipo aparece nas duas áreas.
+          { label: "Conta Corrente de Fornecedores", badge: "P5", icon: "account_box", href: "/compras/conta-corrente-fornecedores?area=fin", perm: "financeiro:view" },
+          { label: "Contas a Pagar", icon: "pending_actions", href: "/Financeiro/contas?tab=pagar", perm: "financeiro:view" },
+          { label: "Compras e Pedidos", icon: "shopping_cart", selector: "[data-nav-centros]", href: "/Financeiro/centroDeCompras" },
+          { label: "Pagamentos a Fornecedor", icon: "north_east", href: "/Financeiro/tesouraria/pagamentos", perm: "financeiro:view" },
+        ],
+      },
+      {
+        label: "Contas a Receber",
+        icon: "south_west",
+        children: [
+          { label: "Centro de Recebimentos", badge: "R1", icon: "post_add", href: "/Financeiro/faturacao/registar", perm: "financeiro:view" },
+          { label: "Calendário de Recebimentos", badge: "R2", icon: "event_available", href: "/Financeiro/calendario?ver=receber", perm: "financeiro:view" },
+          { label: "Autos de Medição", badge: "R3", icon: "straighten", href: "/Financeiro/autos-medicao", perm: "financeiro:view" },
+          { label: "Conta Corrente de Clientes", badge: "R4", icon: "account_box", href: "/Financeiro/conta-corrente", perm: "financeiro:view" },
+          { label: "Contas a Receber", icon: "pending_actions", href: "/Financeiro/contas?tab=receber", perm: "financeiro:view" },
           { label: "Faturação Prevista", icon: "event_upcoming", href: "/Financeiro/faturacao/prevista", perm: "financeiro:view" },
           { label: "Resumo Faturas vs Previsão", icon: "compare_arrows", href: "/Financeiro/faturacao/resumo", perm: "financeiro:view" },
+          { label: "Recebimentos do Cliente", icon: "south_west", href: "/Financeiro/tesouraria/recebimentos", perm: "financeiro:view" },
         ],
       },
-      {
-        label: "Custos",
-        icon: "payments",
-        children: [
-          { label: "Overview Custos", icon: "monitoring", href: "/Financeiro/custos/overview", perm: "financeiro:view" },
-          { label: "Registar Custos", icon: "receipt_long", href: "/Financeiro/custos/registar", perm: "financeiro:view" },
-          { label: "Custos Realizados", icon: "task_alt", href: "/Financeiro/custos/realizados", perm: "financeiro:view" },
-        ],
-      },
-      { label: "Contas a Receber / Pagar", icon: "swap_horiz", href: "/Financeiro/contas", perm: "financeiro:view" },
       {
         label: "Tesouraria",
         icon: "account_balance_wallet",
         children: [
-          { label: "Extratos Bancários", icon: "receipt_long", href: "/Financeiro/tesouraria/extratos", perm: "financeiro:view" },
-          { label: "Recebimentos do Cliente", icon: "south_west", href: "/Financeiro/tesouraria/recebimentos", perm: "financeiro:view" },
+          { label: "Contas e Saldos", badge: "T1", icon: "account_balance", href: "/Financeiro/contas-saldos", perm: "financeiro:view" },
+          { label: "Extratos e Conciliação", badge: "T3", icon: "receipt_long", href: "/Financeiro/tesouraria/extratos", perm: "financeiro:view" },
+          { label: "Previsão de Tesouraria", badge: "T4", icon: "waterfall_chart", href: "/Financeiro/previsao-tesouraria", perm: "financeiro:view" },
+          { label: "Mapa de Fluxo de Caixa", badge: "T8", icon: "stacked_line_chart", href: "/Financeiro/fluxo-caixa", perm: "financeiro:view" },
+          { label: "Contas e Cartões", badge: "T5", icon: "credit_card", href: "/registos/cartoes" },
           { label: "Transferências Internas", icon: "swap_horiz", href: "/Financeiro/tesouraria/transferencias", perm: "financeiro:view" },
           { label: "Levantamentos ATM", icon: "local_atm", href: "/Financeiro/tesouraria/atm", perm: "financeiro:view" },
-          { label: "Pagamentos a Fornecedor", icon: "north_east", href: "/Financeiro/tesouraria/pagamentos", perm: "financeiro:view" },
         ],
       },
-      { label: "Compras e Pedidos", icon: "shopping_cart", selector: "[data-nav-centros]", href: "/Financeiro/centroDeCompras" },
-      { label: "Centro de Pagamentos", icon: "account_balance", href: "/Financeiro/centro-pagamentos", perm: "financeiro:view" },
-      { label: "Controlo Financeiro", icon: "query_stats", href: "/Financeiro/controlo", perm: "financeiro:view" },
+      {
+        label: "Análise de Custos",
+        icon: "payments",
+        children: [
+          { label: "Custos da Empresa", badge: "A1", icon: "task_alt", href: "/Financeiro/custos/realizados", perm: "financeiro:view" },
+          { label: "Overview Custos", icon: "monitoring", href: "/Financeiro/custos/overview", perm: "financeiro:view" },
+          { label: "Registar Custos", icon: "receipt_long", href: "/Financeiro/custos/registar", perm: "financeiro:view" },
+        ],
+      },
+      {
+        label: "Controlo de Obras",
+        icon: "engineering",
+        children: [
+          { label: "Resumo das Obras", badge: "O1", icon: "dashboard", href: "/Financeiro/obras-resumo", perm: "financeiro:view" },
+          { label: "Custos por Obra", badge: "O2", icon: "price_check", href: "/Financeiro/obras-custos", perm: "financeiro:view" },
+          { label: "Tesouraria da Obra", badge: "O3", icon: "savings", href: "/Financeiro/obra-tesouraria", perm: "financeiro:view" },
+          { label: "Previsões por Obra", badge: "O4", icon: "trending_up", href: "/Financeiro/obra-previsoes", perm: "financeiro:view" },
+          { label: "Áreas de Negócio", badge: "O5", icon: "donut_small", href: "/Financeiro/areas-negocio", perm: "financeiro:view" },
+        ],
+      },
+      {
+        label: "Registos",
+        icon: "folder_open",
+        children: [
+          { label: "Produtos e Serviços", badge: "RG1", icon: "inventory_2", href: "/registos/produtos" },
+          { label: "Obras", badge: "RG4", icon: "apartment", href: "/registos/obras" },
+          { label: "Centros de Custo", badge: "RG8", icon: "account_tree", href: "/Financeiro/centros-custo", perm: "financeiro:view" },
+        ],
+      },
     ],
   },
 ];
