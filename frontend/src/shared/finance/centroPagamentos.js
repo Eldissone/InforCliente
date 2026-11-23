@@ -3,8 +3,8 @@ import { openModal, setButtonLoading, toast } from "../ui.js";
 import { formatCurrency, toDateKey } from "../format.js";
 import { can } from "../permissions.js";
 import { escapeFinanceHtml as esc } from "../financePage.js";
-import { chartCardHtml, compactMoney as compact, drawBarChart, drawComboChart, drawDonutChart, destroyCharts, TONES } from "./charts.js";
-import { kpiCardsHtml, meterHtml, num, skeletonHtml, stripHtml } from "./widgets.js";
+import { compactMoney as compact, destroyCharts } from "./charts.js";
+import { num, skeletonHtml, stripHtml } from "./widgets.js";
 import { dueChip } from "./contasRecebimentos.js";
 import { canPayHere, openPayModal } from "./payModal.js";
 
@@ -209,32 +209,6 @@ function renderShell() {
         As etapas por cima da lista — agendar prestações, aprovar reforços, compromissos — são as da app.
         Análise de custos: <a href="/Financeiro/obras-custos">O2 · Custos por Obra</a>.
       </p>
-
-      <h3 class="cp-sec">Análise</h3>
-      <div id="cpKpis" class="ov-kpis">${skeletonHtml(4, "kpi")}</div>
-
-      <div class="ov-row ov-row--8-4">
-        ${chartCardHtml({
-          id: "cpChartPlan",
-          title: "Plano de pagamentos",
-          subtitle: "O que tem de sair por semana · linha = saldo bancário depois de pagar",
-          height: 280,
-          beforeChartHtml: `<div id="cpPlanTotals" class="ov-flow-totals"></div>`,
-        })}
-        <section class="finance-card ov-panel">
-          <header class="finance-chart-head">
-            <h2 class="finance-chart-title">Esta semana</h2>
-            <p class="finance-chart-subtitle">Próximos 7 dias, com o vencido</p>
-          </header>
-          <div id="cpWeek">${skeletonHtml(4, "line")}</div>
-        </section>
-      </div>
-
-      <div class="ov-row ov-row--6-6">
-        ${chartCardHtml({ id: "cpChartSources", title: "A pagar por origem", subtitle: "De onde vêm as contas por pagar", height: 260 })}
-        ${chartCardHtml({ id: "cpChartProjects", title: "A pagar por obra", subtitle: "Vencido e a vencer", height: 260 })}
-      </div>
-
     </div>`;
 
   document.querySelectorAll("#cpGroup button").forEach((btn) => {
@@ -406,68 +380,7 @@ function linhasVisiveis() {
   });
 }
 
-/* ─── Indicadores ─────────────────────────────────────────────────────────── */
-
-function renderKpis() {
-  const t = state.data?.totals || {};
-  const week = state.data?.week || {};
-  const bal = state.data?.balances || {};
-  const items = payableItems();
-  const total = num(t.payable);
-  const overduePct = total > 0 ? (num(t.overdue) / total) * 100 : 0;
-  const balance = num(bal.total);
-  const afterWeek = balance + num(week.inflow) - num(week.outflow);
-  const coverage = num(week.outflow) > 0 ? (balance / num(week.outflow)) * 100 : null;
-  const cards = [
-    {
-      key: "payable",
-      label: "A pagar",
-      icon: "north_east",
-      tone: "blue",
-      value: money(total),
-      badge: `${items.length} conta${items.length === 1 ? "" : "s"}`,
-      badgeTone: "blue",
-      body: `
-        ${meterHtml([{ value: overduePct, tone: "red" }, { value: 100 - overduePct, tone: "amber-soft" }])}
-        <p class="ov-kpi-compare">${
-          num(t.overdue) > 0
-            ? `<strong class="ov-neg">${esc(compact(t.overdue))}</strong> vencido em ${t.overdueCount} conta${t.overdueCount === 1 ? "" : "s"}`
-            : "Nada vencido."
-        }</p>`,
-    },
-    {
-      key: "week",
-      label: "Sai esta semana",
-      icon: "event_upcoming",
-      tone: "amber",
-      value: money(week.outflow),
-      badge: `${week.outflowCount || 0} conta${week.outflowCount === 1 ? "" : "s"}`,
-      badgeTone: "amber",
-      body: `<p class="ov-kpi-compare">Entra de clientes: <strong class="ov-pos">${esc(compact(week.inflow))}</strong> (${week.inflowCount || 0} fatura${week.inflowCount === 1 ? "" : "s"}).</p>`,
-    },
-    {
-      key: "balance",
-      label: "Saldo bancário",
-      icon: "account_balance",
-      tone: afterWeek >= 0 ? "emerald" : "red",
-      value: money(balance),
-      badge: coverage === null ? "sem saídas" : `cobre ${Math.round(Math.min(coverage, 999))}%`,
-      badgeTone: coverage === null || coverage >= 100 ? "emerald" : "red",
-      body: `<p class="ov-kpi-compare">Depois da semana: <strong class="${afterWeek < 0 ? "ov-neg" : "ov-pos"}">${esc(compact(afterWeek))}</strong>${bal.estimated ? ` · <span class="ov-warn">saldo sem extrato</span>` : ""}</p>`,
-    },
-    {
-      key: "paid",
-      label: "Pago · 30 dias",
-      icon: "task_alt",
-      tone: "emerald",
-      value: money(t.paid30),
-      badge: `${(state.data?.paid || []).length} pagamento${(state.data?.paid || []).length === 1 ? "" : "s"}`,
-      badgeTone: "emerald",
-      body: `<p class="ov-kpi-compare">Liquidações registadas com comprovativo.</p>`,
-    },
-  ];
-  document.getElementById("cpKpis").innerHTML = kpiCardsHtml(cards, "cp");
-}
+/* ─── Etapas ──────────────────────────────────────────────────────────────── */
 
 function stageCount(key) {
   const d = state.data || {};
@@ -513,158 +426,6 @@ function renderStrip() {
       document.getElementById("cpTable")?.closest(".finance-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   });
-}
-
-/* ─── Plano e semana ──────────────────────────────────────────────────────── */
-
-/** Saídas por semana: vencido, as próximas 8 semanas e o resto. */
-function weeklyPlan() {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const monday = new Date(today);
-  monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
-  const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
-  const weeks = Array.from({ length: 8 }, (_, i) => {
-    const start = new Date(monday.getTime() + i * 7 * 864e5);
-    return { label: i === 0 ? "Esta semana" : `${start.getDate()} ${MONTHS[start.getMonth()]}`, start, end: new Date(start.getTime() + 7 * 864e5), out: 0 };
-  });
-  const late = { label: "Vencido", out: 0 };
-  const later = { label: "Depois", out: 0 };
-  let noDate = 0;
-  payableItems().forEach((p) => {
-    if (!p.dueDate) {
-      noDate += num(p.payable);
-      return;
-    }
-    const d = new Date(p.dueDate);
-    d.setHours(0, 0, 0, 0);
-    if (d < today) late.out += num(p.payable);
-    else (weeks.find((w) => d >= w.start && d < w.end) || later).out += num(p.payable);
-  });
-  return { rows: [late, ...weeks], later, noDate };
-}
-
-function renderPlan() {
-  const plan = weeklyPlan();
-  const balance = num(state.data?.balances?.total);
-  let running = balance;
-  const after = plan.rows.map((r) => {
-    running -= r.out;
-    return running;
-  });
-  const lowest = Math.min(...after);
-  document.getElementById("cpPlanTotals").innerHTML = [
-    { label: "Saldo bancário", value: compact(balance), dot: TONES.blue },
-    { label: "Vencido", value: compact(plan.rows[0].out), dot: TONES.red },
-    { label: "Próximas 8 semanas", value: compact(plan.rows.slice(1).reduce((a, r) => a + r.out, 0)), dot: TONES.amber },
-    { label: "Saldo mais baixo", value: compact(lowest), dot: lowest < 0 ? TONES.red : TONES.emerald },
-  ]
-    .map((t) => `<div class="ov-flow-total"><span><i style="background:${t.dot}"></i>${esc(t.label)}</span><strong>${esc(t.value)}</strong></div>`)
-    .join("");
-  drawComboChart("cpChartPlan", {
-    categories: plan.rows.map((r) => r.label),
-    series: [
-      { name: "A pagar", type: "column", data: plan.rows.map((r) => Math.round(r.out)), color: TONES.amber },
-      { name: "Saldo depois de pagar", type: "line", data: after.map((v) => Math.round(v)), color: TONES.blue },
-    ],
-    height: 280,
-  });
-
-  // Esta semana: vencido + próximos 7 dias, do mais atrasado para o mais recente.
-  const week = payableItems().filter((p) => p.daysLate !== null && p.daysLate >= -7);
-  const out = week.reduce((a, p) => a + num(p.payable), 0);
-  const inflow = num(state.data?.week?.inflow);
-  const afterWeek = balance + inflow - out;
-  document.getElementById("cpWeek").innerHTML = `
-    <div class="cp-week">
-      <div class="cp-week-row"><span>Saldo bancário</span><strong>${esc(money(balance))}</strong></div>
-      <div class="cp-week-row"><span>+ Recebimentos previstos</span><strong class="ov-pos">${esc(money(inflow))}</strong></div>
-      <div class="cp-week-row"><span>− Pagamentos a fazer</span><strong class="ov-neg">${esc(money(out))}</strong></div>
-      <div class="cp-week-row cp-week-row--total"><span>Fica em caixa</span><strong class="${afterWeek < 0 ? "ov-neg" : ""}">${esc(money(afterWeek))}</strong></div>
-      ${
-        afterWeek < 0
-          ? `<p class="cp-week-alert"><span class="material-symbols-outlined">priority_high</span>Faltam ${esc(compact(-afterWeek))} para pagar tudo: priorize o vencido e negocie o resto.</p>`
-          : ""
-      }
-    </div>
-    ${
-      week.length
-        ? `<ul class="ac-feed cp-week-list">
-            ${week
-              .slice(0, 5)
-              .map(
-                (p) => `
-              <li>
-                <span class="ac-feed-icon ${p.daysLate > 0 ? "ac-feed-icon--late" : "ac-feed-icon--out"}"><span class="material-symbols-outlined">${p.daysLate > 0 ? "priority_high" : "north_east"}</span></span>
-                <div>
-                  <strong>${esc(p.beneficiary || p.supplier || p.description || "—")}</strong>
-                  <small>${esc([p.project?.name, typeOf(p)?.label || p.sourceLabel].filter(Boolean).join(" · "))}</small>
-                </div>
-                <div class="ac-feed-value">
-                  <strong>${esc(compact(p.payable))}</strong>
-                  <small>${dueChip(p.daysLate)}</small>
-                </div>
-                ${canPay() && canPayHere(p) ? `<button type="button" class="ac-feed-pay" data-pay="${esc(p.id)}" title="Pagar"><span class="material-symbols-outlined">payments</span></button>` : ""}
-              </li>`
-              )
-              .join("")}
-          </ul>
-          ${week.length > 5 ? `<button type="button" class="fl-link cp-more" data-goto="overdue">Ver as ${week.length} contas</button>` : ""}`
-        : `<div class="ov-empty"><span class="material-symbols-outlined">event_available</span>Nada a pagar esta semana.</div>`
-    }`;
-  bindPay(document.getElementById("cpWeek"));
-  document.querySelector("#cpWeek [data-goto]")?.addEventListener("click", () => {
-    state.stage = "pay";
-    renderStrip();
-    renderTable();
-  });
-}
-
-function renderCharts() {
-  const items = payableItems();
-  const bySource = new Map();
-  items.forEach((p) => bySource.set(p.sourceLabel || p.source, (bySource.get(p.sourceLabel || p.source) || 0) + num(p.payable)));
-  const sources = [...bySource.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
-  if (sources.length) {
-    drawDonutChart("cpChartSources", {
-      labels: sources.map(([l]) => l),
-      series: sources.map(([, v]) => v),
-      totalLabel: "A pagar",
-      height: 260,
-    });
-  } else {
-    emptyChart("cpChartSources", "donut_small", "Sem contas a pagar.");
-  }
-
-  const byProject = new Map();
-  items.forEach((p) => {
-    const name = p.project?.name || p.costCenter?.name || "Sem obra";
-    if (!byProject.has(name)) byProject.set(name, { overdue: 0, onTime: 0 });
-    const b = byProject.get(name);
-    if (p.daysLate > 0) b.overdue += num(p.payable);
-    else b.onTime += num(p.payable);
-  });
-  const groups = [...byProject.entries()].map(([name, v]) => ({ name, ...v, total: v.overdue + v.onTime })).sort((a, b) => b.total - a.total).slice(0, 8);
-  if (groups.length) {
-    drawBarChart("cpChartProjects", {
-      categories: groups.map((g) => (g.name.length > 28 ? `${g.name.slice(0, 26)}…` : g.name)),
-      series: [
-        { name: "Vencido", data: groups.map((g) => g.overdue), color: TONES.red },
-        { name: "A vencer", data: groups.map((g) => g.onTime), color: "#fcd34d" },
-      ],
-      stacked: true,
-      horizontal: true,
-      height: Math.max(200, groups.length * 44 + 80),
-    });
-  } else {
-    emptyChart("cpChartProjects", "apartment", "Sem contas a pagar.");
-  }
-}
-
-async function emptyChart(id, icon, message) {
-  await drawBarChart(id, {});
-  const el = document.getElementById(id);
-  if (el) el.innerHTML = `<div class="ov-empty ov-empty--lg"><span class="material-symbols-outlined">${icon}</span>${esc(message)}</div>`;
 }
 
 /* ─── Ações ───────────────────────────────────────────────────────────────── */
@@ -968,11 +729,8 @@ async function load() {
     state.data = await apiRequest("/finance/payment-center");
     renderFiltros();
     renderChips();
-    renderKpis();
     renderStrip();
     renderTable();
-    renderPlan();
-    renderCharts();
   } catch (err) {
     const wrap = document.getElementById("cpTable");
     if (wrap) wrap.innerHTML = `<div class="ov-empty ov-empty--lg">Falha ao carregar: ${esc(err.message)}</div>`;
