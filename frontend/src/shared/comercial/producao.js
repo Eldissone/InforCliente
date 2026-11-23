@@ -104,7 +104,7 @@ function viewP1() {
           <td class="cm-calc">${esc((t.mat || []).map((m) => `${m.c}/${t.un || "un"} ${m.desc}`).join(", ") || "—")}</td>
           <td class="cm-calc">${esc((t.dep || []).map((id) => tarefas.findIndex((x) => x.id === id) + 1).filter((n) => n > 0).join(", ") || "—")}</td>
           <td class="num">${t.n || "—"}</td><td>${dt(t.ini)}</td><td>${dt(t.fim)}</td>
-          ${ed ? `<td class="pr-acts"><button class="cm-chip" type="button" data-pr="editar|${esc(t.id)}">Editar</button><button class="cm-chip" type="button" data-pr="apagar|${esc(t.id)}">✕</button></td>` : ""}
+          ${ed ? `<td class="pr-acts"><button class="cm-chip" type="button" data-pr="editar|${esc(t.id)}">Editar</button><button class="cm-chip" type="button" data-pr="apagar|${esc(t.id)}"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">close</span></button></td>` : ""}
         </tr>`
           )
           .join("")}</tbody></table></div>`
@@ -139,7 +139,7 @@ function viewP1() {
             <td class="num"><input type="number" min="0" max="100" class="cell-manual pr-n" data-pri="ind|${i}|ded" value="${Math.round((p.ded ?? 1) * 100)}" ${ed ? "" : "disabled"}></td>
             <td><input type="date" class="cell-manual" data-pri="ind|${i}|ini" value="${esc(p.ini || "")}" ${ed ? "" : "disabled"}></td>
             <td><input type="date" class="cell-manual" data-pri="ind|${i}|fim" value="${esc(p.fim || "")}" ${ed ? "" : "disabled"}></td>
-            <td class="num">${pl.ind[i]?.dias.length || 0}</td>${ed ? `<td><button class="cm-chip" type="button" data-pr="inddel|${i}">✕</button></td>` : ""}</tr>`
+            <td class="num">${pl.ind[i]?.dias.length || 0}</td>${ed ? `<td><button class="cm-chip" type="button" data-pr="inddel|${i}"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">close</span></button></td>` : ""}</tr>`
           )
           .join("")}
         ${d.indm
@@ -149,7 +149,7 @@ function viewP1() {
             <td class="num"><input type="number" min="0" class="cell-manual pr-n" data-pri="indm|${i}|n" value="${esc(m.n ?? 1)}" ${ed ? "" : "disabled"}></td><td></td>
             <td><input type="date" class="cell-manual" data-pri="indm|${i}|ini" value="${esc(m.ini || "")}" ${ed ? "" : "disabled"}></td>
             <td><input type="date" class="cell-manual" data-pri="indm|${i}|fim" value="${esc(m.fim || "")}" ${ed ? "" : "disabled"}></td>
-            <td class="num">${pl.indm[i]?.dias.length || 0}</td>${ed ? `<td><button class="cm-chip" type="button" data-pr="indmdel|${i}">✕</button></td>` : ""}</tr>`
+            <td class="num">${pl.indm[i]?.dias.length || 0}</td>${ed ? `<td><button class="cm-chip" type="button" data-pr="indmdel|${i}"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">close</span></button></td>` : ""}</tr>`
           )
           .join("")}</tbody></table></div>`
       : ""
@@ -365,7 +365,7 @@ function viewP7() {
             (it, i) => `<tr><td><input class="cell-manual" data-pre="${i}|item" value="${esc(it.item)}" ${ed ? "" : "disabled"}></td>
             <td class="num"><input type="number" min="0" class="cell-manual pr-n" data-pre="${i}|preco" value="${esc(it.preco ?? "")}" ${ed ? "" : "disabled"}></td>
             ${fns.map((f) => `<td class="num"><input type="number" min="0" class="cell-manual pr-n" data-pre="${i}|por|${esc(f)}" value="${esc(it.por?.[f] ?? "")}" ${ed ? "" : "disabled"}></td>`).join("")}
-            <td class="num">${fmt(E.itens[i].pecas)}</td><td class="num"><b>${fmt(E.itens[i].total)}</b></td>${ed ? `<td><button class="cm-chip" type="button" data-pr="epiDel|${i}">✕</button></td>` : ""}</tr>`
+            <td class="num">${fmt(E.itens[i].pecas)}</td><td class="num"><b>${fmt(E.itens[i].total)}</b></td>${ed ? `<td><button class="cm-chip" type="button" data-pr="epiDel|${i}"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">close</span></button></td>` : ""}</tr>`
           )
           .join("")}</tbody><tfoot><tr><td colspan="${fns.length + 3}">Total EPI</td><td class="num"><b>${fmt(E.total)}</b></td>${ed ? "<td></td>" : ""}</tr></tfoot></table></div>`
       : vazio("Ainda não há itens de EPI.")

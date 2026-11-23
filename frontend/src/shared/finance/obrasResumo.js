@@ -30,7 +30,7 @@ function barra(x) {
 function ficha(x) {
   const lin = (l, v, s) => `<tr><td>${l}${s ? `<div class="fx2-mut">${s}</div>` : ""}</td><td class="r"><b>${v}</b></td></tr>`;
   return `<tr class="fx3-ficha"><td colspan="11">
-    ${x.alertas.length ? `<ul class="fx3-alertas">${x.alertas.map((a) => `<li>⚠ ${esc(a)}</li>`).join("")}</ul>` : `<p class="fx2-mut">Sem alertas.</p>`}
+    ${x.alertas.length ? `<ul class="fx3-alertas">${x.alertas.map((a) => `<li><span class="material-symbols-outlined" style="font-size:16px;vertical-align:text-bottom">warning</span> ${esc(a)}</li>`).join("")}</ul>` : `<p class="fx2-mut">Sem alertas.</p>`}
     <div class="fx3-ficha-g">
       <table class="fx2-t"><tbody>
         ${lin("Venda prevista", fmt(x.contr), x.fonteContrato === "TABELA_QUANTIDADES" ? "da tabela de quantidades" : "")}

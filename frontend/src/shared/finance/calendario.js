@@ -147,7 +147,7 @@ function desenhar() {
         ${F.lado !== "P" ? `<span class="fcal-l"><span>Receber</span><b class="fcal-in" title="${fmt(p.R)}">${p.R ? fmt0(p.R) : "—"}</b></span>` : ""}
         ${F.lado !== "R" ? `<span class="fcal-l"><span>Pagar</span><b class="fcal-out" title="${fmt(p.P)}">${p.P ? fmt0(p.P) : "—"}</b></span>` : ""}
         ${!F.lado ? `<span class="fcal-l s"><span>Saldo</span><b class="${p.saldo < 0 ? "fcal-out" : "fcal-in"}" title="${fmt(p.saldo)}">${p.R || p.P ? fmt0(p.saldo) : "—"}</b></span>` : ""}
-        ${p.atr ? `<span class="fcal-atr">⚠ ${p.atr} em atraso</span>` : ""}
+        ${p.atr ? `<span class="fcal-atr"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:text-bottom">warning</span> ${p.atr} em atraso</span>` : ""}
       </button>`;
     })
     .join("");

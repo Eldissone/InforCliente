@@ -1838,7 +1838,7 @@ function wireQuoteInvoiceScanner({ need, suppliers, apiRequest, showToast }) {
       <div>Fornecedor: ${supplierHtml}${res.supplier && f.supplierNif ? ` · NIF ${escHtml(f.supplierNif)}` : ""}</div>
       <div>${match?.quotedPrice != null ? `Preço unit.: <strong>${fmtMoney(match.quotedPrice, currency)}</strong>${match.estimated ? " <em>(estimado)</em>" : ""}` : "Preço unitário não identificado"}${f.vatPercent != null ? ` · IVA ${f.vatPercent}%` : ""}${f.docNumber ? ` · Doc ${escHtml(f.docNumber)}` : ""}</div>
       ${lineSelect}
-      ${warnings.map((w) => `<div class="mt-1 text-amber-800">⚠ ${escHtml(w)}</div>`).join("")}`;
+      ${warnings.map((w) => `<div class="mt-1 text-amber-800"><span class="material-symbols-outlined" style="font-size:13px;vertical-align:text-bottom">warning</span> ${escHtml(w)}</div>`).join("")}`;
 
     banner.querySelector("#quoteAiLineSelect")?.addEventListener("change", (e) => {
       const line = candidates.find((c) => String(c.index) === e.target.value);

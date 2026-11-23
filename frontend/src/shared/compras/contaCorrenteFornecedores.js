@@ -118,7 +118,7 @@ function extrato() {
         .join("")}</tbody>
       <tfoot><tr><td colspan="7">Total em dívida</td><td class="r">${fmt(abertos.reduce((s, l) => s + l.valor, 0))}</td></tr></tfoot>
       </table></div>`
-        : vazio("Nada em aberto. ✓")
+        : vazio("Nada em aberto.")
     }
     <h3 class="cs-sec">Pagamentos (últimos 12 meses)</h3>
     ${

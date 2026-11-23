@@ -79,7 +79,7 @@ export function renderAlertsHtml(list, { actions = true } = {}) {
         </div>
         <p class="al-title">${esc(a.title)}</p>
         <p class="al-text">${esc(a.body)}</p>
-        ${a.aiExplanation ? `<p class="al-ai">✨ ${esc(a.aiExplanation)}</p>` : ""}
+        ${a.aiExplanation ? `<p class="al-ai"><span class="material-symbols-outlined" style="font-size:16px;vertical-align:text-bottom">auto_awesome</span> ${esc(a.aiExplanation)}</p>` : ""}
         ${
           actions
             ? `<div class="al-actions">

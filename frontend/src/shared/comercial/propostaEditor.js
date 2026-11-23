@@ -174,7 +174,7 @@ function anexosHtml(doc, zona, dis) {
       </div>
       <div class="pe-ia-pedido">
         <input class="cell-manual" type="text" data-piatxt="${attr(zona)}" placeholder="Pedir um bloco à IA: o que deve dizer…" ${dis}>
-        <button type="button" class="cm-chip" data-pia="bloco|${attr(zona)}" ${dis}>✦ Redigir</button>
+        <button type="button" class="cm-chip" data-pia="bloco|${attr(zona)}" ${dis}><span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">auto_awesome</span> Redigir</button>
       </div>
       ${
         meus.length
@@ -219,7 +219,7 @@ export function renderEditor(doc, { editable = true, resolve } = {}) {
         ${
           s.ia
             ? `<div class="pe-ia">
-                 <button type="button" class="cm-chip" data-pia="${attr(s.ia.tarefa)}|${attr(s.zona)}" ${dis}>${esc(s.ia.label)}</button>
+                 <button type="button" class="cm-chip" data-pia="${attr(s.ia.tarefa)}|${attr(s.zona)}" ${dis}><span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">auto_awesome</span> ${esc(s.ia.label.replace(/^✦\s*/, ""))}</button>
                  <small>${esc(s.ia.ajuda || "")}</small>
                </div>`
             : ""

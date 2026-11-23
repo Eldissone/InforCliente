@@ -88,9 +88,9 @@ function desenhar() {
                 ).join("")}</select>`
               : esc((DECISOES.find(([k]) => k === (l.decisao || "")) || ["", "Por decidir"])[1])
           }${l.decididoPor ? `<div class="fx2-mut">${esc(l.decididoPor)}${l.decididoEm ? ` · ${fmtData(l.decididoEm)}` : ""}</div>` : ""}</td>
-          <td>${l.documento ? `<a href="${esc(getAssetUrl(l.documento))}" target="_blank" rel="noopener" title="${esc(l.documentoNome || "")}">📄 Ver</a>` : ""}${
+          <td>${l.documento ? `<a href="${esc(getAssetUrl(l.documento))}" target="_blank" rel="noopener" title="${esc(l.documentoNome || "")}"><span class="material-symbols-outlined" style="font-size:16px;vertical-align:text-bottom">description</span> Ver</a>` : ""}${
             edita
-              ? ` <label class="finance-btn finance-btn--sm" title="Anexar a fatura que apareceu (ou o documento da autofaturação)">📎 ${l.documento ? "Trocar" : "Anexar"}<input type="file" hidden accept="application/pdf,image/jpeg,image/png,image/webp" data-dscdoc="${esc(l.id)}"></label>`
+              ? ` <label class="finance-btn finance-btn--sm" title="Anexar a fatura que apareceu (ou o documento da autofaturação)"><span class="material-symbols-outlined" style="font-size:16px;vertical-align:text-bottom">attach_file</span> ${l.documento ? "Trocar" : "Anexar"}<input type="file" hidden accept="application/pdf,image/jpeg,image/png,image/webp" data-dscdoc="${esc(l.id)}"></label>`
               : ""
           }</td>
           <td class="fx2-mut">${esc(l.estado)}</td>

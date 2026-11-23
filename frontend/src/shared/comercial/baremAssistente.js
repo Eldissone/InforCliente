@@ -63,7 +63,7 @@ function corpo() {
     </p>
     <textarea id="baDesc" class="cell-manual" rows="4" placeholder="${attr(EXEMPLOS[S.kind] || "")}">${esc(S.descricao)}</textarea>
     <div class="cm-head-actions" style="margin-top:.5rem">
-      <button class="cm-chip is-on" type="button" id="baCalcular" ${S.aCorrer ? "disabled" : ""}>${S.aCorrer ? "A calcular…" : "✦ Calcular proposta"}</button>
+      <button class="cm-chip is-on" type="button" id="baCalcular" ${S.aCorrer ? "disabled" : ""}>${S.aCorrer ? "A calcular…" : '<span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">auto_awesome</span> Calcular proposta'}</button>
       <span class="cm-lead" id="baMsg" style="margin:0"></span>
     </div>
     ${r ? resultadoHtml(r) : ""}`;

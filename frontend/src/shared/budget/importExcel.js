@@ -663,7 +663,7 @@ function renderPreviewStep() {
           <div class="flex items-center gap-2">
             <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">${group.sheetGroupName}</span>
             <span class="material-symbols-outlined text-sm text-emerald-500">arrow_forward</span>
-            <span class="text-xs font-bold ${isNew ? 'text-blue-600' : 'text-slate-900'}">${isNew ? '✨ ' : ''}${ccName}${isNew ? ' (nova na obra)' : ''}</span>
+            <span class="text-xs font-bold ${isNew ? 'text-blue-600' : 'text-slate-900'}">${isNew ? '<span class="material-symbols-outlined" style="font-size:14px;vertical-align:text-bottom">auto_awesome</span> ' : ''}${ccName}${isNew ? ' (nova na obra)' : ''}</span>
           </div>
           <span class="text-xs font-bold text-slate-600">${group.items.length} itens · ${formatCurrency(groupTotal, cur)}</span>
         </div>

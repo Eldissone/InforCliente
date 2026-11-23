@@ -100,7 +100,7 @@ export function renderDigestHtml(content, { aiUsed = false } = {}) {
   injectStyles();
   if (!content) return '<p class="dg-empty">Sem conteúdo.</p>';
   const badge = aiUsed
-    ? '<span class="dg-badge">✨ Pontos de atenção escritos pela IA a partir dos números do sistema</span>'
+    ? '<span class="dg-badge"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">auto_awesome</span> Pontos de atenção escritos pela IA a partir dos números do sistema</span>'
     : '<span class="dg-badge rules">Pontos de atenção calculados pelo sistema</span>';
   const hl = content.highlights?.length
     ? `<ul class="dg-hl">${content.highlights.map((h) => `<li>${esc(h)}</li>`).join("")}</ul>`

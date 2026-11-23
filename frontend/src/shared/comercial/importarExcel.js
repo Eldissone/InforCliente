@@ -73,7 +73,7 @@ function passoFicheiro() {
     </div>
     <div class="cm-head-actions" style="margin-top:.75rem">
       <button class="cm-chip is-on" type="button" id="impAnalisar" ${S.aCorrer ? "disabled" : ""}>
-        ${S.aCorrer ? "A ler a folha…" : "✦ Analisar com a IA"}
+        ${S.aCorrer ? "A ler a folha…" : '<span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">auto_awesome</span> Analisar com a IA'}
       </button>
       <span class="cm-lead" id="impMsg" style="margin:0"></span>
     </div>`);

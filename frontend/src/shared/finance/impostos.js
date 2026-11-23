@@ -67,7 +67,7 @@ function registoRapido() {
       <label class="f0-lbl">N.º Nota Liquidação<input class="finance-input" data-qr="nl" value="${esc(Q.nl)}"></label>
       <label class="f0-lbl">RUPE<input class="finance-input" data-qr="rupe" value="${esc(Q.rupe)}"></label>
       <label class="f0-lbl"><span>Nota Liquidação <b class="g1-req">*</b></span>
-        <span class="finance-btn finance-btn--sm g1-file">${Q.file ? `📎 ${esc(Q.file.name)}` : "Anexar nota"}<input type="file" hidden accept="application/pdf,image/jpeg,image/png,image/webp" data-qrfile></span></label>
+        <span class="finance-btn finance-btn--sm g1-file">${Q.file ? `<span class="material-symbols-outlined" style="font-size:16px;vertical-align:text-bottom">attach_file</span> ${esc(Q.file.name)}` : "Anexar nota"}<input type="file" hidden accept="application/pdf,image/jpeg,image/png,image/webp" data-qrfile></span></label>
       <button type="button" class="finance-btn finance-btn--primary" data-qrok>Gravar</button>
     </div>
     <p class="fx2-mut">IVA, retenção na fonte, IRT-B e outros (contabilidade). <b>IRT e INSS são pedidos pelo RH</b> e aparecem aqui sozinhos.
@@ -135,7 +135,7 @@ function desenhar() {
           <td class="r">${l.valor ? fmt(l.valor) : '<span class="fx2-mut">por apurar</span>'}</td>
           <td class="fx2-mut">${esc(l.rupe || "")}</td>
           <td><span class="fcal-pill fcal-pill--${ESTADO_TOM[l.estado] || "slate"}">${esc(l.estado)}</span>${l.pagoEm ? `<div class="fx2-mut">${fmtData(l.pagoEm)}${l.pagoNota ? ` · ${esc(l.pagoNota)}` : ""}</div>` : ""}</td>
-          <td>${l.nota ? `<a href="${esc(getAssetUrl(l.nota.path))}" target="_blank" rel="noopener">📄</a>` : "—"}</td>
+          <td>${l.nota ? `<a href="${esc(getAssetUrl(l.nota.path))}" target="_blank" rel="noopener" title="${esc(l.nota.nome || "Nota de liquidação")}"><span class="material-symbols-outlined" style="font-size:18px;vertical-align:text-bottom">description</span></a>` : "—"}</td>
           <td>${l.pedido ? `<a href="/Financeiro/centro-pagamentos" title="${esc(l.pedido.estado)}">${esc(l.pedido.numero)}</a>` : "—"}</td>
           <td class="g1-acts">${acoes.join(" ")}</td>
         </tr>`;
@@ -201,7 +201,7 @@ function formImposto(l) {
       <div class="finance-field"><label class="finance-label">RUPE</label><input id="gfR" class="finance-input" value="${esc(o.rupe || "")}"></div>
       <div class="finance-field finance-field--full"><label class="finance-label">Observações</label><textarea id="gfO" class="finance-textarea" rows="2">${esc(o.notas || "")}</textarea></div>
       <div class="finance-field finance-field--full"><label class="finance-label">Nota de liquidação</label>
-        ${o.nota ? `<a href="${esc(getAssetUrl(o.nota.path))}" target="_blank" rel="noopener">📄 ${esc(o.nota.nome)}</a> · ` : ""}<input id="gfF" type="file" accept="application/pdf,image/jpeg,image/png,image/webp"></div>
+        ${o.nota ? `<a href="${esc(getAssetUrl(o.nota.path))}" target="_blank" rel="noopener"><span class="material-symbols-outlined" style="font-size:16px;vertical-align:text-bottom">description</span> ${esc(o.nota.nome)}</a> · ` : ""}<input id="gfF" type="file" accept="application/pdf,image/jpeg,image/png,image/webp"></div>
       ${
         novo
           ? ""

@@ -219,7 +219,7 @@ function renderShell() {
       <button id="invXlsx" type="button" class="finance-btn">Exportar Excel</button>
       ${
         canEdit()
-          ? `<label class="finance-btn" title="Lê cada PDF e abre o formulário já preenchido, para conferir e guardar">📄 Importar Faturas (PDF)
+          ? `<label class="finance-btn" title="Lê cada PDF e abre o formulário já preenchido, para conferir e guardar"><span class="material-symbols-outlined">upload_file</span> Importar Faturas (PDF)
                <input id="invImport" type="file" hidden multiple accept="application/pdf,.pdf" /></label>
              <button id="invNew" type="button" class="finance-btn finance-btn--primary">+ Registar Fatura</button>`
           : ""
@@ -332,7 +332,7 @@ function renderFiltros2() {
       <button type="button" class="finance-btn finance-btn--sm${f.until === hoje ? " is-on" : ""}" data-ate="hoje">Hoje</button>
       <button type="button" class="finance-btn finance-btn--sm${f.until === fimMes ? " is-on" : ""}" data-ate="fim">Fim do mês</button>
       <input id="invAte" class="finance-input" type="date" value="${esc(f.until || "")}">
-      ${f.until ? `<button type="button" class="finance-btn finance-btn--sm" data-ate="" title="Sem limite">✕</button>` : ""}
+      ${f.until ? `<button type="button" class="finance-btn finance-btn--sm" data-ate="" title="Sem limite"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">close</span></button>` : ""}
     </span>`;
 }
 

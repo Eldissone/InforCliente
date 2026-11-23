@@ -58,7 +58,7 @@ function desenhar() {
           <td class="g1-acts">${
             podeEditar()
               ? `${a.endDate ? "" : `<button type="button" class="finance-btn finance-btn--sm" data-t6dev="${esc(a.id)}">Devolver</button>`}
-                 <button type="button" class="finance-btn finance-btn--sm" data-t6del="${esc(a.id)}" title="Apagar (registado por engano)">✕</button>`
+                 <button type="button" class="finance-btn finance-btn--sm" data-t6del="${esc(a.id)}" title="Apagar (registado por engano)"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">close</span></button>`
               : ""
           }</td></tr>`
       ).join("")}</tbody></table></div>`

@@ -59,7 +59,7 @@ function desenhar() {
       ).join("")}</tbody>
       <tfoot><tr><td colspan="6">Total</td><td class="r">${fmt(soma)}</td></tr></tfoot>
       </table></div>`
-        : vazio("Sem compromissos pendentes. ✓")
+        : vazio("Sem compromissos pendentes.")
     }
     <p class="fcal-nota">As requisições contam pelo que falta entregar, ao preço estimado na requisição. Os pedidos contam pelo valor a pagar (com IVA e retenção). Os pedidos aprovados já estão autorizados para pagamento: aparecem também no Centro de Pagamentos e na <a href="/compras/conta-corrente-fornecedores">C6 Conta Corrente de Fornecedores</a> — aqui ficam enquanto não estiverem pagos, para não se perder o que a fatura ainda vai trazer.</p>`;
 }

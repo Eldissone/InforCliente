@@ -161,7 +161,7 @@ function extrato() {
               : l.tipo === "FT" && l.emAberto > 0.005
                 ? `<button type="button" class="finance-btn finance-btn--sm" data-ccnc="${esc(l.faturaId)}|${l.emAberto}|${esc(l.doc)}">Nota de crédito</button>`
                 : l.tipo === "NC" && l.notaId
-                  ? `<button type="button" class="finance-btn finance-btn--sm" data-ccncdel="${esc(l.notaId)}" title="Apagar a nota de crédito">✕</button>`
+                  ? `<button type="button" class="finance-btn finance-btn--sm" data-ccncdel="${esc(l.notaId)}" title="Apagar a nota de crédito"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">close</span></button>`
                   : ""
           }</td>
         </tr>`

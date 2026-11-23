@@ -52,7 +52,7 @@ function render() {
     ${
       S.readonly
         ? ""
-        : `<button class="cm-chip" type="button" id="oqImport" data-cm-write="1" title="A IA lê a folha e mostra as linhas para rever">✦ Importar Excel</button>
+        : `<button class="cm-chip" type="button" id="oqImport" data-cm-write="1" title="A IA lê a folha e mostra as linhas para rever"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">auto_awesome</span> Importar Excel</button>
            <button class="cm-chip is-on" type="button" id="oqNew" data-cm-write="1">+ Novo orçamento</button>`
     }`;
 

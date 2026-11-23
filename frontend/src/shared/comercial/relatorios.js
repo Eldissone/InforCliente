@@ -19,7 +19,7 @@ const SHEETJS = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.mi
 let C = null;
 
 function card(ic, t, sub, attrs) {
-  return `<button type="button" class="rel-card" ${attrs}><span class="rel-ic">${ic}</span><span><b>${esc(t)}</b><small>${esc(sub)}</small></span></button>`;
+  return `<button type="button" class="rel-card" ${attrs}><span class="rel-ic material-symbols-outlined">${ic}</span><span><b>${esc(t)}</b><small>${esc(sub)}</small></span></button>`;
 }
 
 /** As colunas de dados (não as calculadas) de uma folha. */
@@ -73,25 +73,25 @@ export function viewR1(ctx) {
     [
       "Orçamento",
       [
-        card("📄", "Relatório do orçamento", "Resumo e detalhe por categoria, aqui em baixo; PDF ou Word com o logótipo da MBT (botões do cabeçalho)", `data-rel="rep"`),
-        card("📊", "Exportar todos os dados", "Excel com o resumo e todas as folhas do orçamento", `data-rel="xlsx"`),
-        card("🧾", "Folha de despacho", "Custos, margens e decisão comercial", href(`/comercial/despacho?id=${id}`)),
-        card("✉️", "Propostas", "Proposta ao cliente (PDF/Word)", href(`/comercial/propostas?id=${id}`)),
+        card("description", "Relatório do orçamento", "Resumo e detalhe por categoria, aqui em baixo; PDF ou Word com o logótipo da MBT (botões do cabeçalho)", `data-rel="rep"`),
+        card("table_view", "Exportar todos os dados", "Excel com o resumo e todas as folhas do orçamento", `data-rel="xlsx"`),
+        card("fact_check", "Folha de despacho", "Custos, margens e decisão comercial", href(`/comercial/despacho?id=${id}`)),
+        card("forward_to_inbox", "Propostas", "Proposta ao cliente (PDF/Word)", href(`/comercial/propostas?id=${id}`)),
       ],
     ],
     [
       "Produção",
       [
-        card("📅", "Cronograma de execução", "As tarefas no tempo (P2)", go("pcron")),
-        card("🎯", "Metas", "O que cada tarefa faz por semana (P3)", go("metas")),
-        card("👷", "Recursos humanos", "Pessoal por função e por semana (P5)", go("prh")),
-        card("🚜", "Equipamentos e máquinas", "Meios por semana (P4)", go("pmaq")),
-        card("🧩", "Organograma da obra", "Funções e nomes (P6)", go("org")),
-        card("🦺", "EPI", "Lista por função (P7)", go("epi")),
-        card("💰", "Cronograma financeiro", "Do cliente (T1) e interno (T2)", go("pfinc")),
+        card("calendar_month", "Cronograma de execução", "As tarefas no tempo (P2)", go("pcron")),
+        card("track_changes", "Metas", "O que cada tarefa faz por semana (P3)", go("metas")),
+        card("engineering", "Recursos humanos", "Pessoal por função e por semana (P5)", go("prh")),
+        card("agriculture", "Equipamentos e máquinas", "Meios por semana (P4)", go("pmaq")),
+        card("account_tree", "Organograma da obra", "Funções e nomes (P6)", go("org")),
+        card("health_and_safety", "EPI", "Lista por função (P7)", go("epi")),
+        card("payments", "Cronograma financeiro", "Do cliente (T1) e interno (T2)", go("pfinc")),
       ],
     ],
-    ["Compras", [card("🛒", "Necessidades e pedido de cotação", "Artigos a comprar e o pedido em Excel (C0)", href(`/comercial/necessidades?orc=${id}`))]],
+    ["Compras", [card("shopping_cart", "Necessidades e pedido de cotação", "Artigos a comprar e o pedido em Excel (C0)", href(`/comercial/necessidades?orc=${id}`))]],
   ];
   return `<div class="cm-head" style="margin-bottom:.5rem"><div><div class="cm-head-num">R1</div><h2 class="cm-panel-title" style="font-size:1.0625rem">Relatórios e documentos</h2>
     <p class="cm-lead" style="margin-top:.25rem">Todos os documentos que o programa produz sobre este orçamento, num só sítio. Cada um abre a página onde se gera.</p></div><div class="cm-head-actions"></div></div>

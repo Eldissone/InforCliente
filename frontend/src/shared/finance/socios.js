@@ -38,7 +38,7 @@ function desenhar() {
           <tbody>${d.socios
             .map(
               (s) => `<tr><td><b>${esc(s.socio)}</b></td><td class="r">${fmt(s.bruto)}</td>
-                <td class="r">${fmt(s.iac)}${s.iac > 0 ? `<div class="fx2-mut">${s.iacPago >= s.iac - 0.5 ? "✓ pago" : `pago ${fmt(s.iacPago)}`}</div>` : ""}</td>
+                <td class="r">${fmt(s.iac)}${s.iac > 0 ? `<div class="fx2-mut">${s.iacPago >= s.iac - 0.5 ? '<span class="material-symbols-outlined" style="font-size:14px;vertical-align:text-bottom">check</span> pago' : `pago ${fmt(s.iacPago)}`}</div>` : ""}</td>
                 <td class="r"><b>${fmt(s.liquido)}</b></td><td class="r">${fmt(s.pago)}</td>
                 <td class="r${s.remanescente < -0.5 ? " f0-neg" : ""}"><b>${fmt(s.remanescente)}</b></td>
                 <td>${ed ? `<button type="button" class="finance-btn finance-btn--sm" data-e4pag="${esc(s.socio)}">Registar pagamento</button>` : ""}</td></tr>`
@@ -54,7 +54,7 @@ function desenhar() {
             .map(
               (x) => `<tr><td>${fmtData(x.data)}</td><td>${esc(x.exercicio || "")}</td><td>${esc(x.descricao || "Distribuição de lucros")}</td><td class="r"><b>${fmt(x.total)}</b></td>
                 <td class="fx2-mut">${esc(x.parts.map((p) => `${p.nome} ${p.pct}%`).join(" · "))} · IAC ${x.iacPct}%</td>
-                <td>${ed ? `<button type="button" class="finance-btn finance-btn--sm" data-e4del="${esc(x.id)}">✕</button>` : ""}</td></tr>`
+                <td>${ed ? `<button type="button" class="finance-btn finance-btn--sm" data-e4del="${esc(x.id)}"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">close</span></button>` : ""}</td></tr>`
             )
             .join("")}</tbody></table></div>`
         : vazio("Ainda não há distribuições registadas.")
@@ -66,7 +66,7 @@ function desenhar() {
           <tbody>${d.pagamentos
             .map(
               (p) => `<tr><td>${fmtData(p.data)}</td><td>${esc(p.socio)}</td><td>${p.tipo === "IAC" ? "IAC (ao Estado)" : "Lucro"}</td><td class="r">${fmt(p.valor)}</td><td class="fx2-mut">${esc(p.notas || "")}</td>
-                <td>${ed ? `<button type="button" class="finance-btn finance-btn--sm" data-e4pdel="${esc(p.id)}">✕</button>` : ""}</td></tr>`
+                <td>${ed ? `<button type="button" class="finance-btn finance-btn--sm" data-e4pdel="${esc(p.id)}"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">close</span></button>` : ""}</td></tr>`
             )
             .join("")}</tbody></table></div>`
         : vazio("Sem pagamentos registados.")

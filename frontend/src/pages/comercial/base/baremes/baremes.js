@@ -111,7 +111,7 @@ function renderTabs() {
     ${
       S.readonly || S.kind === "COMBUSTIVEL"
         ? ""
-        : `<button id="bqIA" class="cm-chip" type="button" data-cm-write="1" title="Descreva o recurso por palavras e a IA calcula os campos">✦ Calcular com IA</button>`
+        : `<button id="bqIA" class="cm-chip" type="button" data-cm-write="1" title="Descreva o recurso por palavras e a IA calcula os campos"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">auto_awesome</span> Calcular com IA</button>`
     }
     ${S.readonly ? "" : `<button id="bqNew" class="cm-chip" type="button" data-cm-write="1">+ Novo barém</button>`}
     ${S.readonly || S.items.length ? "" : `<button id="bqSeed" class="cm-chip is-on" type="button" data-cm-write="1">Carregar baremes de referência</button>`}

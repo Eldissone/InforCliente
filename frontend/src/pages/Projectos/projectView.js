@@ -5404,17 +5404,17 @@ function wireGallery() {
           try {
             const plans = await apiRequest(`/daily-plans?projectId=${encodeURIComponent(id)}`);
             if (!plans || plans.length === 0) {
-              descSelect.innerHTML = `<option value="__outro__">✏️ Outro (texto livre)</option>`;
+              descSelect.innerHTML = `<option value="__outro__">Outro (texto livre)</option>`;
               descCustom.classList.remove("hidden");
             } else {
               descSelect.innerHTML = `
                 <option value="">Selecione um Plano Diário...</option>
                 ${plans.map(p => `<option value="${escapeHtml(p.description || '')}">${formatDateBR(p.date)} — ${escapeHtml(p.description || 'Sem descrição')} [${dpStatusLabel(p.status)}]</option>`).join("")}
-                <option value="__outro__">✏️ Outro (texto livre)</option>
+                <option value="__outro__">Outro (texto livre)</option>
               `;
             }
           } catch {
-            descSelect.innerHTML = `<option value="__outro__">✏️ Outro (texto livre)</option>`;
+            descSelect.innerHTML = `<option value="__outro__">Outro (texto livre)</option>`;
             descCustom.classList.remove("hidden");
           }
         })();

@@ -80,7 +80,7 @@ function passoEscolher() {
     </div>
     <div class="cm-head-actions" style="margin-top:.75rem">
       <button class="cm-chip is-on" type="button" id="ccCompor" ${S.aCorrer || !n ? "disabled" : ""}>
-        ${S.aCorrer ? "A compor…" : `✦ Compor ${n} trabalho(s)`}
+        ${S.aCorrer ? "A compor…" : `<span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">auto_awesome</span> Compor ${n} trabalho(s)`}
       </button>
       <span class="cm-lead" id="ccMsg" style="margin:0"></span>
     </div>`);

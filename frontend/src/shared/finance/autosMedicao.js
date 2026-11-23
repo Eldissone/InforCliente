@@ -61,7 +61,7 @@ function desenhar() {
     ])}
     ${
       acima.length
-        ? `<ul class="fx3-alertas"><li>⚠ ${[...new Set(acima.map((l) => l.obra))]
+        ? `<ul class="fx3-alertas"><li><span class="material-symbols-outlined" style="font-size:16px;vertical-align:text-bottom">warning</span> ${[...new Set(acima.map((l) => l.obra))]
             .map((o) => esc(o))
             .join(", ")}: os autos já medem mais do que a venda prevista da obra (até ${pc(Math.max(...acima.map((l) => l.pctAcum)))}). Ou a venda prevista está incompleta, ou há autos a mais.</li></ul>`
         : ""
@@ -76,7 +76,7 @@ function desenhar() {
         .join("")}</select>
       <select class="fcal-ano" data-r3s="f"><option value="">Faturação: todos</option><option value="nao"${S.f === "nao" ? " selected" : ""}>Aprovados por faturar</option><option value="sim"${S.f === "sim" ? " selected" : ""}>Faturados</option></select>
       ${moedaSeg("r3", S.d.moeda, moedas)}
-      ${can("financeiro", "edit") ? `<button type="button" class="finance-btn" data-r3plan>📅 Planear Autos Previstos</button>` : ""}
+      ${can("financeiro", "edit") ? `<button type="button" class="finance-btn" data-r3plan><span class="material-symbols-outlined">calendar_month</span> Planear Autos Previstos</button>` : ""}
     </div>
     ${
       L.length

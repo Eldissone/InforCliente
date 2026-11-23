@@ -80,7 +80,7 @@ function detalhe() {
       <button type="button" class="fcal-todos" data-o2back>← Todas as obras</button>
       <h2 class="fx2-h2">${esc(x.codigo)} · ${esc(x.nome)}</h2>
     </div>
-    ${alertas.length ? `<ul class="fx3-alertas">${alertas.map((a) => `<li>⚠ ${esc(a)}</li>`).join("")}</ul>` : ""}
+    ${alertas.length ? `<ul class="fx3-alertas">${alertas.map((a) => `<li><span class="material-symbols-outlined" style="font-size:16px;vertical-align:text-bottom">warning</span> ${esc(a)}</li>`).join("")}</ul>` : ""}
     ${kpis([
       { tom: "neu", titulo: "Venda Prevista", valor: x.contr ? fmt(x.contr) : "—", nota: x.moeda },
       { tom: "neu", titulo: "Custo Orçado", valor: x.orc ? fmt(x.orc) : "—" },

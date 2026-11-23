@@ -35,7 +35,7 @@ function desenhar() {
     ${
       outras.length
         ? `<ul class="fx3-alertas">${outras
-            .map(([m, v]) => `<li>⚠ Pagamentos em ${esc(m)} nesta obra em ${esc(obra.moeda)}: ${fmt(v)} ${esc(m)}. Ficam fora dos totais — sem câmbio não se somam.</li>`)
+            .map(([m, v]) => `<li><span class="material-symbols-outlined" style="font-size:16px;vertical-align:text-bottom">warning</span> Pagamentos em ${esc(m)} nesta obra em ${esc(obra.moeda)}: ${fmt(v)} ${esc(m)}. Ficam fora dos totais — sem câmbio não se somam.</li>`)
             .join("")}</ul>`
         : ""
     }

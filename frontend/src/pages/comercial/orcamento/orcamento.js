@@ -544,7 +544,7 @@ function viewSheet(key) {
                ${S.R.precoDado ? `<span class="cm-pill is-good">É o preço de venda</span>` : `<span class="cm-pill">Não é o preço de venda</span>`}
                ${
                  editable && (S.doc.sheets.qt || []).some((l) => l.desc && Number(l.q) > 0)
-                   ? `<button class="cm-chip" type="button" id="bComporQt" title="A IA propõe os recursos que cada trabalho leva por unidade">✦ Compor custos</button>`
+                   ? `<button class="cm-chip" type="button" id="bComporQt" title="A IA propõe os recursos que cada trabalho leva por unidade"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">auto_awesome</span> Compor custos</button>`
                    : ""
                }
                ${editable ? `<button class="cm-chip is-on" type="button" id="bImportQt">Importar de uma obra</button>` : ""}`

@@ -45,7 +45,7 @@ export const SECTIONS = [
     anexos: true,
     ia: {
       tarefa: "textos",
-      label: "✦ Redigir os textos técnicos",
+      label: "Redigir os textos técnicos",
       ajuda: "Escreve o objectivo, a documentação de referência, a introdução e as fases das condições técnicas e o texto do traçado.",
     },
     campos: [
@@ -60,7 +60,7 @@ export const SECTIONS = [
     ajuda: "Explica o projecto: o que se vai fazer, a solução técnica escolhida e porquê.",
     ia: {
       tarefa: "memoria",
-      label: "✦ Redigir a memória",
+      label: "Redigir a memória",
       ajuda: "Escreve a introdução e os pontos da memória a partir do orçamento. Substitui o que lá estiver.",
     },
     campos: [

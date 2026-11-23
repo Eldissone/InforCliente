@@ -19,7 +19,11 @@ const esc = (v) => escapeHtml(String(v ?? ""));
 const fmt = (v, d = 0) => (Number(v) || 0).toLocaleString("pt-PT", { minimumFractionDigits: d, maximumFractionDigits: d });
 const dt = (k) => (k ? String(k).slice(0, 10).split("-").reverse().join("/") : "—");
 const SHEETJS = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-const EST = { none: ["🔴", "Sem preço"], old: ["🟡", "Preço antigo ou de barém"], ok: ["🟢", "Cotado e válido"] };
+const EST = {
+  none: ['<span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom;color:#dc2626">cancel</span>', "Sem preço", "Sem preço"],
+  old: ['<span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom;color:#d97706">schedule</span>', "Preço antigo ou de barém", "Preço antigo ou de barém"],
+  ok: ['<span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom;color:#16a34a">check_circle</span>', "Cotado e válido", "Cotado e válido"],
+};
 const ESTADO = { EM_ELABORACAO: "Em elaboração", EM_ANALISE: "Em análise", APROVADO: "Aprovado", PROPOSTA_ENVIADA: "Proposta enviada" };
 
 const S = { lista: null, det: null, src: null, cat: "", est: "", q: "", sel: new Set(), erro: null };
@@ -36,10 +40,10 @@ function lista() {
   if (!L.length) return `<p class="cm-lead">Não há orçamentos em curso com artigos para comprar. Os orçamentos aparecem aqui quando têm materiais, EPI, ferramentas ou mantimentos com quantidade.</p>`;
   return `<div class="nc-grid">${L.map(
     (o) => `<button type="button" class="nc-card" data-ncsrc="${esc(o.id)}">
-      <div class="nc-t"><b>${esc(o.numero)}</b> <span class="cm-pill">${esc(ESTADO[o.estado] || o.estado)}</span>${o.pronto ? ' <span class="cm-pill is-good">✔ pronto para cotação</span>' : ' <span class="cm-pill">pode mudar</span>'}</div>
+      <div class="nc-t"><b>${esc(o.numero)}</b> <span class="cm-pill">${esc(ESTADO[o.estado] || o.estado)}</span>${o.pronto ? ' <span class="cm-pill is-good"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:text-bottom">check</span> pronto para cotação</span>' : ' <span class="cm-pill">pode mudar</span>'}</div>
       <div class="nc-o">${esc(o.obra || "")}</div>
       <div class="nc-m">${o.inicio ? `Início ${dt(o.inicio)} · ` : ""}${o.artigos} artigos · ${cats.map(([k, l]) => (o.porCat[k] ? `${l} ${o.porCat[k]}` : "")).filter(Boolean).join(" · ")}</div>
-      <div class="nc-s"><span>🔴 ${o.semPreco} sem preço</span><span>🟡 ${o.antigo} preço antigo/barém</span><span>🟢 ${o.cotados} cotados</span>${o.pedidos ? `<span>📨 ${o.pedidos} pedido(s) de cotação</span>` : ""}</div>
+      <div class="nc-s"><span>${EST.none[0]} ${o.semPreco} sem preço</span><span>${EST.old[0]} ${o.antigo} preço antigo/barém</span><span>${EST.ok[0]} ${o.cotados} cotados</span>${o.pedidos ? `<span><span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">forward_to_inbox</span> ${o.pedidos} pedido(s) de cotação</span>` : ""}</div>
       <span class="nc-a">Abrir ›</span></button>`
   ).join("")}</div>
   ${L.length > 1 ? `<p class="cm-calc" style="margin-top:.75rem">Para juntar o mesmo artigo de vários orçamentos num só pedido (mais volume, melhor preço): <a href="#" data-ncsrc="__all">vista consolidada de todos os orçamentos</a>.</p>` : ""}`;
@@ -61,9 +65,9 @@ function detalhe() {
   <h2 class="cm-panel-title">${todos ? "Vista consolidada" : esc(D.orcamento.numero)} <span class="cm-calc">${todos ? "· todos os orçamentos em curso" : `· ${esc(D.orcamento.obra || "")}`}</span></h2>
   <div class="cm-grupos" style="margin:.5rem 0">
     <span class="cm-chip"><span>Artigos</span><b>${all.length}</b></span>
-    <span class="cm-chip"><span>🔴 Sem preço</span><b>${cnt("none")}</b></span>
-    <span class="cm-chip"><span>🟡 Preço antigo ou de barém</span><b>${cnt("old")}</b></span>
-    <span class="cm-chip"><span>🟢 Cotados e válidos</span><b>${cnt("ok")}</b></span>
+    <span class="cm-chip"><span>${EST.none[0]} Sem preço</span><b>${cnt("none")}</b></span>
+    <span class="cm-chip"><span>${EST.old[0]} Preço antigo ou de barém</span><b>${cnt("old")}</b></span>
+    <span class="cm-chip"><span>${EST.ok[0]} Cotados e válidos</span><b>${cnt("ok")}</b></span>
   </div>
   ${
     !todos && D.pedidos.length
@@ -72,7 +76,7 @@ function detalhe() {
   }
   <div class="cm-head-actions" style="flex-wrap:wrap;margin-bottom:.5rem">
     ${[["", "Todos"], ...cats].map(([k, l]) => `<button type="button" class="cm-chip${S.cat === k ? " is-on" : ""}" data-nc="cat|${k}">${esc(l)} (${k ? all.filter((r) => r.cat === k).length : all.length})</button>`).join("")}
-    <select class="cell-list" data-ncf="est"><option value="">Todos os estados</option>${Object.entries(EST).map(([k, v]) => `<option value="${k}"${S.est === k ? " selected" : ""}>${v[0]} ${v[1]}</option>`).join("")}</select>
+    <select class="cell-list" data-ncf="est"><option value="">Todos os estados</option>${Object.entries(EST).map(([k, v]) => `<option value="${k}"${S.est === k ? " selected" : ""}>${v[1]}</option>`).join("")}</select>
     <input class="cell-manual" data-ncq placeholder="Procurar artigo…" value="${esc(S.q)}">
   </div>
   ${
@@ -94,7 +98,7 @@ function detalhe() {
     ${!todos && canEdit() ? `<button type="button" class="cm-chip" data-nc="avisar">Avisar a Logística</button>` : ""}
     ${!todos ? `<a class="cm-chip" href="/comercial/orcamento?id=${esc(D.orcamento.id)}&v=mat">Abrir o orçamento ›</a>` : ""}
   </div>
-  <p class="cm-calc">🟢 = há uma compra ou cotação da casa que casa com o artigo, com menos de ${D.validade} dias. 🟡 = preço mais antigo, parecido mas não igual, ou só o do barém/orçamento. 🔴 = sem preço nenhum.
+  <p class="cm-calc">${EST.ok[0]} = há uma compra ou cotação da casa que casa com o artigo, com menos de ${D.validade} dias. ${EST.old[0]} = preço mais antigo, parecido mas não igual, ou só o do barém/orçamento. ${EST.none[0]} = sem preço nenhum.
     Os pedidos de cotação da app são por obra: como o orçamento ainda não tem obra, o pedido sai em Excel para enviar aos fornecedores, e a Logística é avisada.</p>`;
 }
 
