@@ -9,6 +9,7 @@ import {
 } from "./appNav.js";
 import { applyEmbedMode, isEmbeddedView } from "./embedMode.js";
 import { mountAppHeader } from "./appHeader.js";
+import { ligarReferenciasObra } from "./obraRef.js";
 
 applyEmbedMode();
 
@@ -439,3 +440,5 @@ async function openProfileModal() {
 }
 
 mountAppHeader();
+// A referência da obra no lugar do código interno (OBR-…), em todas as páginas.
+if (getSessionUser()) ligarReferenciasObra();
