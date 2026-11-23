@@ -24,9 +24,9 @@ import { canPayHere, openPayModal } from "./payModal.js";
 
 /** Onde se tratam os compromissos (ainda não podem ser pagos). */
 const COMMITMENT_LINK = {
-  PEDIDO_COMPRA: { href: "/Financeiro/centrodecompras", label: "Compras" },
-  PEDIDO_EXTRA: { href: "/Financeiro/centrodecompras", label: "Aprovar" },
-  FRETE: { href: "/Financeiro/centrodecompras", label: "Compras" },
+  PEDIDO_COMPRA: { href: "/Financeiro/centro-pagamentos", label: "Pagamentos" },
+  PEDIDO_EXTRA: { href: "/Financeiro/centro-pagamentos", label: "Pagamentos" },
+  FRETE: { href: "/Financeiro/centro-pagamentos", label: "Pagamentos" },
 };
 
 function canPay() {

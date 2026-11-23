@@ -75,7 +75,7 @@ function desenhar() {
       <tbody>${L.map(
         (l) => `<tr>
           <td>${fmtData(l.data)}</td>
-          <td><a href="/Financeiro/centroDeCompras">${esc(l.pedido)}</a></td>
+          <td><a href="/Financeiro/centro-pagamentos">${esc(l.pedido)}</a></td>
           <td>${esc(l.fornecedor)}</td>
           <td>${esc(l.produto)}</td>
           <td class="fx2-mut">${esc(l.obra)}</td>

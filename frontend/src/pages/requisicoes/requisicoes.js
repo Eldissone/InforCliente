@@ -189,7 +189,7 @@ function drawDoc() {
     ${
       r.purchaseOrder
         ? `<div class="cm-note is-warn">Foi para compra: pedido <b>${esc(r.purchaseOrder.number)}</b> (${esc(r.purchaseOrder.status)}).
-             <a href="/Financeiro/centroDeCompras?tab=compras">Ver em Compras ›</a></div>`
+             <a href="/Financeiro/centro-pagamentos">Ver no Centro de Pagamentos ›</a></div>`
         : ""
     }
 

@@ -1520,7 +1520,7 @@ function closeExtraModal() {
 }
 
 export const NOVO_PEDIDO_PATH = "/Financeiro/novoPedido";
-const DEFAULT_RETURN_TO = "/Financeiro/centroDeCompras";
+const DEFAULT_RETURN_TO = "/Financeiro/centro-pagamentos";
 
 export function currentAppPath() {
   return `${window.location.pathname}${window.location.search}`;

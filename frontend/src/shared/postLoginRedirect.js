@@ -42,10 +42,10 @@ export async function resolvePostLoginPath(user) {
     { action: "nav_obras", path: "/Projectos/ProjectGeral" },
     { action: "nav_logistica", path: "/Stock" },
     { action: "nav_planeamento", path: "/Projectos/ProjectGeral" },
-    { action: "nav_financeiro", path: "/Financeiro/centroDeCompras" },
+    { action: "nav_financeiro", path: "/Financeiro/overview" },
     { action: "nav_cotacao", path: "/Projectos/Cotacao" },
     { action: "nav_comercial", path: "/comercial/orcamentos" },
-    { action: "nav_centros_gerais", path: "/Financeiro/centroDeCompras" },
+    { action: "nav_centros_gerais", path: "/Financeiro/centro-pagamentos" },
     { action: "nav_users", path: "/Users" },
   ];
 

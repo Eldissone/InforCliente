@@ -42,7 +42,7 @@ function buildFinanceiroNotificationUrl(payload) {
   if (extraId) {
     const params = new URLSearchParams({ extraRequestId: extraId });
     if (payload.metadata?.projectId) params.set("projectId", payload.metadata.projectId);
-    return `/Financeiro/centroDeCompras.html?${params}`;
+    return `/Financeiro/centro-pagamentos?${params}`;
   }
   const paymentId = payload?.metadata?.paymentId;
   if (!paymentId) return null;
@@ -51,7 +51,7 @@ function buildFinanceiroNotificationUrl(payload) {
   if (payload.metadata?.event === "PAYMENT_CONFIRMED" && payload.metadata?.comprovativoUrl) {
     params.set("focus", "comprovativo");
   }
-  return `/Financeiro/centroDeCompras.html?${params}`;
+  return `/Financeiro/centro-pagamentos?${params}`;
 }
 
 function isComprovativoNotification(payload) {

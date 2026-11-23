@@ -142,7 +142,6 @@ const APP_MENU = [
           { label: "Mapa de Obrigações", icon: "table_chart", href: "/Financeiro/mapa-obrigacoes", perm: "financeiro:view" },
           { label: "Conta Corrente de Fornecedores", icon: "account_box", href: "/compras/conta-corrente-fornecedores" },
           { label: "Contas a Pagar", icon: "pending_actions", href: "/Financeiro/contas?tab=pagar", perm: "financeiro:view" },
-          { label: "Compras e Pedidos", icon: "shopping_cart", selector: "[data-nav-centros]", href: "/Financeiro/centroDeCompras" },
           { label: "Pagamentos a Fornecedor", icon: "north_east", href: "/Financeiro/tesouraria/pagamentos", perm: "financeiro:view" },
         ],
       },
@@ -381,9 +380,6 @@ function isSidebarLinkActive(link) {
       && !current.includes("/projectos/tecnicoplanos");
   }
   if (link.matches("[data-nav-clientes]")) return current.includes("/clientes/") || current.includes("/clientedetalhe/");
-  if (link.matches("[data-nav-centros]")) {
-    return current.includes("/financeiro/centrodecompras") || current.includes("/financeiro/financeiro");
-  }
   if (link.matches("[data-nav-cotacao]")) return current.includes("/cotacao");
   if (link.matches("[data-nav-comercial]")) return current.includes("/comercial/orcamento");
   if (link.matches("[data-nav-users]")) return current.includes("/users/");

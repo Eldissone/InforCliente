@@ -70,14 +70,12 @@ const STATUS_LABEL = {
 
 /** Onde se tratam os compromissos (ainda não podem ser pagos). */
 const COMMITMENT_LINK = {
-  PEDIDO_COMPRA: { href: "/Financeiro/centrodecompras", label: "Compras" },
-  PEDIDO_EXTRA: { href: "/Financeiro/centrodecompras", label: "Aprovar" },
-  FRETE: { href: "/Financeiro/centrodecompras", label: "Compras" },
+  PEDIDO_COMPRA: { href: "/Financeiro/centro-pagamentos", label: "Pagamentos" },
+  PEDIDO_EXTRA: { href: "/Financeiro/centro-pagamentos", label: "Pagamentos" },
+  FRETE: { href: "/Financeiro/centro-pagamentos", label: "Pagamentos" },
 };
 
-const LINKS = [
-  { label: "Compras e Pedidos", href: "/Financeiro/centrodecompras", icon: "shopping_cart" },
-];
+const LINKS = [];
 
 /**
  * Filtros e cartões do P1 do protótipo (`V.fcp`): pesquisa, estado, tipo,

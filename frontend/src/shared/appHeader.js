@@ -21,7 +21,6 @@ function renderAppHeader() {
           <a class="${LINK}" data-nav-logistics href="/Stock">Logística</a>
           <a class="${LINK} hidden" data-nav-cotacao href="/Projectos/Cotacao">Cotação</a>
           <a class="${LINK} hidden" data-nav-comercial href="/comercial/orcamentos">Comercial</a>
-          <a class="${LINK} hidden" data-nav-centros href="/Financeiro/centroDeCompras">Compras e Pedidos</a>
         </div>
       </div>
       <div class="flex flex-1 items-center justify-end gap-3 min-w-0">
@@ -46,7 +45,6 @@ function renderAppHeader() {
       <a class="${MOBILE}" data-nav-logistics href="/Stock"><span class="material-symbols-outlined text-lg">inventory_2</span> Logística</a>
       <a class="${MOBILE} hidden" data-nav-cotacao href="/Projectos/Cotacao"><span class="material-symbols-outlined text-lg">request_quote</span> Cotação</a>
       <a class="${MOBILE} hidden" data-nav-comercial href="/comercial/orcamentos"><span class="material-symbols-outlined text-lg">calculate</span> Comercial</a>
-      <a class="${MOBILE} hidden" data-nav-centros href="/Financeiro/centroDeCompras"><span class="material-symbols-outlined text-lg">account_balance</span> Compras e Pedidos</a>
       <button data-logout class="flex items-center gap-3 text-left text-sm font-semibold text-red-400 py-3 px-4 rounded-xl hover:bg-red-400/10 transition-all mt-2" type="button">
         <span class="material-symbols-outlined text-lg">logout</span> Sair
       </button>
