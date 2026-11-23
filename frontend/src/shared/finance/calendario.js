@@ -13,7 +13,7 @@
 import { apiRequest } from "../../services/api.js";
 import { escapeFinanceHtml as esc } from "../financePage.js";
 import { markActiveDropdownTriggers, markTopNavActive } from "../appNav.js";
-import { buildCalendar, periodLabel, periodShort, MESES } from "./calendarioCore.js";
+import { buildCalendar, periodLabel, periodShort, MESES, JANELAS } from "./calendarioCore.js";
 
 const VER = {
   tudo: { num: "F1", titulo: "Calendário Financeiro", lado: "" },
@@ -68,7 +68,7 @@ function cabecalho() {
 
 const seg = (k, opcoes) =>
   `<span class="finance-seg">${opcoes
-    .map(([v, l]) => `<button type="button" class="${String(state.F[k]) === v ? "active" : ""}" data-fcal="${k}|${v}">${esc(l)}</button>`)
+    .map(([v, l]) => `<button type="button" class="${String(state.F[k] ?? "") === v ? "active" : ""}" data-fcal="${k}|${v}">${esc(l)}</button>`)
     .join("")}</span>`;
 
 const PILL = {
@@ -128,6 +128,10 @@ function desenhar() {
 
   const { hoje, itens } = state.dados;
   const F = state.F;
+  {
+    const ms = new Set(itens.map((x) => String(x.moeda || "AOA").toUpperCase()));
+    if (!F.moeda || !ms.has(F.moeda)) F.moeda = ms.has("AOA") ? "AOA" : [...ms][0] || "AOA";
+  }
   const C = buildCalendar(itens, F, hoje);
   F.sel = C.sel;
   cabecalho();
@@ -149,14 +153,34 @@ function desenhar() {
     })
     .join("");
 
+  // Clientes (ou fornecedores) do lado escolhido, para o filtro por entidade.
+  const entidades = [...new Set(itens.filter((x) => !F.lado || x.lado === F.lado).map((x) => x.entidade).filter((e) => e && e !== "—"))].sort((a, b) =>
+    a.localeCompare(b, "pt")
+  );
+  const janelas = `<div class="fcal-janelas">${JANELAS.map(
+    ([k, l]) => `<button type="button" class="fx2-chip${(F.janela || "") === k ? " on" : ""}" data-fcal="janela|${k}">${esc(l)} <i>${C.contagens[k]}</i></button>`
+  ).join("")}</div>`;
+
+  const moedas = [...new Set(itens.map((x) => String(x.moeda || "AOA").toUpperCase()))].sort((a, b) => (a === "AOA" ? -1 : b === "AOA" ? 1 : a.localeCompare(b)));
+
   el.innerHTML = `
+    ${janelas}
     <div class="fcal-filtros">
+      ${moedas.length > 1 ? seg("moeda", moedas.map((m) => [m, m])) : ""}
       <input type="search" class="fcal-q" data-fcalq placeholder="Pesquisar entidade, documento, obra, valor…" value="${esc(F.q || "")}">
       ${seg("lado", [["", "Pagar e Receber"], ["P", "Só a Pagar"], ["R", "Só a Receber"]])}
       ${seg("per", [["M", "Por Mês"], ["S", "Por Semana"]])}
       ${
         F.per === "M"
           ? `<select class="fcal-ano" data-fcals="ano">${anos.map((a) => `<option${F.ano === a ? " selected" : ""}>${a}</option>`).join("")}</select>`
+          : ""
+      }
+      <select class="fcal-ano" data-fcals="ent"><option value="">${F.lado === "P" ? "Todos os fornecedores" : F.lado === "R" ? "Todos os clientes" : "Todas as entidades"}</option>${entidades
+        .map((e) => `<option${F.ent === e ? " selected" : ""}>${esc(e)}</option>`)
+        .join("")}</select>
+      ${
+        F.lado === "R"
+          ? seg("fonte", [["", "Faturas e previstos"], ["fat", "Só faturas emitidas"], ["prev", "Só autos previstos"]])
           : ""
       }
       <label class="fcal-chk" title="${nPrev} auto(s) aprovado(s) ainda sem fatura">
@@ -196,10 +220,20 @@ function ligar() {
     const b = e.target.closest("[data-fcal]");
     if (!b) return;
     const [k, v] = b.dataset.fcal.split("|");
-    if (k === "sel") state.F.sel = v;
+    if (k === "sel") {
+      state.F.sel = v;
+      state.F.janela = "";
+    } else if (k === "fonte") {
+      state.F.fonte = v;
+      // «Só autos previstos» precisa dos previstos ligados.
+      if (v === "prev") state.F.prev = true;
+    }
     else {
       state.F[k] = v;
-      if (k === "lado") gravarLado(v);
+      if (k === "lado") {
+        gravarLado(v);
+        state.F.ent = "";
+      }
       if (k === "per") state.F.sel = null;
     }
     desenhar();

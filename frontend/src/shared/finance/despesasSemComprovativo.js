@@ -23,7 +23,7 @@ const DECISOES = [
   ["", "Por decidir"],
   ["DSC", "Mantém DSC"],
   ["AF", "Autofaturação"],
-  ["FATURA", "Apareceu a fatura"],
+  ["FATURA", "Fatura encontrada"],
 ];
 
 const norm = (v) =>
@@ -58,13 +58,13 @@ function desenhar() {
         nota: `${totais.nDsc} linha(s) · encargo ${pct}%: ${fmt(totais.dscEncargo)} · custo ${fmt(totais.dscCustoTotal)}`,
       },
       { tom: "good", titulo: "Autofaturação", valor: fmt(totais.af), nota: `${totais.nAf} linha(s)` },
-      { tom: "blue", titulo: "Apareceu a Fatura", valor: fmt(totais.fatura), nota: `${totais.nFatura} linha(s)` },
+      { tom: "blue", titulo: "Fatura Encontrada", valor: fmt(totais.fatura), nota: `${totais.nFatura} linha(s)` },
     ])}
     <div class="fcal-filtros">
       <select class="fcal-ano" data-dscs="mes"><option value="">Todos os meses</option>${meses
         .map((k) => `<option value="${k}"${S.mes === k ? " selected" : ""}>${MESES[Number(k.slice(5, 7)) - 1]} ${k.slice(0, 4)}</option>`)
         .join("")}</select>
-      ${seg("dsc", "dec", S.dec, [["", "Todas"], ["_", "Por decidir"], ["DSC", "Mantém DSC"], ["AF", "Autofaturação"], ["FATURA", "Com fatura"]])}
+      ${seg("dsc", "dec", S.dec, [["", "Todas"], ["_", "Por decidir"], ["DSC", "Mantém DSC"], ["AF", "Autofaturação"], ["FATURA", "Fatura encontrada"]])}
       <input type="search" class="fcal-q" data-dscq placeholder="Pesquisar pedido, fornecedor, produto, obra…" value="${esc(S.q)}">
       <span class="fx2-ajuda">${L.length} de ${linhas.length}</span>
     </div>
@@ -101,7 +101,7 @@ function desenhar() {
     }
     <p class="fcal-nota">
       Quem pede marca a linha DSC ou AF no pedido de pagamento; o financeiro decide aqui, linha a linha: mantém
-      DSC, passa a autofaturação, ou apareceu a fatura (anexe-a — a linha passa logo a «Apareceu a fatura»).
+      DSC, passa a autofaturação, ou a fatura foi encontrada (anexe-a — a linha passa logo a «Fatura encontrada»).
       Uma despesa sem documento não é aceite como custo fiscal: enquanto for DSC soma-se-lhe ${pct}% de encargo,
       como no protótipo, para se ver quanto custa a decisão.
     </p>`;

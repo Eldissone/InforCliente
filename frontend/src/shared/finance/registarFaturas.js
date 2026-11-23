@@ -96,6 +96,7 @@ const TIPOS = [
 const ESTADOS = [
   ["__aberto", "Por receber"],
   ["ATRASADO", "Atrasados"],
+  ["a90", "Atraso superior a 90 dias"],
   ["EM_ABERTO", "Em aberto"],
   ["PAGO_PARCIAL", "Recebidos em parte"],
   ["PAGO_TOTAL", "Recebidos"],
@@ -282,22 +283,38 @@ function moedasHtml(m) {
   return ks.map((k, i) => (i ? `<small class="fx2-mut"> + ${esc(money(m[k], k))}</small>` : esc(money(m[k], k)))).join("");
 }
 
+/** Em atraso há mais de 90 dias (pela data de receção). */
+function atraso90(inv) {
+  const v = vencDe(inv);
+  return inv.status === "ATRASADO" && v && v < addDays(toDateKey(new Date()), -90);
+}
+
+/**
+ * Os três cartões da versão final do protótipo (v555): por receber, em atraso
+ * e em atraso há mais de 90 dias — cada um com faturas, clientes e o peso no
+ * que está por receber. Filtram a lista. O previsto e o recebido do mês ficam
+ * no estado «Previstos» e na Análise.
+ */
 function renderCards() {
   const base = filteredBase();
   const ab = base.filter((i) => POR_RECEBER.includes(i.status));
   const atr = base.filter((i) => i.status === "ATRASADO");
-  const v7 = base.filter(em7Dias);
-  const prev = forecastVisible();
+  const a90 = atr.filter(atraso90);
   const st = state.filters.status;
-  const mes = new Date().toLocaleDateString("pt-PT", { month: "long", year: "numeric" });
-  const card = (k, tom, titulo, valor, nota) =>
-    `<button type="button" class="fx2-k fx2-k--${tom}${st === k ? " on" : ""}" data-r1est="${k}"><span class="fx2-kt">${esc(titulo)}</span><b class="fx2-kv">${valor}</b><span class="fx2-kn">${esc(nota)}</span></button>`;
-  document.getElementById("invCards").innerHTML = `<div class="fx2-kpis">
-    ${card("__aberto", "neu", "Por Receber", moedasHtml(porMoeda(ab, (i) => i.missingAmount)), `${ab.length} fatura(s)`)}
-    ${card("ATRASADO", "bad", "Em Atraso", moedasHtml(porMoeda(atr, (i) => i.missingAmount)), `${atr.length} fatura(s)`)}
-    ${card("v7", "warn", "Recebe em 7 Dias", moedasHtml(porMoeda(v7, (i) => i.missingAmount)), `${v7.length} fatura(s)`)}
-    ${card("PAGO_TOTAL", "good", "Recebido Este Mês", moedasHtml(state.receivedThisMonth || {}), mes)}
-    ${card("prev", "blue", "Previsto (sem Fatura)", moedasHtml(porMoeda(prev, (a) => a.value, (a) => a.currency)), `${prev.length} auto(s) previsto(s)`)}
+  const nCli = (L) => new Set(L.map((i) => i.client?.id || i.client?.name || "—")).size;
+  // O peso só se calcula na moeda principal (não se somam moedas).
+  const totAOA = porMoeda(ab, (i) => i.missingAmount).AOA || 0;
+  const peso = (L) => (totAOA ? ((porMoeda(L, (i) => i.missingAmount).AOA || 0) / totAOA) * 100 : 0);
+  const card = (k, tom, titulo, L, cor) => {
+    const p = peso(L);
+    return `<button type="button" class="fx2-k fx2-k--${tom} r1-box${st === k ? " on" : ""}" data-r1est="${k}"><span class="fx2-kt">${esc(titulo)}</span><b class="fx2-kv">${moedasHtml(
+      porMoeda(L, (i) => i.missingAmount)
+    )}</b><span class="fx2-kn">${L.length} fatura(s) · ${nCli(L)} cliente(s)${k !== "__aberto" && totAOA > 0 ? ` · ${p.toLocaleString("pt-PT", { maximumFractionDigits: 1 })}%` : ""}</span><span class="r1-bar"><i style="width:${Math.min(100, k === "__aberto" ? (ab.length ? 100 : 0) : p)}%;background:${cor}"></i></span></button>`;
+  };
+  document.getElementById("invCards").innerHTML = `<div class="fx2-kpis r1-boxes">
+    ${card("__aberto", "blue", "Por Receber de Clientes", ab, "#1f5fd1")}
+    ${card("ATRASADO", "bad", "Em Atraso", atr, "#d64545")}
+    ${card("a90", "bad", "Atraso Superior a 90 Dias", a90, "#7a1010")}
   </div>`;
 }
 
@@ -397,6 +414,7 @@ function visibleItems() {
   const s = state.filters.status;
   if (s === "__aberto") return items.filter((i) => POR_RECEBER.includes(i.status));
   if (s === "v7") return items.filter(em7Dias);
+  if (s === "a90") return items.filter(atraso90);
   if (s === "prev") return [];
   return s ? items.filter((i) => i.status === s) : items;
 }

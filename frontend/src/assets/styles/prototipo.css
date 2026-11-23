@@ -713,3 +713,9 @@ button.fx2-k:hover { background: #f8fafc; }
 .cm-pronto { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; margin-left: 4px; }
 .cm-field { display: grid; gap: .25rem; font-size: .8125rem; color: var(--cm-muted); margin-top: .625rem; }
 .cm-modal--wide { width: min(900px, 96vw); max-width: 96vw; }
+
+.r1-bar { display: block; height: 4px; margin-top: 6px; border-radius: 2px; background: #eef1f4; }
+.r1-bar i { display: block; height: 4px; border-radius: 2px; }
+
+/* ─── P2 Vencimentos: atalhos ─────────────────────────────────────────────── */
+.fcal-janelas { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }

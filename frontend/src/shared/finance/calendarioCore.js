@@ -78,17 +78,54 @@ export function norm(v) {
  *   `prev` (incluir previstos), `q` (pesquisa), `sel` (período escolhido)
  * @param {string} hoje AAAA-MM-DD
  */
+/**
+ * Os atalhos do P2 Vencimentos do protótipo: atrasados, esta semana, próxima
+ * semana, este mês, próximo mês, todos. Devolve se um documento cai na janela.
+ */
+export const JANELAS = [
+  ["atr", "Atrasados"],
+  ["sem", "Esta Semana"],
+  ["psem", "Próxima Semana"],
+  ["mes", "Este Mês"],
+  ["pmes", "Próximo Mês"],
+  ["", "Todos"],
+];
+
+export function naJanela(j, x, hoje) {
+  if (!j) return true;
+  const d = x.data;
+  if (j === "atr") return x.estado === "atr" || Boolean(d && d < hoje && x.estado !== "prev");
+  if (!d) return false;
+  const seg = weekOf(hoje);
+  if (j === "sem") return d >= hoje && d <= addDays(seg, 6);
+  if (j === "psem") return d >= addDays(seg, 7) && d <= addDays(seg, 13);
+  const m = hoje.slice(0, 7);
+  if (j === "mes") return d >= hoje && d.slice(0, 7) === m;
+  const [y, mm] = m.split("-").map(Number);
+  const prox = new Date(Date.UTC(y, mm, 1)).toISOString().slice(0, 7);
+  if (j === "pmes") return d.slice(0, 7) === prox;
+  return true;
+}
+
 export function buildCalendar(itens, F, hoje) {
   const keys = periodKeys({ per: F.per, ano: F.ano, hoje });
   const atual = F.per === "S" ? weekOf(hoje) : hoje.slice(0, 7);
   const q = norm(F.q || "").trim();
 
-  const visiveis = (itens || []).filter(
+  // Sem a janela: é daqui que saem as contagens dos atalhos.
+  const base = (itens || []).filter(
     (x) =>
       (!F.lado || x.lado === F.lado) &&
+      // Uma moeda de cada vez: kwanzas e dólares não se somam.
+      (!F.moeda || String(x.moeda || "AOA").toUpperCase() === F.moeda) &&
       (F.prev || x.estado !== "prev") &&
+      // R3 do protótipo: faturas e previstos, só faturas emitidas, só autos previstos.
+      (!F.fonte || (F.fonte === "prev" ? x.estado === "prev" : x.estado !== "prev")) &&
+      (!F.ent || x.entidade === F.ent) &&
       (!q || norm([x.entidade, x.doc, x.sub, x.grupo, x.valor].join(" ")).includes(q))
   );
+  const contagens = Object.fromEntries(JANELAS.map(([k]) => [k, base.filter((x) => naJanela(k, x, hoje)).length]));
+  const visiveis = base.filter((x) => naJanela(F.janela, x, hoje));
 
   const P = {};
   for (const x of visiveis) {
@@ -109,6 +146,8 @@ export function buildCalendar(itens, F, hoje) {
   // atual; senão o primeiro.
   let sel = F.sel;
   if (sel !== "tudo" && !ordem.includes(sel)) sel = keys.includes(atual) ? atual : keys[0];
+  // Com um atalho escolhido, a lista mostra tudo o que cai nele.
+  if (F.janela) sel = "tudo";
 
   const doPeriodo = sel === "tudo" ? visiveis : visiveis.filter((x) => periodOf(F.per, x.data, keys) === sel);
 
@@ -132,5 +171,5 @@ export function buildCalendar(itens, F, hoje) {
 
   const R = lado("R");
   const Pg = lado("P");
-  return { keys, atual, sel, periodos, receber: R, pagar: Pg, saldo: R.total - Pg.total };
+  return { keys, atual, sel, periodos, receber: R, pagar: Pg, saldo: R.total - Pg.total, contagens };
 }

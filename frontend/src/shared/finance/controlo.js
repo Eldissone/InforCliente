@@ -4,6 +4,7 @@ import { formatCurrency } from "../format.js";
 import { escapeFinanceHtml as esc } from "../financePage.js";
 import { chartCardHtml, compactMoney as compact, drawBarChart, drawComboChart, destroyCharts, TONES } from "./charts.js";
 import { kpiCardsHtml, meterHtml as meter, num, skeletonHtml, stripHtml, toneOf } from "./widgets.js";
+import { renderEstrutura } from "./controloEstrutura.js";
 
 /**
  * Ecrã «Controlo Financeiro».
@@ -148,6 +149,7 @@ function renderShell() {
         </header>
         <div id="ctrlTable" class="finance-table-scroll"></div>
       </section>
+      <div id="ctrlEstrutura"></div>
     </div>`;
 
   document.querySelectorAll("#ctrlRange button").forEach((btn) => {
@@ -633,5 +635,6 @@ async function load() {
 export async function render() {
   destroyCharts();
   renderShell();
-  await load();
+  // «Estrutura» e os últimos 12 meses do protótipo (V.fctl), por baixo das obras.
+  await Promise.all([load(), renderEstrutura(document.getElementById("ctrlEstrutura"))]);
 }

@@ -69,7 +69,7 @@ function desenhar() {
       { tom: C.atrS > 0.5 ? "bad" : "good", titulo: "A Pagar em Atraso", valor: fmt(C.atrS), nota: "contado no mês atual" },
       C.negativo
         ? { tom: "bad", titulo: "Saldo Negativo a Partir de", valor: esc(monthLabel(C.negativo)), nota: "falta dinheiro para o previsto" }
-        : { tom: "good", titulo: "Saldo no Fim", valor: fmt(C.fim[C.fim.length - 1]), nota: monthLabel(C.M[C.M.length - 1]) },
+        : { tom: "good", titulo: `Saldo Previsto em ${monthLabel(C.M[C.M.length - 1])}`, valor: fmt(C.fim[C.fim.length - 1]), nota: "sem saldo negativo previsto" },
     ])}
     <section class="fx2-blk fx2-mf"><div class="fx2-tw"><table>
       <thead><tr><th>Mês</th>${C.M.map(

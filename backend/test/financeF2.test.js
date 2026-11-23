@@ -630,3 +630,32 @@ test("RG8: centro geral com orçamento anual e tipo; subcustos por categoria", (
   const c = r.linhas.find((l) => l.id === "c1");
   assert.deepEqual(c.subs, [{ k: "Gastos pessoal", n: 2, custo: 50 }]);
 });
+
+test("P2/R3 calendário: atalhos de vencimento, só faturas / só previstos e filtro de cliente", async () => {
+  const { buildCalendar, naJanela } = await import(
+    require("node:url").pathToFileURL(require("node:path").join(__dirname, "../../frontend/src/shared/finance/calendarioCore.js")).href
+  );
+  const hoje = "2026-11-23"; // segunda-feira
+  const it = (o) => ({ lado: "R", valor: 10, entidade: "A", grupo: "g", estado: "abe", ...o });
+  const itens = [
+    it({ data: "2026-11-10", estado: "atr" }),
+    it({ data: "2026-11-25" }),
+    it({ data: "2026-12-02", entidade: "B" }),
+    it({ data: "2026-12-20", estado: "prev" }),
+    it({ data: "2027-01-05" }),
+  ];
+  assert.equal(naJanela("sem", itens[1], hoje), true);
+  assert.equal(naJanela("psem", itens[2], hoje), true);
+  assert.equal(naJanela("atr", itens[0], hoje), true);
+  const F = { per: "M", ano: "2026", prev: true, lado: "R" };
+  const C = buildCalendar(itens, F, hoje);
+  assert.deepEqual(C.contagens, { atr: 1, sem: 1, psem: 1, mes: 1, pmes: 2, "": 5 });
+  assert.equal(buildCalendar(itens, { ...F, janela: "pmes" }, hoje).receber.n, 2);
+  assert.equal(buildCalendar(itens, { ...F, janela: "", sel: "tudo", fonte: "prev" }, hoje).receber.n, 1);
+  assert.equal(buildCalendar(itens, { ...F, sel: "tudo", fonte: "fat" }, hoje).receber.n, 4);
+  assert.equal(buildCalendar(itens, { ...F, sel: "tudo", ent: "B" }, hoje).receber.n, 1);
+  // Uma moeda de cada vez.
+  const mix = [...itens, it({ data: "2026-11-26", moeda: "USD", valor: 7 })];
+  assert.equal(buildCalendar(mix, { ...F, sel: "tudo", moeda: "AOA" }, hoje).receber.total, 50);
+  assert.equal(buildCalendar(mix, { ...F, sel: "tudo", moeda: "USD" }, hoje).receber.total, 7);
+});

@@ -85,7 +85,10 @@ const LINKS = [
  * cartões Por Pagar · Em Atraso · Vence em 7 Dias · A Crédito · Pago, que
  * também filtram.
  */
-const FILTROS0 = { estado: "", tipo: "", por: "", cc: "", forn: "", de: "", ate: "", chip: "", semComp: false };
+const FILTROS0 = { estado: "", tipo: "", conta: "", por: "", cc: "", forn: "", de: "", ate: "", chip: "", semComp: false };
+
+/** A conta que paga (P1 «Todas as contas»): o fundo/conta do pedido, ou o modo de pagamento. */
+const CONTA_DE = (p) => p.fundName || (p.paymentMode ? String(p.paymentMode).replace(/_/g, " ").toLowerCase() : null);
 const state = { stage: "pay", group: "priority", query: "", data: null, f: { ...FILTROS0 } };
 
 const CHIPS = [
@@ -310,6 +313,7 @@ function renderFiltros() {
     <input id="cpSearch" type="search" placeholder="Pesquisar n.º, beneficiário, descrição…" value="${esc(state.query)}" autocomplete="off">
     <select data-cpf="estado">${opcoes(all.map(ESTADO_DE), f.estado, "Todos os estados")}</select>
     <select data-cpf="tipo">${opcoes(all.map((p) => typeOf(p)?.label || p.sourceLabel), f.tipo, "Todos os tipos")}</select>
+    <select data-cpf="conta">${opcoes(all.map(CONTA_DE), f.conta, "Todas as contas")}</select>
     <select data-cpf="por">${opcoes(all.map((p) => p.requestedBy), f.por, "Pedido por: todos")}</select>
     <label class="cp-venc">Vencimento de <input type="date" data-cpf="de" value="${esc(f.de)}"> até <input type="date" data-cpf="ate" value="${esc(f.ate)}"></label>
     <select data-cpf="cc">${opcoes(all.map(CC_DE), f.cc, "Todos os centros de custo")}</select>
@@ -324,6 +328,7 @@ function passaFiltros(p) {
   if (f.estado && ESTADO_DE(p) !== f.estado) return false;
   if (f.tipo && (typeOf(p)?.label || p.sourceLabel) !== f.tipo) return false;
   if (f.por && p.requestedBy !== f.por) return false;
+  if (f.conta && CONTA_DE(p) !== f.conta) return false;
   if (f.cc && CC_DE(p) !== f.cc) return false;
   if (f.forn && partyOf(p) !== f.forn) return false;
   const d = p.dueDate ? String(p.dueDate).slice(0, 10) : "";

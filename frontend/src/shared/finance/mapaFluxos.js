@@ -43,6 +43,7 @@ function desenhar() {
 
   el.innerHTML = `
     <div class="fcal-filtros">
+      <a class="finance-btn" href="/Financeiro/calendario?ver=tudo">Calendário Financeiro</a>
       ${seg("mf", "modo", F.modo, [["tudo", "Realizado + Previsto"], ["real", "Só Realizado"], ["comp", "Só Compromissos (por pagar/receber)"]])}
       ${seg("mf", "per", F.per, [["M", "Por Mês"], ["S", "Por Semana"]])}
       ${F.per === "M" ? `<select class="fcal-ano" data-mfs="ano">${anos.map((a) => `<option${F.ano === a ? " selected" : ""}>${a}</option>`).join("")}</select>` : ""}
