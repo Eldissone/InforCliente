@@ -35,13 +35,11 @@ const PAGES = {
     module: "compromissos.js",
   },
   "conta-corrente-fornecedores": {
-    code: "C6",
-    kicker: "Compras · Encomendas",
+    code: "P5",
+    kicker: "Financeiro · Contas a Pagar",
     title: "Conta Corrente de Fornecedores",
     subtitle: "Quanto devemos a cada fornecedor e há quanto tempo (antiguidade pelo vencimento).",
     module: "contaCorrenteFornecedores.js",
-    // Aberto a partir do Financeiro (Contas a Pagar), é o P5 do protótipo.
-    fin: { code: "P5", kicker: "Financeiro · Contas a Pagar" },
   },
   "stock-armazem": {
     code: "S3",
@@ -61,9 +59,7 @@ const PAGES = {
 
 (async () => {
   const key = document.body.dataset.comprasPage;
-  const base = PAGES[key];
-  const fromFin = new URLSearchParams(window.location.search).get("area") === "fin";
-  const meta = base && fromFin && base.fin ? { ...base, ...base.fin } : base;
+  const meta = PAGES[key];
   if (!meta) {
     console.warn("Página de Compras e Stock desconhecida:", key);
     return;

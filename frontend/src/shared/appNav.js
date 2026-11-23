@@ -7,17 +7,16 @@ const APP_MENU = [
     type: "group",
     label: "Registos",
     icon: "folder_open",
-    badge: "13",
+    badge: "11",
     children: [
       { label: "Contactos", icon: "contacts", href: "/registos/contactos" },
       { label: "Obras", icon: "apartment", href: "/registos/obras" },
       {
         label: "Terceiros",
         icon: "groups",
-        badge: "3",
+        badge: "2",
         children: [
           { label: "Setores", icon: "account_tree", href: "/registos/terceiros/setores" },
-          { label: "Fornecedores", icon: "local_shipping", href: "/fornecedores" },
           { label: "Clientes", icon: "business", selector: "[data-nav-clientes]", href: "/Clientes/clienteLista" },
         ],
       },
@@ -29,7 +28,6 @@ const APP_MENU = [
       { label: "Tipo de Custo (Produto ou Serviço)", icon: "category", href: "/registos/tipo-custo" },
       { label: "Categorias de Custo", icon: "account_tree", href: "/registos/categorias-custo" },
       { label: "Subcategorias de Custo", icon: "subdirectory_arrow_right", href: "/registos/subcategorias-custo" },
-      { label: "Cartões Bancários", icon: "credit_card", href: "/registos/cartoes" },
       { label: "Movimentos Financeiros", icon: "payments", href: "/registos/movimentos" },
     ],
   },
@@ -47,7 +45,6 @@ const APP_MENU = [
       },
       { label: "Folha de Despacho", icon: "fact_check", href: "/comercial/despacho", perm: "comercial:tab_despacho" },
       { label: "Propostas", icon: "forward_to_inbox", href: "/comercial/propostas", perm: "comercial:tab_propostas" },
-      { label: "Requisições de Material", icon: "assignment_add", href: "/requisicoes", perm: "obras:view" },
       {
         label: "Base",
         icon: "dataset",
@@ -65,8 +62,6 @@ const APP_MENU = [
     icon: "construction",
     children: [
       { label: "Listagem", icon: "list", selector: "[data-nav-obras]", href: "/Projectos/ProjectGeral" },
-      { label: "Cotação", icon: "request_quote", selector: "[data-nav-cotacao]", href: "/Projectos/Cotacao" },
-      { label: "Requisições de Material", icon: "assignment_add", href: "/requisicoes", perm: "obras:view" },
     ],
   },
   {
@@ -85,7 +80,7 @@ const APP_MENU = [
         label: "Compras",
         icon: "shopping_cart",
         children: [
-          { label: "Pedidos de Cotação", badge: "C1", icon: "request_quote", href: "/Projectos/Cotacao", perm: "navlinks:nav_cotacao" },
+          { label: "Pedidos de Cotação", badge: "C1", icon: "request_quote", selector: "[data-nav-cotacao]", href: "/Projectos/Cotacao" },
           { label: "Mapas Comparativos", badge: "C2", icon: "compare", href: "/compras/mapas-comparativos" },
           { label: "Base de Preços", badge: "C3", icon: "sell", href: "/compras/base-precos" },
           { label: "Fornecedores", badge: "C4", icon: "local_shipping", href: "/fornecedores" },
@@ -96,7 +91,6 @@ const APP_MENU = [
         icon: "assignment",
         children: [
           { label: "Compromissos Pendentes", badge: "C5", icon: "pending_actions", href: "/compras/compromissos" },
-          { label: "Conta Corrente de Fornecedores", badge: "C6", icon: "account_box", href: "/compras/conta-corrente-fornecedores" },
         ],
       },
       {
@@ -110,7 +104,6 @@ const APP_MENU = [
           { label: "Ferramentas e Equipamentos", badge: "S5", icon: "handyman", href: "/equipamentos" },
           { label: "Armazéns", badge: "S6", icon: "warehouse", href: "/registos/armazens" },
           { label: "Pedidos de Logística", icon: "inventory_2", selector: LOGISTICS_SELECTOR, href: "/Stock" },
-          { label: "Produtos e Serviços", icon: "category", href: "/produtos" },
         ],
       },
     ],
@@ -145,8 +138,7 @@ const APP_MENU = [
           { label: "Centro de Pagamentos", badge: "P1", icon: "account_balance", href: "/Financeiro/centro-pagamentos", perm: "financeiro:view" },
           { label: "Calendário de Pagamentos", badge: "P2", icon: "event", href: "/Financeiro/calendario?ver=pagar", perm: "financeiro:view" },
           { label: "Despesas sem Comprovativo", badge: "P3", icon: "receipt", href: "/Financeiro/despesas-sem-comprovativo", perm: "financeiro:view" },
-          // O mesmo ecrã que C6 nas Compras: no protótipo aparece nas duas áreas.
-          { label: "Conta Corrente de Fornecedores", badge: "P5", icon: "account_box", href: "/compras/conta-corrente-fornecedores?area=fin", perm: "financeiro:view" },
+          { label: "Conta Corrente de Fornecedores", badge: "P5", icon: "account_box", href: "/compras/conta-corrente-fornecedores" },
           { label: "Contas a Pagar", icon: "pending_actions", href: "/Financeiro/contas?tab=pagar", perm: "financeiro:view" },
           { label: "Compras e Pedidos", icon: "shopping_cart", selector: "[data-nav-centros]", href: "/Financeiro/centroDeCompras" },
           { label: "Pagamentos a Fornecedor", icon: "north_east", href: "/Financeiro/tesouraria/pagamentos", perm: "financeiro:view" },
@@ -203,8 +195,6 @@ const APP_MENU = [
         label: "Registos",
         icon: "folder_open",
         children: [
-          { label: "Produtos e Serviços", badge: "RG1", icon: "inventory_2", href: "/registos/produtos" },
-          { label: "Obras", badge: "RG4", icon: "apartment", href: "/registos/obras" },
           { label: "Centros de Custo", badge: "RG8", icon: "account_tree", href: "/Financeiro/centros-custo", perm: "financeiro:view" },
         ],
       },
