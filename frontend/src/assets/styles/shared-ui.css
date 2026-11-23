@@ -382,7 +382,7 @@
   .app-primary-sidebar:is(:hover, :focus-within, .is-pinned) .app-sidebar-link.is-active {
     background: #18181b;
     color: #ffffff;
-    border-radius: 1rem;
+    border-radius: 0.5rem;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
   }
 
