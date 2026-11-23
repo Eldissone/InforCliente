@@ -813,3 +813,57 @@ button.fx2-k:hover { background: #f8fafc; }
 .rel-card small { display: block; color: var(--cm-muted, #56636f); font-size: 12px; margin-top: 2px; }
 .rel-rep { margin-top: 1.25rem; padding-top: .75rem; border-top: 2px solid #1fa36a; }
 .rel-rep h3 { margin: .9rem 0 .4rem; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #56636f; }
+
+/* ── T3 Extratos Bancários (o V.fextr do protótipo) ── */
+.t3-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.t3-bar .t3-conta { min-width: 240px; width: auto; }
+.t3-bar .t3-falta { border-color: var(--pt-warn) !important; }
+.t3-sp { margin-left: auto; }
+.t3-small { font-size: 12px; }
+.t3-sec { border: .8px solid var(--pt-line); border-radius: 10px; background: var(--pt-surface); padding: 10px 12px; margin-bottom: 10px; }
+.t3-sec > h3 { font: 600 14px var(--pt-display); margin: 0 0 8px; }
+.t3-flush { padding: 0; overflow: hidden; }
+.t3-flush .fx2-tw { border: 0; margin: 0; }
+.t3-imp { border-color: var(--pt-accent); }
+.t3-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px 10px; align-items: end; margin-bottom: 6px; }
+.t3-f { display: flex; flex-direction: column; gap: 2px; font-size: 11.5px; color: var(--pt-muted); }
+.t3-w2 { grid-column: span 2; }
+.t3-det { align-self: center; font-size: 12px; }
+.t3-req, .t3-bad { color: var(--pt-bad); font-weight: 600; }
+.t3-good { color: var(--pt-good); }
+.t3-warn { color: var(--pt-warn); }
+.t3-chk { display: flex; gap: 6px; align-items: center; margin: 6px 0; font-size: 12.5px; }
+.t3-cols { margin: 6px 0; font-size: 12px; }
+.t3-cols summary { cursor: pointer; }
+.t3-acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+.t3-lotes summary { cursor: pointer; font-size: 12.5px; margin-bottom: 8px; }
+.t3-nowrap { white-space: nowrap; }
+.t3-auto { width: auto !important; display: inline-block; }
+.t3-danger { background: var(--pt-bad) !important; border-color: var(--pt-bad) !important; color: #fff !important; }
+.t3-lnk { color: var(--pt-brand); text-decoration: none; }
+.t3-lnk:hover { text-decoration: underline; }
+@media (max-width: 720px) { .t3-w2 { grid-column: auto; } }
+
+/* ── T2 Conciliação Bancária (o V.fext do protótipo) ── */
+.t2-lbl { display: inline-flex; gap: 6px; align-items: center; }
+.t2-conta { min-width: 300px; width: auto; }
+.t2-filtros .finance-input { width: auto; }
+.t2-filtros .t2-q { min-width: 220px; }
+.t2-saldo { margin-left: auto; font-size: 13px; }
+.t2-t td { vertical-align: middle; }
+.t2-in { height: 28px !important; padding: 2px 6px !important; font-size: 12.5px !important; }
+.t2-tipo { width: 150px !important; }
+.t2-nota { min-width: 140px; width: 100% !important; }
+.t2-desc { min-width: 170px; white-space: normal; }
+.t2-cc { white-space: normal; min-width: 130px; font-size: 12px; }
+.t2-ok-row { background: #f7fbf8; }
+.t2-conc { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; min-width: 110px; }
+.t2-concbtn { width: 30px; height: 26px; border-radius: 13px; border: .8px solid var(--pt-accent); background: #fff; color: var(--pt-accent); cursor: pointer; font-size: 14px; }
+.t2-concbtn:hover { background: #e8f0fe; }
+.t2-mini { border: 0; background: none; cursor: pointer; color: var(--pt-muted); font-size: 12px; }
+.t2-pill { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11px; background: var(--pt-neutral-bg); color: var(--pt-muted); white-space: nowrap; }
+.t2-pill.t2-ok { background: var(--pt-good-bg); color: var(--pt-good); }
+.t2-pag { padding: 6px 12px; margin: 0; }
+.t2-gravado { outline: 2px solid var(--pt-brand2) !important; }
+.t2-auto { width: auto !important; }
+.t2-w3 { min-width: 260px; width: auto !important; flex: 1; }

@@ -4843,12 +4843,85 @@ financeRoutes.get(
   })
 );
 
+/**
+ * T3 Extratos › «Importações de extrato»: mover uma importação feita na conta
+ * errada (os movimentos e as classificações ficam, só muda a conta) ou apagá-la
+ * (vão os movimentos todos, e com eles as conciliações já feitas).
+ */
+financeRoutes.patch(
+  "/bank-statements/:id",
+  edit,
+  asyncHandler(async (req, res) => {
+    const { cardId } = z.object({ cardId: z.string().min(1) }).parse(req.body);
+    const st = await prisma.bankStatement.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    if (!st) return res.status(404).json({ error: "STATEMENT_NOT_FOUND" });
+    const card = await prisma.pettyCashCard.findUnique({ where: { id: cardId }, select: { id: true } });
+    if (!card) return res.status(400).json({ error: "CARD_NOT_FOUND" });
+    await prisma.$transaction([
+      prisma.bankStatement.update({ where: { id: st.id }, data: { cardId } }),
+      prisma.bankMovement.updateMany({ where: { statementId: st.id }, data: { cardId } }),
+      prisma.bankBalance.updateMany({ where: { statementId: st.id }, data: { cardId } }),
+    ]);
+    return res.json({ ok: true });
+  })
+);
+
+financeRoutes.delete(
+  "/bank-statements/:id",
+  edit,
+  asyncHandler(async (req, res) => {
+    const st = await prisma.bankStatement.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, movements: { select: { id: true } } },
+    });
+    if (!st) return res.status(404).json({ error: "STATEMENT_NOT_FOUND" });
+    const ids = st.movements.map((m) => m.id);
+    await prisma.$transaction([
+      // Os custos ficam; só perdem a ligação ao movimento que deixa de existir.
+      prisma.costPayment.updateMany({ where: { bankMovementId: { in: ids } }, data: { bankMovementId: null } }),
+      prisma.bankBalance.deleteMany({ where: { statementId: st.id } }),
+      prisma.bankStatement.delete({ where: { id: st.id } }),
+    ]);
+    return res.json({ ok: true, movements: ids.length });
+  })
+);
+
+/** T3 Extratos › «Regras de Classificação»: «a descrição contém X» → tipo. */
+const REGRAS_EXTRATO = "extratos.regras";
+const TIPOS_MOV = ["TRANSFERENCIA_INTERNA", "PF", "REEMBOLSO", "OPERACAO_ANULADA", "RECEBIMENTO_CLIENTE", "LEVANTAMENTO_ATM", "OUTRO"];
+financeRoutes.get(
+  "/bank-rules",
+  view,
+  asyncHandler(async (_req, res) => {
+    const row = await prisma.companySetting.findUnique({ where: { key: REGRAS_EXTRATO } });
+    return res.json({ items: Array.isArray(row?.value) ? row.value : [] });
+  })
+);
+financeRoutes.put(
+  "/bank-rules",
+  edit,
+  asyncHandler(async (req, res) => {
+    const { items } = z
+      .object({
+        items: z.array(z.object({ texto: z.string().trim().min(2).max(80), tipo: z.enum(TIPOS_MOV) })).max(300),
+      })
+      .parse(req.body);
+    await prisma.companySetting.upsert({
+      where: { key: REGRAS_EXTRATO },
+      create: { key: REGRAS_EXTRATO, value: items, label: "Extratos — regras de classificação" },
+      update: { value: items },
+    });
+    return res.json({ items });
+  })
+);
+
 financeRoutes.get(
   "/bank-movements",
   view,
   asyncHandler(async (req, res) => {
-    const { movementType, projectId, costAssigned, direction } = req.query;
+    const { movementType, projectId, costAssigned, direction, cardId } = req.query;
     const where = {};
+    if (cardId) where.cardId = String(cardId);
     if (movementType) where.movementType = String(movementType);
     if (direction === "ENTRADA" || direction === "SAIDA") where.direction = direction;
     if (projectId) where.projectId = String(projectId);
@@ -4864,7 +4937,8 @@ financeRoutes.get(
         statement: { select: { id: true, name: true } },
       },
       orderBy: [{ movementDate: "desc" }],
-      take: 500,
+      // T3 Extratos lê todos (contagens por conta e por importação).
+      take: Math.min(Math.max(Number(req.query.limit) || 500, 1), 20000),
     });
     const ids = items.map((m) => m.id);
     const [costs, receipts] = await Promise.all([loadMovementCosts(ids), loadMovementReceipts(ids)]);

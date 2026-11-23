@@ -1,790 +1,384 @@
 import { apiRequest } from "../../services/api.js";
-import { openModal, toast, setButtonLoading } from "../ui.js";
+import { toast } from "../ui.js";
 import { can } from "../permissions.js";
-import { toDateKey } from "../format.js";
 import { escapeFinanceHtml as esc } from "../financePage.js";
-import { chartCardHtml, compactMoney as compact, drawComboChart, destroyCharts, TONES } from "./charts.js";
-import { kpiCardsHtml, meterHtml as meter, num, skeletonHtml } from "./widgets.js";
+import { MOVEMENT_TYPE } from "./movementsShared.js";
+import { conciliado } from "./conciliacao.js";
+import { abrirRegras, abrirTipos } from "./extratoRegras.js";
 import {
-  MOVEMENT_TYPE,
-  DOC_TYPE,
-  money,
-  dateOnly,
-  isIncoming,
-  needsCostAssignment,
-  costStatusHtml,
-  receiptStateHtml,
-  parseStatementText,
-  loadMovementOptions,
-  openClassifyModal,
-  openAssignCostModal,
-} from "./movementsShared.js";
+  CAMPOS,
+  tabelaDeTexto,
+  linhaCabecalho,
+  mapaAuto,
+  movimentosDaTabela,
+  contaDoFicheiro,
+  saldoAnterior,
+  saldoFinal,
+  tipoPelasRegras,
+  chaveMov,
+} from "./extratoImportCore.js";
 
 /**
- * Ecrã «Extratos Bancários» (Financeiro · Tesouraria).
+ * T3 Extratos Bancários — o `V.fextr` do protótipo (versão 624).
  *
- *  - Lista: cada extrato com entradas, saídas, conferência dos saldos
- *    (saldo inicial + entradas − saídas = saldo final) e quanto falta tratar.
- *  - Detalhe: os movimentos do extrato. Cada movimento leva obra, nº e tipo de
- *    documento (Fatura / AF), fornecedor e tipo de movimento financeiro
- *    (transferência interna, PF, reembolso, operação anulada, recebimento…).
- *    Nas saídas, «Associar custo» abre o custo (produto, tipo, categoria,
- *    subcategoria; pagamentos múltiplos / ATM discriminados item a item).
- *    Mercadoria não leva custo direto: o custo nasce na saída de stock.
- *  - Importar: cabeçalho do extrato com os saldos e movimentos colados / CSV.
+ *  1. Conta do extrato  →  2. «⬆ Escolher o Ficheiro do Extrato» (CSV, TXT,
+ *     Excel). Abre a caixa «Importar Extrato»: a conta (o n.º escrito no
+ *     ficheiro confirma-a), o saldo anterior como saldo inicial, as colunas
+ *     (detetadas sozinhas), as primeiras linhas e «Importar N movimento(s)»,
+ *     sem os que já estão importados nessa conta.
+ *  - Resumo por conta / cartão: movimentos, último movimento importado e
+ *    quantos estão por conciliar (abre a T2 Conciliação nessa conta).
+ *  - «Importações de extrato»: cada ficheiro importado, com o período, os
+ *    movimentos e os conciliados; mover para outra conta ou apagar.
+ *  - «Regras de Classificação» (a descrição contém… → tipo) e «Tipos».
+ * A classificação e a conciliação de cada movimento fazem-se na T2.
  */
 
-const state = {
-  options: null,
-  statements: [],
-  balances: null,
-  detail: null,
-  view: "all",
-  query: "",
+const SHEETJS = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+const BANCOS = {
+  BFA: "Banco de Fomento Angola",
+  BAI: "Banco Angolano de Investimentos",
+  BIC: "Banco BIC",
+  BPC: "Banco de Poupança e Crédito",
+  BCGA: "Banco Caixa Geral Angola",
+  BMA: "Banco Millennium Atlântico",
+  ATL: "Banco Millennium Atlântico",
+  SOL: "Banco Sol",
+  KEVE: "Banco Keve",
+  BNI: "Banco de Negócios Internacional",
+  SBA: "Standard Bank Angola",
+  YETU: "Banco Yetu",
+  BCI: "Banco de Comércio e Indústria",
+  BVB: "Banco Valor",
 };
+const TIPO_CARTAO = { DEBITO: ["neu", "Débito"], CREDITO: ["warn", "Crédito"], PREPAGO: ["neu", "Pré-pago"] };
 
-const DETAIL_VIEWS = [
-  { key: "all", label: "Todos" },
-  { key: "unclassified", label: "Por classificar", test: (m) => m.movementType === "OUTRO" && isIncoming(m) },
-  { key: "toAssign", label: "Por associar custo", test: (m) => needsCostAssignment(m) && !m.isMerchandise && !m.costAssigned },
-  { key: "stock", label: "Mercadoria", test: (m) => m.isMerchandise },
-  { key: "in", label: "Entradas", test: (m) => isIncoming(m) },
-  { key: "out", label: "Saídas", test: (m) => !isIncoming(m) },
-];
+const S = { cards: [], statements: [], movs: [], regras: [], conta: "", imp: null, erro: null, carregado: false };
+const root = () => document.getElementById("financeRoot");
+const fmt = (v) => (Number(v) || 0).toLocaleString("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtD = (iso) => {
+  const s = String(iso || "").slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}` : "";
+};
+const contaCod = (c) => (c ? [c.bank, c.label].filter(Boolean).join(" ") + (c.lastDigits ? ` •${c.lastDigits}` : "") : "Sem conta");
+const bancoLbl = (b) => {
+  const k = String(b || "").toUpperCase().trim();
+  return BANCOS[k] ? `${k} — ${BANCOS[k]}` : b || "—";
+};
+const edita = () => can("financeiro", "edit");
 
-function canEdit() {
-  return can("financeiro", "edit") || can("financeiro", "manage");
+// ── Desenho ─────────────────────────────────────────────────
+
+function caixaImportar() {
+  const I = S.imp;
+  if (!I) return "";
+  const rows = I.rows;
+  const keys = new Set(S.movs.filter((m) => m.card?.id === I.contaId || m.cardId === I.contaId).map((m) => chaveMov(String(m.movementDate).slice(0, 10), m.direction === "SAIDA" ? -m.amount : Number(m.amount), m.description)));
+  const dup = I.contaId ? rows.filter((m) => keys.has(chaveMov(m.data, m.valor, m.desc))).length : 0;
+  const novos = I.contaId ? rows.length - dup : 0;
+  const ic = S.cards.find((c) => c.id === I.contaId);
+  const D = I.det || {};
+  const difer = D.conta && I.contaId && D.conta.id !== I.contaId;
+  const cab = I.hi >= 0 ? I.tabela[I.hi] || [] : [];
+  const cols = Math.max(...I.tabela.slice(Math.max(0, I.hi), I.hi + 30).map((r) => r.length), 1);
+  const opt = (k) =>
+    `<select class="finance-input" data-impmap="${k}"><option value="-1">—</option>${Array.from({ length: cols }, (_, j) => `<option value="${j}"${I.map[k] === j ? " selected" : ""}>${esc(String(cab[j] || `Coluna ${j + 1}`).slice(0, 28))}</option>`).join("")}</select>`;
+  const ent = rows.filter((m) => m.valor > 0).reduce((s, m) => s + m.valor, 0);
+  const sai = -rows.filter((m) => m.valor < 0).reduce((s, m) => s + m.valor, 0);
+  return `<section class="t3-sec t3-imp">
+    <h3>Importar Extrato “${esc(I.nome)}”</h3>
+    <div class="t3-grid">
+      <label class="t3-f t3-w2"><span>Conta deste extrato <b class="t3-req">*</b></span>
+        <select class="finance-input" data-impconta="1"><option value="">— escolha a conta —</option>${S.cards.map((c) => `<option value="${esc(c.id)}"${c.id === I.contaId ? " selected" : ""}>${esc(contaCod(c))}</option>`).join("")}</select></label>
+      <div class="t3-w2 t3-det">${
+        D.conta
+          ? `<span class="t3-good">✓ O ficheiro indica a conta <b>${esc(D.num)}</b> → <b>${esc(contaCod(D.conta))}</b></span>`
+          : D.num
+            ? `<span class="t3-warn">O ficheiro indica a conta <b>${esc(D.num)}</b>, que não está registada em Contas e Cartões. Confirme a conta à mão.</span>`
+            : `<span class="fx2-mut">O ficheiro não indica o n.º da conta. Escolha a conta com atenção.</span>`
+      }</div>
+    </div>
+    ${difer ? `<p class="t3-bad">⚠ Atenção: o ficheiro é da conta ${esc(contaCod(D.conta))}, mas escolheu ${esc(contaCod(ic))}.</p>` : ""}
+    ${I.saldoAnt && ic ? `<label class="t3-chk"><input type="checkbox" data-impsi="1"${I.usarSI ? " checked" : ""}> Usar o saldo ${I.saldoAnt.calculado ? "antes do 1.º movimento (calculado do extrato)" : "anterior do extrato"} (<b>${fmt(I.saldoAnt.valor)}</b>) como saldo inicial deste extrato</label>` : ""}
+    ${I.saldoFim !== null ? `<p class="fx2-mut t3-small">Saldo final do extrato: <b>${fmt(I.saldoFim)}</b> — passa a ser o saldo da conta nessa data.</p>` : ""}
+    <details class="t3-cols"><summary>Colunas do ficheiro (detetadas automaticamente — abra só se algo estiver errado)</summary>
+      <p class="fx2-mut t3-small">Confirme que coluna corresponde a cada campo. Valor com sinal numa só coluna, ou Débito e Crédito em duas.</p>
+      <div class="t3-grid">${CAMPOS.map(([k, l]) => `<label class="t3-f"><span>${esc(l)}</span>${opt(k)}</label>`).join("")}
+        <label class="t3-f"><span>Linha de cabeçalho</span><input class="finance-input" type="number" min="0" data-impmap="hi" value="${I.hi + 1}"></label></div>
+    </details>
+    <div class="fx2-tw"><table class="fx2-t"><thead><tr><th>Data</th><th>Descrição</th><th class="r">Valor</th><th>Tipo</th><th>Doc.</th></tr></thead><tbody>
+      ${rows
+        .slice(0, 8)
+        .map((m) => `<tr><td>${fmtD(m.data)}</td><td>${esc(m.desc)}</td><td class="r${m.valor < 0 ? " fcal-out" : ""}">${fmt(m.valor)}</td><td>${esc(MOVEMENT_TYPE[tipoDe(m)]?.label || "")}</td><td>${esc(m.docn || m.ref || "")}</td></tr>`)
+        .join("")}
+      ${rows.length > 8 ? `<tr><td colspan="5" class="fx2-mut">… mais ${rows.length - 8} linhas</td></tr>` : ""}
+      ${rows.length ? "" : `<tr><td colspan="5" class="fx2-mut">Nenhuma linha com data e valor. Confira as colunas acima.</td></tr>`}
+    </tbody></table></div>
+    <div class="t3-acts">
+      <button type="button" class="finance-btn finance-btn--primary" data-t3="impgo"${novos > 0 && edita() ? "" : " disabled"}>Importar ${Math.max(0, novos)} movimento(s)</button>
+      <button type="button" class="finance-btn" data-t3="impcancel">Cancelar</button>
+      <span class="fx2-mut t3-small">${rows.length} linhas válidas · entradas ${fmt(ent)} · saídas ${fmt(sai)}${dup ? ` · ${dup} já importadas (ignoradas)` : ""}${I.contaId ? "" : ' · <b class="t3-bad">escolha a conta do extrato</b>'}</span>
+    </div>
+  </section>`;
 }
 
-/** Movimentos ainda por tratar: saídas sem custo e entradas sem tipo. */
-function pendingOf(summary) {
-  return num(summary?.toAssign) + num(summary?.unclassified);
+function resumo() {
+  const C = S.cards.filter((c) => c.active !== false).sort((a, b) => contaCod(a).localeCompare(contaCod(b), "pt", { numeric: true }));
+  if (!C.length) return "";
+  return `<section class="t3-sec t3-flush"><div class="fx2-tw"><table class="fx2-t"><thead><tr><th>Conta / Cartão</th><th>Banco</th><th>Tipo</th><th class="r">Movimentos</th><th>Último movimento importado</th><th class="r">Por conciliar</th></tr></thead><tbody>
+    ${C.map((c) => {
+      const M = S.movs.filter((m) => (m.card?.id || m.cardId) === c.id);
+      const u = M.reduce((a, m) => (String(m.movementDate).slice(0, 10) > a ? String(m.movementDate).slice(0, 10) : a), "");
+      const p = M.filter((m) => !conciliado(m)).length;
+      const [tom, tipo] = TIPO_CARTAO[c.type] || ["neu", c.type || "—"];
+      return `<tr><td><b>${esc(contaCod(c))}</b></td><td class="fx2-mut">${esc(bancoLbl(c.bank))}</td><td><span class="fcal-pill fcal-pill--${tom === "warn" ? "warn" : "slate"}">${esc(tipo)}</span></td>
+        <td class="r">${M.length}</td><td>${u ? fmtD(u) : '<span class="fx2-mut">sem extratos</span>'}</td>
+        <td class="r">${p ? `<a class="t3-lnk" href="/Financeiro/conciliacao?conta=${encodeURIComponent(c.id)}"><b class="t3-warn">${p}</b> ›</a>` : '<span class="fx2-mut">0</span>'}</td></tr>`;
+    }).join("")}</tbody></table></div></section>`;
 }
 
-function cardLabel(card) {
-  if (!card) return "Sem conta";
-  return `${card.label}${card.lastDigits ? ` ••${card.lastDigits}` : ""}`;
+function importacoes() {
+  const L = [...S.statements].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  if (!L.length) return "";
+  const ed = edita();
+  return `<details class="t3-sec t3-lotes" open><summary><b>Importações de extrato</b> (${L.length}) — mover para outra conta ou apagar uma importação feita por engano</summary>
+    <div class="fx2-tw"><table class="fx2-t"><thead><tr><th>Ficheiro</th><th>Importado em</th><th>Período</th><th class="r">Movimentos</th><th class="r">Conciliados</th><th>Mover para</th><th></th></tr></thead><tbody>
+    ${L.map((st) => {
+      const M = S.movs.filter((m) => m.statement?.id === st.id);
+      const ds = M.map((m) => String(m.movementDate).slice(0, 10)).sort();
+      const ini = st.periodStart ? String(st.periodStart).slice(0, 10) : ds[0];
+      const fim = st.periodEnd ? String(st.periodEnd).slice(0, 10) : ds[ds.length - 1];
+      const nc = M.filter(conciliado).length;
+      return `<tr><td><b>${esc(st.fileName || st.name)}</b><div class="fx2-mut">${esc(contaCod(st.card))}</div></td>
+        <td class="fx2-mut">${new Date(st.createdAt).toLocaleString("pt-PT", { dateStyle: "short", timeStyle: "short" })}</td>
+        <td class="fx2-mut">${ini ? `${fmtD(ini)} – ${fmtD(fim)}` : ""}</td>
+        <td class="r">${st.summary?.count ?? M.length}</td><td class="r">${nc || "—"}</td>
+        <td class="t3-nowrap">${ed ? `<select class="finance-input t3-auto" data-lotemv="${esc(st.id)}"><option value="">— conta —</option>${S.cards.filter((c) => c.id !== st.card?.id).map((c) => `<option value="${esc(c.id)}">${esc(contaCod(c))}</option>`).join("")}</select> <button type="button" class="finance-btn finance-btn--sm" data-t3="lotemv|${esc(st.id)}">Mover</button>` : ""}</td>
+        <td>${ed ? `<button type="button" class="finance-btn finance-btn--sm t3-danger" data-t3="lotedel|${esc(st.id)}">Apagar importação</button>` : ""}</td></tr>`;
+    }).join("")}</tbody></table></div>
+    <p class="fx2-mut t3-small">Mover mantém os movimentos e as classificações, só muda a conta. Apagar remove todos os movimentos dessa importação (incluindo as conciliações já feitas).</p>
+  </details>`;
 }
 
-function reconcileChip(summary) {
-  if (!summary || summary.difference === null || summary.difference === undefined) {
-    return `<span class="finance-chip finance-chip--slate" title="Indique os saldos inicial e final do extrato para conferir">Sem saldos</span>`;
-  }
-  if (Math.abs(summary.difference) < 0.01) return `<span class="finance-chip finance-chip--emerald">Confere</span>`;
-  return `<span class="finance-chip finance-chip--red" title="Saldo final do extrato − (inicial + entradas − saídas)">Diferença ${esc(compact(summary.difference))}</span>`;
-}
-
-/* ─── Estrutura ───────────────────────────────────────────────────────────── */
-
-function renderShell() {
-  document.getElementById("financeRoot").innerHTML = `<div class="ov" id="stmtRoot"></div>`;
-  const actions = document.getElementById("financePageActions");
-  if (actions) {
-    actions.innerHTML = canEdit()
-      ? `<button id="stmtImport" type="button" class="finance-btn finance-btn--primary">
-           <span class="material-symbols-outlined">upload_file</span><span>Importar extrato</span>
-         </button>`
-      : "";
-    document.getElementById("stmtImport")?.addEventListener("click", openImportModal);
-  }
-}
-
-/* ─── Lista de extratos ───────────────────────────────────────────────────── */
-
-function renderList() {
-  const root = document.getElementById("stmtRoot");
-  destroyCharts(root);
-  const list = state.statements;
-  const sum = (key) => list.reduce((a, s) => a + num(s.summary?.[key]), 0);
-  const pending = list.reduce((a, s) => a + pendingOf(s.summary), 0);
-  const unreconciled = list.filter((s) => s.summary?.difference !== null && Math.abs(num(s.summary?.difference)) >= 0.01).length;
-  const noBalances = list.filter((s) => s.summary?.difference === null).length;
-  const bal = state.balances || {};
-
-  const cards = [
-    {
-      key: "balance",
-      label: "Saldo bancário",
-      icon: "account_balance",
-      tone: num(bal.total) < 0 ? "red" : "blue",
-      value: compact(bal.total),
-      foot: bal.estimated ? "Inclui saldos de cartão sem extrato" : bal.asOf ? `Pelos extratos · ${dateOnly(bal.asOf)}` : "Sem contas ativas",
-    },
-    { key: "in", label: "Entradas", icon: "south_west", tone: "emerald", value: compact(sum("inflow")), foot: `${list.length} extrato${list.length === 1 ? "" : "s"} importado${list.length === 1 ? "" : "s"}` },
-    { key: "out", label: "Saídas", icon: "north_east", tone: "red", value: compact(sum("outflow")), foot: `${sum("count")} movimentos no total` },
-    {
-      key: "pending",
-      label: "Por tratar",
-      icon: "pending_actions",
-      tone: pending ? "amber" : "emerald",
-      value: String(pending),
-      badge: unreconciled ? `${unreconciled} não confere${unreconciled === 1 ? "" : "m"}` : null,
-      badgeTone: "red",
-      foot: pending ? `${sum("toAssign")} saídas sem custo · ${sum("unclassified")} entradas sem tipo` : "Tudo classificado e associado",
-    },
-  ];
-
-  if (!list.length) {
-    root.innerHTML = `
-      <div class="ov-kpis">${kpiCardsHtml(cards, "st")}</div>
-      <section class="finance-card ov-panel">
-        <div class="ov-empty ov-empty--lg">
-          <span class="material-symbols-outlined">account_balance</span>
-          Ainda não há extratos bancários importados.
-          ${canEdit() ? `<button type="button" class="cr-act cr-act--emerald" id="stmtImportEmpty"><span class="material-symbols-outlined">upload_file</span><span>Importar o primeiro extrato</span></button>` : ""}
-        </div>
-      </section>`;
-    document.getElementById("stmtImportEmpty")?.addEventListener("click", openImportModal);
+function desenhar() {
+  const el = root();
+  if (!el) return;
+  if (S.erro) {
+    el.innerHTML = `<div class="finance-empty">Não foi possível carregar: ${esc(S.erro)}</div>`;
     return;
   }
+  if (!S.carregado) {
+    el.innerHTML = `<div class="finance-empty">A carregar…</div>`;
+    return;
+  }
+  const C = S.cards.filter((c) => c.active !== false).sort((a, b) => contaCod(a).localeCompare(contaCod(b), "pt", { numeric: true }));
+  if (!C.length) {
+    el.innerHTML = `<section class="t3-sec"><p class="fx2-mut">Crie primeiro as contas em <b>Tesouraria › Contas e Cartões</b>.</p><a class="finance-btn finance-btn--primary" href="/Financeiro/contas-cartoes">+ Nova conta / cartão</a></section>`;
+    return;
+  }
+  const ed = edita();
+  el.innerHTML = `
+    <div class="t3-bar">
+      <span class="t3-small"><b>1.</b> Conta do extrato:</span>
+      <select class="finance-input t3-conta${S.conta ? "" : " t3-falta"}" data-t3conta="1"><option value="">— escolher a conta —</option>${C.map((c) => `<option value="${esc(c.id)}"${c.id === S.conta ? " selected" : ""}>${esc(contaCod(c))} · ${esc(BANCOS[String(c.bank || "").toUpperCase()] || c.bank || "")}</option>`).join("")}</select>
+      <span class="t3-small"><b>2.</b></span>
+      ${
+        S.conta && ed
+          ? `<label class="finance-btn finance-btn--primary">⬆ Escolher o Ficheiro do Extrato<input type="file" hidden accept=".csv,.txt,.xlsx,.xls" data-t3file="1"></label>`
+          : `<button type="button" class="finance-btn" disabled title="${ed ? "Escolha primeiro a conta" : "Sem permissão para importar"}">⬆ Escolher o Ficheiro do Extrato</button>`
+      }
+      <span class="t3-sp"></span>
+      <button type="button" class="finance-btn finance-btn--sm" data-t3="regras">Regras de Classificação</button>
+      <button type="button" class="finance-btn finance-btn--sm" data-t3="tipos">Tipos</button>
+    </div>
+    ${caixaImportar()}
+    ${resumo()}
+    ${importacoes()}
+    ${S.movs.length ? "" : '<p class="fx2-mut t3-small">Ainda não há extratos importados.</p>'}
+    <p class="fx2-mut t3-small">A classificação e a conciliação de cada movimento fazem-se em <a class="t3-lnk" href="/Financeiro/conciliacao">T2 · Conciliação Bancária</a>.</p>`;
+}
 
-  const rows = list
-    .map((s) => {
-      const sm = s.summary || {};
-      const pend = pendingOf(sm);
-      const done = sm.count ? ((sm.count - pend) / sm.count) * 100 : 100;
-      return `
-      <tr data-open="${esc(s.id)}" class="tz-click">
-        <td>
-          <div class="ov-project">
-            <span class="ov-project-name">${esc(s.name)}</span>
-            <span class="ov-project-meta">${esc([s.fileName, `importado ${dateOnly(s.createdAt)}`].filter(Boolean).join(" · "))}</span>
-          </div>
-        </td>
-        <td>${esc(cardLabel(s.card))}${s.card?.bank ? `<div class="ov-project-meta">${esc(s.card.bank)}</div>` : ""}</td>
-        <td class="tz-date">${s.periodStart || s.periodEnd ? `${esc(dateOnly(s.periodStart))} – ${esc(dateOnly(s.periodEnd))}` : `<span class="ov-muted">—</span>`}</td>
-        <td class="fin-num ov-pos">+${esc(compact(sm.inflow))}</td>
-        <td class="fin-num ov-neg">−${esc(compact(sm.outflow))}</td>
-        <td class="fin-num">${sm.closing !== null && sm.closing !== undefined ? esc(money(sm.closing)) : `<span class="ov-muted">—</span>`}</td>
-        <td>${reconcileChip(sm)}</td>
-        <td>
-          <div class="ov-cell-bar tz-progress">
-            <span class="${pend ? "ov-warn" : "ov-pos"}">${pend ? `${pend} por tratar` : "Tratado"}</span>
-            ${meter([{ value: done, tone: pend ? "amber" : "emerald" }])}
-            <small>${sm.count || 0} movimentos</small>
-          </div>
-        </td>
-        <td><span class="material-symbols-outlined tz-go">chevron_right</span></td>
-      </tr>`;
-    })
-    .join("");
+// ── Importação ──────────────────────────────────────────────
 
-  root.innerHTML = `
-    <div class="ov-kpis">${kpiCardsHtml(cards, "st")}</div>
-    ${
-      noBalances
-        ? `<p class="pay-note"><span class="material-symbols-outlined">info</span><span>${noBalances} extrato${noBalances === 1 ? "" : "s"} sem saldo inicial/final: sem eles não é possível conferir se faltam movimentos nem atualizar o saldo bancário.</span></p>`
-        : ""
+function tipoDe(m) {
+  return tipoPelasRegras(m.desc, S.regras) || (m.valor > 0 ? "OUTRO" : "OUTRO");
+}
+
+function recalcular() {
+  const I = S.imp;
+  I.rows = movimentosDaTabela(I.tabela, I.map, I.hi);
+  I.saldoAnt = saldoAnterior(I.tabela, I.hi, I.rows);
+  I.saldoFim = saldoFinal(I.rows);
+}
+
+async function lerFicheiro(file) {
+  const nome = file.name || "extrato";
+  let tabela;
+  if (/\.(xlsx|xls)$/i.test(nome)) {
+    if (!window.XLSX) {
+      await new Promise((res, rej) => {
+        const s = document.createElement("script");
+        s.src = SHEETJS;
+        s.onload = res;
+        s.onerror = () => rej(new Error("não foi possível carregar o leitor de Excel"));
+        document.head.appendChild(s);
+      });
     }
-    <section class="finance-card ov-panel">
-      <header class="finance-chart-head">
-        <div>
-          <h2 class="finance-chart-title">Extratos importados</h2>
-          <p class="finance-chart-subtitle">Conferência = saldo inicial + entradas − saídas contra o saldo final do extrato</p>
-        </div>
-      </header>
-      <div class="finance-table-scroll">
-        <table class="fin-table tz-table">
-          <thead><tr>
-            <th>Extrato</th><th>Conta / cartão</th><th>Período</th>
-            <th style="text-align:right">Entradas</th><th style="text-align:right">Saídas</th>
-            <th style="text-align:right">Saldo final</th><th>Conferência</th><th>Tratamento</th><th></th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-    </section>`;
-
-  root.querySelectorAll("[data-open]").forEach((tr) => tr.addEventListener("click", () => openDetail(tr.dataset.open)));
+    const wb = window.XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    tabela = window.XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: "" }).map((r) => r.map((c) => (c instanceof Date ? c : c)));
+  } else {
+    const buf = await file.arrayBuffer();
+    let texto = new TextDecoder("utf-8").decode(buf);
+    if (texto.includes("�")) texto = new TextDecoder("windows-1252").decode(buf);
+    tabela = tabelaDeTexto(texto);
+  }
+  const hi = linhaCabecalho(tabela);
+  const det = contaDoFicheiro(tabela, hi, S.cards);
+  S.imp = { nome, tabela, hi, map: mapaAuto(tabela, hi), det, contaId: S.conta || det.conta?.id || "", usarSI: true };
+  recalcular();
+  if (!S.imp.saldoAnt) S.imp.usarSI = false;
+  desenhar();
+  document.querySelector(".t3-imp")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-/* ─── Detalhe do extrato ──────────────────────────────────────────────────── */
-
-async function openDetail(statementId) {
-  const root = document.getElementById("stmtRoot");
-  root.innerHTML = `<div class="ov-kpis">${skeletonHtml(4, "kpi")}</div>`;
+async function importar(btn) {
+  const I = S.imp;
+  if (!I?.contaId) return toast("Escolha a conta do extrato.", { type: "error" });
+  const keys = new Set(S.movs.filter((m) => (m.card?.id || m.cardId) === I.contaId).map((m) => chaveMov(String(m.movementDate).slice(0, 10), m.direction === "SAIDA" ? -m.amount : Number(m.amount), m.description)));
+  const novos = I.rows.filter((m) => !keys.has(chaveMov(m.data, m.valor, m.desc)));
+  if (!novos.length) return toast("Não há movimentos novos neste ficheiro.", { type: "info" });
+  const D = I.det || {};
+  if (D.conta && D.conta.id !== I.contaId && !window.confirm(`O ficheiro é da conta ${contaCod(D.conta)}. Importar mesmo assim para ${contaCod(S.cards.find((c) => c.id === I.contaId))}?`)) return;
+  const datas = novos.map((m) => m.data).sort();
+  btn.disabled = true;
   try {
-    const data = await apiRequest(`/finance/bank-statements/${statementId}`);
-    state.detail = data.statement;
-    renderDetail();
+    await apiRequest("/finance/bank-statements", {
+      method: "POST",
+      body: {
+        cardId: I.contaId,
+        name: I.nome.replace(/\.[^.]+$/, ""),
+        fileName: I.nome,
+        periodStart: datas[0],
+        periodEnd: datas[datas.length - 1],
+        openingBalance: I.usarSI && I.saldoAnt ? I.saldoAnt.valor : null,
+        closingBalance: I.saldoFim,
+        movements: novos.map((m) => ({
+          movementDate: m.data,
+          description: m.desc || null,
+          direction: m.valor < 0 ? "SAIDA" : "ENTRADA",
+          amount: Math.abs(m.valor),
+          docNumber: m.docn || m.ref || null,
+          movementType: tipoPelasRegras(m.desc, S.regras) || "OUTRO",
+        })),
+      },
+    });
+    toast(`Importados ${novos.length} movimento(s)${I.rows.length - novos.length ? ` · ${I.rows.length - novos.length} já existiam` : ""}.`, { type: "success" });
+    S.imp = null;
+    await carregar();
   } catch (err) {
-    root.innerHTML = `<div class="ov-empty ov-empty--lg">Falha ao carregar o extrato: ${esc(err.message)}</div>`;
-    toast(err.message || "Falha ao carregar extrato.", { type: "error" });
+    btn.disabled = false;
+    toast(err.message || "Falha ao importar o extrato.", { type: "error" });
   }
 }
 
-async function reloadDetail() {
-  if (!state.detail) return;
-  const data = await apiRequest(`/finance/bank-statements/${state.detail.id}`);
-  state.detail = data.statement;
-  renderDetailBody();
-}
+// ── Mover / apagar importação ───────────────────────────────
 
-function renderDetail() {
-  const s = state.detail;
-  const root = document.getElementById("stmtRoot");
-  destroyCharts(root);
-  root.innerHTML = `
-    <div class="tz-back">
-      <button id="stmtBack" type="button" class="finance-btn finance-btn--ghost">
-        <span class="material-symbols-outlined">arrow_back</span><span>Extratos</span>
-      </button>
-      <div>
-        <strong>${esc(s.name)}</strong>
-        <small>${esc([cardLabel(s.card), s.card?.bank, s.periodStart || s.periodEnd ? `${dateOnly(s.periodStart)} – ${dateOnly(s.periodEnd)}` : null].filter(Boolean).join(" · "))}</small>
-      </div>
-    </div>
-    <div id="stmtKpis" class="ov-kpis"></div>
-    <div class="ov-row ov-row--8-4">
-      ${chartCardHtml({ id: "stmtChart", title: "Movimento diário", subtitle: "Entradas e saídas do extrato · linha = saldo", height: 260 })}
-      <section class="finance-card ov-panel">
-        <header class="finance-chart-head">
-          <div>
-            <h2 class="finance-chart-title">Conferência</h2>
-            <p class="finance-chart-subtitle">Os movimentos importados batem com o extrato?</p>
-          </div>
-        </header>
-        <div id="stmtCheck"></div>
-      </section>
-    </div>
-    <section class="finance-card ov-panel">
-      <header class="finance-chart-head finance-chart-head--row">
-        <div>
-          <h2 class="finance-chart-title">Movimentos</h2>
-          <p class="finance-chart-subtitle" id="stmtHint">—</p>
-        </div>
-        <div class="ov-table-tools">
-          <label class="ov-search">
-            <span class="material-symbols-outlined">search</span>
-            <input id="stmtSearch" type="search" placeholder="Descrição, doc, obra…" autocomplete="off" value="${esc(state.query)}" />
-          </label>
-        </div>
-      </header>
-      <div class="finance-seg tz-views" id="stmtViews"></div>
-      <div id="stmtTable" class="finance-table-scroll"></div>
-    </section>`;
-
-  document.getElementById("stmtBack").addEventListener("click", async () => {
-    state.detail = null;
-    state.view = "all";
-    state.query = "";
-    await loadStatements();
-  });
-  document.getElementById("stmtSearch").addEventListener("input", (e) => {
-    state.query = e.target.value;
-    renderMovements();
-  });
-  renderDetailBody();
-}
-
-function renderDetailBody() {
-  const s = state.detail;
-  const sm = s.summary || {};
-  const pend = pendingOf(sm);
-  const movements = s.movements || [];
-  const assigned = movements.filter((m) => m.costAssigned).length;
-  const costOut = movements.filter((m) => needsCostAssignment(m) || m.costAssigned).length;
-
-  document.getElementById("stmtKpis").innerHTML = kpiCardsHtml(
-    [
-      {
-        key: "closing",
-        label: "Saldo final",
-        icon: "account_balance",
-        tone: "blue",
-        value: sm.closing !== null && sm.closing !== undefined ? compact(sm.closing) : sm.computedClosing !== null ? compact(sm.computedClosing) : "—",
-        foot: sm.opening !== null && sm.opening !== undefined ? `Saldo inicial ${compact(sm.opening)}` : "Sem saldo inicial",
-      },
-      { key: "in", label: "Entradas", icon: "south_west", tone: "emerald", value: compact(sm.inflow), foot: `${movements.filter(isIncoming).length} movimentos a crédito` },
-      { key: "out", label: "Saídas", icon: "north_east", tone: "red", value: compact(sm.outflow), foot: `${movements.filter((m) => !isIncoming(m)).length} movimentos a débito` },
-      {
-        key: "pending",
-        label: "Por tratar",
-        icon: "pending_actions",
-        tone: pend ? "amber" : "emerald",
-        value: String(pend),
-        body: costOut ? meter([{ value: (assigned / costOut) * 100, tone: "emerald" }], { title: "Saídas com custo associado" }) : "",
-        foot: costOut ? `${assigned} de ${costOut} saídas com custo${sm.merchandise ? ` · ${sm.merchandise} mercadoria` : ""}` : "Sem saídas com custo",
-      },
-    ],
-    "sd"
-  );
-
-  renderCheck();
-  renderDetailChart();
-  renderMovements();
-}
-
-function renderCheck() {
-  const sm = state.detail.summary || {};
-  const line = (label, value, cls = "") =>
-    `<div class="tz-recon-row"><span>${label}</span><strong class="${cls}">${value}</strong></div>`;
-  const hasOpening = sm.opening !== null && sm.opening !== undefined;
-  const hasClosing = sm.closing !== null && sm.closing !== undefined;
-  const ok = sm.difference !== null && Math.abs(num(sm.difference)) < 0.01;
-  document.getElementById("stmtCheck").innerHTML = `
-    <div class="tz-recon">
-      ${line("Saldo inicial", hasOpening ? esc(money(sm.opening)) : `<span class="ov-muted">não indicado</span>`)}
-      ${line("+ Entradas", esc(money(sm.inflow)), "ov-pos")}
-      ${line("− Saídas", esc(money(sm.outflow)), "ov-neg")}
-      <div class="tz-recon-sep"></div>
-      ${line("= Saldo calculado", sm.computedClosing !== null ? esc(money(sm.computedClosing)) : "—")}
-      ${line("Saldo final do extrato", hasClosing ? esc(money(sm.closing)) : `<span class="ov-muted">não indicado</span>`)}
-    </div>
-    <div class="tz-check ${sm.difference === null ? "tz-check--muted" : ok ? "tz-check--ok" : "tz-check--bad"}">
-      <span class="material-symbols-outlined">${sm.difference === null ? "help" : ok ? "verified" : "error"}</span>
-      <span>${
-        sm.difference === null
-          ? "Sem os dois saldos não é possível conferir o extrato."
-          : ok
-            ? "Confere: não faltam movimentos."
-            : `Diferença de ${esc(money(sm.difference))}: ${num(sm.difference) > 0 ? "faltam entradas ou há saídas a mais" : "faltam saídas ou há entradas a mais"} na importação.`
-      }</span>
-    </div>`;
-}
-
-function renderDetailChart() {
-  const s = state.detail;
-  const sm = s.summary || {};
-  const days = new Map();
-  (s.movements || []).forEach((m) => {
-    const k = toDateKey(m.movementDate);
-    if (!days.has(k)) days.set(k, { in: 0, out: 0 });
-    days.get(k)[isIncoming(m) ? "in" : "out"] += num(m.amount);
-  });
-  const keys = [...days.keys()].sort();
-  let running = num(sm.opening);
-  drawComboChart("stmtChart", {
-    categories: keys.map((k) => k.split("-").reverse().slice(0, 2).join("/")),
-    height: 260,
-    series: [
-      { name: "Entradas", type: "column", data: keys.map((k) => days.get(k).in), color: TONES.emerald },
-      { name: "Saídas", type: "column", data: keys.map((k) => days.get(k).out), color: TONES.red },
-      {
-        name: sm.opening !== null && sm.opening !== undefined ? "Saldo" : "Saldo (desde 0)",
-        type: "line",
-        data: keys.map((k) => {
-          running += days.get(k).in - days.get(k).out;
-          return Math.round(running);
-        }),
-        color: TONES.blue,
-      },
-    ],
-  });
-}
-
-function filteredMovements() {
-  const q = state.query.trim().toLowerCase();
-  return (state.detail?.movements || []).filter((m) => {
-    if (!q) return true;
-    return [m.description, m.docNumber, m.project?.name, m.supplier?.name].filter(Boolean).join(" ").toLowerCase().includes(q);
-  });
-}
-
-function typeCell(m) {
-  if (!canEdit()) return `<span class="finance-chip">${esc(MOVEMENT_TYPE[m.movementType]?.label || m.movementType)}</span>`;
-  const allowed = Object.entries(MOVEMENT_TYPE).filter(([k]) =>
-    isIncoming(m) ? ["RECEBIMENTO_CLIENTE", "TRANSFERENCIA_INTERNA", "REEMBOLSO", "OPERACAO_ANULADA", "OUTRO"].includes(k) : k !== "RECEBIMENTO_CLIENTE"
-  );
-  return `
-    <select class="finance-select tz-type ${m.movementType === "OUTRO" && isIncoming(m) ? "tz-type--todo" : ""}" data-type="${esc(m.id)}" ${m.costAssigned ? "disabled title=\"Já tem custo associado\"" : ""}>
-      ${allowed.map(([k, v]) => `<option value="${k}" ${k === m.movementType ? "selected" : ""}>${esc(k === "OUTRO" && isIncoming(m) ? "Outro (por classificar)" : v.label)}</option>`).join("")}
-    </select>`;
-}
-
-function movementState(m) {
-  if (m.movementType === "RECEBIMENTO_CLIENTE") {
-    return m.receiptLink?.state === "LIGADO"
-      ? receiptStateHtml(m)
-      : `<a href="/Financeiro/faturacao/registar" title="Ligar no Centro de Recebimentos">${receiptStateHtml(m)}</a>`;
-  }
-  if (isIncoming(m)) return `<span class="finance-chip finance-chip--slate">${m.movementType === "OUTRO" ? "Indicar tipo" : "Entrada"}</span>`;
-  return costStatusHtml(m);
-}
-
-function renderMovements() {
-  const all = filteredMovements();
-  document.getElementById("stmtViews").innerHTML = DETAIL_VIEWS.map((v) => {
-    const count = v.test ? all.filter(v.test).length : all.length;
-    return `<button type="button" data-view="${v.key}" class="${v.key === state.view ? "active" : ""}"><span>${esc(v.label)}</span><em>${count}</em></button>`;
-  }).join("");
-  document.querySelectorAll("#stmtViews button").forEach((btn) =>
-    btn.addEventListener("click", () => {
-      state.view = btn.dataset.view;
-      renderMovements();
-    })
-  );
-
-  const view = DETAIL_VIEWS.find((v) => v.key === state.view);
-  const rows = view?.test ? all.filter(view.test) : all;
-  document.getElementById("stmtHint").textContent = `${rows.length} movimento${rows.length === 1 ? "" : "s"} · escolha o tipo de movimento financeiro e associe o custo às saídas`;
-  const wrap = document.getElementById("stmtTable");
-  if (!rows.length) {
-    wrap.innerHTML = `<div class="ov-empty ov-empty--lg"><span class="material-symbols-outlined">task_alt</span>Nada nesta vista.</div>`;
-    return;
-  }
-
-  wrap.innerHTML = `
-    <table class="fin-table tz-table">
-      <thead><tr>
-        <th>Data</th><th>Movimento</th><th>Obra</th><th>Fornecedor</th><th>Tipo de movimento</th>
-        <th style="text-align:right">Valor</th><th>Custo</th><th></th>
-      </tr></thead>
-      <tbody>
-        ${rows
-          .map((m) => {
-            const incoming = isIncoming(m);
-            const doc = [m.docType ? DOC_TYPE[m.docType] : null, m.docNumber].filter(Boolean).join(" ");
-            const canAssign = canEdit() && needsCostAssignment(m) && !m.isMerchandise && !m.costAssigned;
-            return `
-          <tr data-id="${esc(m.id)}">
-            <td class="tz-date">${esc(dateOnly(m.movementDate))}</td>
-            <td>
-              <div class="ov-project">
-                <span class="ov-project-name">${esc(m.description || "—")}</span>
-                <span class="ov-project-meta">${esc(doc || "Sem documento")}${m.isMerchandise ? " · mercadoria" : ""}</span>
-              </div>
-            </td>
-            <td>${m.project ? esc(m.project.name) : `<span class="${needsCostAssignment(m) ? "ov-warn" : "ov-muted"}">—</span>`}</td>
-            <td>${m.supplier ? esc(m.supplier.name) : m.costSummary?.suppliers?.length ? esc(m.costSummary.suppliers.join(", ")) : `<span class="ov-muted">—</span>`}</td>
-            <td>${typeCell(m)}</td>
-            <td class="fin-num"><strong class="${incoming ? "ov-pos" : "ov-neg"}">${incoming ? "+" : "−"}${esc(money(m.amount))}</strong></td>
-            <td>${movementState(m)}</td>
-            <td>
-              <div class="ac-actions">
-                ${canAssign ? `<button type="button" class="cr-act cr-act--amber" data-action="assign"><span class="material-symbols-outlined">${m.movementType === "LEVANTAMENTO_ATM" ? "call_split" : "link"}</span><span>${m.movementType === "LEVANTAMENTO_ATM" ? "Separar custos" : "Associar custo"}</span></button>` : ""}
-                ${canEdit() ? `<button type="button" class="fin-icon-btn fin-icon-btn--slate" title="Classificar (obra, fornecedor, documento, categoria)" data-action="classify"><span class="material-symbols-outlined" style="font-size:17px">edit_note</span></button>` : ""}
-              </div>
-            </td>
-          </tr>`;
-          })
-          .join("")}
-      </tbody>
-    </table>`;
-
-  wrap.querySelectorAll("tbody tr[data-id]").forEach((tr) => {
-    const m = state.detail.movements.find((x) => x.id === tr.dataset.id);
-    if (!m) return;
-    tr.querySelector('[data-action="classify"]')?.addEventListener("click", () => openClassifyModal(m, { options: state.options, onSaved: reloadDetail }));
-    tr.querySelector('[data-action="assign"]')?.addEventListener("click", () => openAssignCostModal(m, { options: state.options, onSaved: reloadDetail }));
-  });
-  wrap.querySelectorAll("[data-type]").forEach((sel) =>
-    sel.addEventListener("change", async () => {
-      sel.disabled = true;
-      try {
-        await apiRequest(`/finance/bank-movements/${sel.dataset.type}`, { method: "PATCH", body: { movementType: sel.value } });
-        await reloadDetail();
-      } catch (err) {
-        sel.disabled = false;
-        toast(err.message || "Não foi possível mudar o tipo.", { type: "error" });
-      }
-    })
-  );
-}
-
-/* ─── Importar extrato ────────────────────────────────────────────────────── */
-
-function optionList(items, valueKey = "id", labelKey = "name") {
-  return items.map((it) => `<option value="${esc(it[valueKey])}">${esc(it[labelKey])}</option>`).join("");
-}
-
-function movementRowHtml() {
-  const { projects, suppliers } = state.options;
-  return `
-    <tr data-row>
-      <td><input class="finance-input" type="date" data-f="movementDate" /></td>
-      <td><input class="finance-input" type="text" data-f="description" placeholder="Descrição do banco" /></td>
-      <td>
-        <select class="finance-select" data-f="direction">
-          <option value="SAIDA">Saída</option>
-          <option value="ENTRADA">Entrada</option>
-        </select>
-      </td>
-      <td><input class="finance-input" type="number" min="0" step="0.01" data-f="amount" /></td>
-      <td>
-        <select class="finance-select" data-f="movementType">
-          ${Object.entries(MOVEMENT_TYPE).map(([k, v]) => `<option value="${k}" ${k === "OUTRO" ? "selected" : ""}>${esc(v.label)}</option>`).join("")}
-        </select>
-      </td>
-      <td><select class="finance-select" data-f="projectId"><option value="">—</option>${optionList(projects)}</select></td>
-      <td><select class="finance-select" data-f="supplierId"><option value="">—</option>${optionList(suppliers)}</select></td>
-      <td>
-        <div class="tz-doc">
-          <select class="finance-select" data-f="docType"><option value="">—</option>${Object.entries(DOC_TYPE).map(([k, v]) => `<option value="${k}">${esc(k === "AF" ? "AF" : v)}</option>`).join("")}</select>
-          <input class="finance-input" type="text" data-f="docNumber" placeholder="Nº" />
-        </div>
-      </td>
-      <td style="text-align:center"><input type="checkbox" data-f="isMerchandise" title="Mercadoria: o custo vem da saída de stock" /></td>
-      <td><button type="button" class="fin-icon-btn fin-icon-btn--red" data-remove title="Remover"><span class="material-symbols-outlined" style="font-size:17px">close</span></button></td>
-    </tr>`;
-}
-
-function openImportModal() {
-  const { cards } = state.options;
-  openModal({
-    title: "Importar extrato bancário",
-    width: 1180,
-    contentHtml: `
-      <div class="finance-form-grid finance-form-grid--3">
-        <div class="finance-field">
-          <label class="finance-label" for="st_name">Nome do extrato <span class="inv-req">*</span></label>
-          <input id="st_name" class="finance-input" type="text" placeholder="Ex.: BFA · Outubro 2026" />
-        </div>
-        <div class="finance-field">
-          <label class="finance-label" for="st_card">Conta / cartão <span class="inv-req">*</span></label>
-          <select id="st_card" class="finance-select">
-            <option value="">—</option>
-            ${cards.map((c) => `<option value="${esc(c.id)}">${esc(cardLabel(c))}${c.bank ? ` · ${esc(c.bank)}` : ""}</option>`).join("")}
-          </select>
-        </div>
-        <div class="finance-field">
-          <label class="finance-label" for="st_file">Ficheiro / referência</label>
-          <input id="st_file" class="finance-input" type="text" placeholder="extrato-outubro.pdf" />
-        </div>
-        <div class="finance-field">
-          <label class="finance-label" for="st_start">Período</label>
-          <div class="tz-doc">
-            <input id="st_start" class="finance-input" type="date" />
-            <input id="st_end" class="finance-input" type="date" />
-          </div>
-        </div>
-        <div class="finance-field">
-          <label class="finance-label" for="st_open">Saldo inicial</label>
-          <input id="st_open" class="finance-input" type="number" step="0.01" placeholder="Como no extrato" />
-        </div>
-        <div class="finance-field">
-          <label class="finance-label" for="st_close">Saldo final</label>
-          <input id="st_close" class="finance-input" type="number" step="0.01" placeholder="Atualiza o saldo da conta" />
-        </div>
-      </div>
-
-      <details class="tz-paste">
-        <summary><span class="material-symbols-outlined">content_paste</span>Colar do extrato ou carregar CSV</summary>
-        <textarea id="st_paste" class="finance-textarea" rows="4"
-          placeholder="2026-10-01; Pagamento fornecedor X; -150000&#10;03/10/2026; Recebimento do cliente; 250.000,00"></textarea>
-        <div class="tz-paste-actions">
-          <button type="button" id="st_parse" class="finance-btn finance-btn--ghost"><span class="material-symbols-outlined">playlist_add</span><span>Preencher movimentos</span></button>
-          <button type="button" id="st_csvBtn" class="finance-btn finance-btn--ghost"><span class="material-symbols-outlined">upload_file</span><span>Carregar CSV</span></button>
-          <input id="st_csv" type="file" accept=".csv,text/csv,text/plain" hidden />
-          <small id="st_pasteNote">Uma linha por movimento: data; descrição; valor. Negativo = saída.</small>
-        </div>
-      </details>
-
-      <div class="finance-table-scroll tz-import">
-        <table class="fin-table">
-          <thead><tr>
-            <th>Data</th><th>Descrição</th><th>Direção</th><th>Valor</th><th>Tipo de movimento</th>
-            <th>Obra</th><th>Fornecedor</th><th>Documento</th><th title="Mercadoria">Merc.</th><th></th>
-          </tr></thead>
-          <tbody id="importRows"></tbody>
-        </table>
-      </div>
-      <div class="tz-import-foot">
-        <button type="button" id="importAddRow" class="finance-btn finance-btn--ghost"><span class="material-symbols-outlined">add</span><span>Adicionar movimento</span></button>
-        <div id="st_check" class="tz-check tz-check--muted"></div>
-      </div>`,
-    primaryLabel: "Importar",
-    onRender: ({ panel }) => {
-      const rows = panel.querySelector("#importRows");
-      const pasteNote = panel.querySelector("#st_pasteNote");
-      const $ = (id) => panel.querySelector(`#${id}`);
-
-      // Conferência ao vivo: saldo inicial + entradas − saídas contra o saldo final.
-      const check = () => {
-        let inflow = 0;
-        let outflow = 0;
-        let count = 0;
-        rows.querySelectorAll("[data-row]").forEach((r) => {
-          const v = Number(r.querySelector('[data-f="amount"]').value) || 0;
-          if (!v) return;
-          count += 1;
-          if (r.querySelector('[data-f="direction"]').value === "ENTRADA") inflow += v;
-          else outflow += v;
-        });
-        const box = $("st_check");
-        const open = $("st_open").value;
-        const close = $("st_close").value;
-        const base = `${count} movimentos · +${compact(inflow)} / −${compact(outflow)}`;
-        if (open === "" || close === "") {
-          box.className = "tz-check tz-check--muted";
-          box.innerHTML = `<span class="material-symbols-outlined">help</span><span>${esc(base)} · indique os saldos para conferir</span>`;
-          return;
-        }
-        const diff = Number(close) - (Number(open) + inflow - outflow);
-        const ok = Math.abs(diff) < 0.01;
-        box.className = `tz-check ${ok ? "tz-check--ok" : "tz-check--bad"}`;
-        box.innerHTML = `<span class="material-symbols-outlined">${ok ? "verified" : "error"}</span><span>${esc(base)} · ${
-          ok ? "confere com o saldo final" : `diferença de ${esc(money(diff))}`
-        }</span>`;
-      };
-
-      const addRow = (prefill = null) => {
-        rows.insertAdjacentHTML("beforeend", movementRowHtml());
-        const rowEl = rows.lastElementChild;
-        if (prefill) {
-          rowEl.querySelector('[data-f="movementDate"]').value = prefill.movementDate || "";
-          rowEl.querySelector('[data-f="amount"]').value = prefill.amount ?? "";
-          rowEl.querySelector('[data-f="direction"]').value = prefill.direction || "SAIDA";
-          rowEl.querySelector('[data-f="description"]').value = prefill.description || "";
-          // Sugere o tipo pela descrição do banco.
-          const d = String(prefill.description || "").toLowerCase();
-          const type = /atm|levant/.test(d)
-            ? "LEVANTAMENTO_ATM"
-            : /transf.*(intern|cart)|carregamento/.test(d)
-              ? "TRANSFERENCIA_INTERNA"
-              : /anula|estorno/.test(d)
-                ? "OPERACAO_ANULADA"
-                : /reembolso/.test(d)
-                  ? "REEMBOLSO"
-                  : prefill.direction === "ENTRADA" && /receb|cliente|pagamento de/.test(d)
-                    ? "RECEBIMENTO_CLIENTE"
-                    : "OUTRO";
-          rowEl.querySelector('[data-f="movementType"]').value = type;
-        }
-      };
-      addRow();
-      $("importAddRow").addEventListener("click", () => addRow());
-      rows.addEventListener("click", (e) => {
-        const btn = e.target.closest("[data-remove]");
-        if (btn) {
-          btn.closest("[data-row]").remove();
-          check();
-        }
-      });
-      rows.addEventListener("input", check);
-      rows.addEventListener("change", check);
-      $("st_open").addEventListener("input", check);
-      $("st_close").addEventListener("input", check);
-
-      const fillFromText = (text) => {
-        const parsed = parseStatementText(text);
-        if (!parsed.length) {
-          pasteNote.textContent = "Não foi possível ler nenhum movimento. Use «data; descrição; valor», uma linha por movimento.";
-          return;
-        }
-        const onlyPlaceholder = rows.children.length === 1 && !rows.querySelector('[data-f="amount"]')?.value;
-        if (onlyPlaceholder) rows.innerHTML = "";
-        parsed.forEach((movement) => addRow(movement));
-        const dates = parsed.map((p) => p.movementDate).sort();
-        if (!$("st_start").value) $("st_start").value = dates[0];
-        if (!$("st_end").value) $("st_end").value = dates[dates.length - 1];
-        pasteNote.textContent = `${parsed.length} movimento(s) lido(s). Confirme o tipo, a obra e o fornecedor antes de importar.`;
-        check();
-      };
-      $("st_parse").addEventListener("click", () => fillFromText($("st_paste").value));
-      const csvInput = $("st_csv");
-      $("st_csvBtn").addEventListener("click", () => csvInput.click());
-      csvInput.addEventListener("change", async () => {
-        const file = csvInput.files?.[0];
-        if (!file) return;
-        if (!$("st_file").value) $("st_file").value = file.name;
-        try {
-          fillFromText(await file.text());
-        } catch (err) {
-          pasteNote.textContent = err.message || "Falha ao ler o ficheiro.";
-        }
-      });
-      check();
-    },
-    onPrimary: async ({ btn, close, panel }) => {
-      const $ = (id) => panel.querySelector(`#${id}`);
-      const name = $("st_name").value.trim();
-      if (!name) return toast("Indique o nome do extrato.", { type: "error" });
-      if (!$("st_card").value) return toast("Escolha a conta / cartão do extrato.", { type: "error" });
-      if ($("st_start").value && $("st_end").value && $("st_end").value < $("st_start").value) {
-        return toast("O fim do período é anterior ao início.", { type: "error" });
-      }
-
-      const movements = [];
-      for (const row of panel.querySelectorAll("#importRows [data-row]")) {
-        const val = (f) => row.querySelector(`[data-f="${f}"]`)?.value?.trim() ?? "";
-        const amount = Number(val("amount"));
-        const date = val("movementDate");
-        if (!date || !amount) continue;
-        const direction = val("direction");
-        const movementType = val("movementType") || "OUTRO";
-        if (direction === "SAIDA" && movementType === "RECEBIMENTO_CLIENTE") {
-          return toast(`Movimento de ${dateOnly(date)}: um recebimento do cliente tem de ser uma entrada.`, { type: "error" });
-        }
-        movements.push({
-          projectId: val("projectId") || null,
-          supplierId: val("supplierId") || null,
-          docType: val("docType") || null,
-          docNumber: val("docNumber") || null,
-          movementType,
-          direction,
-          amount: Math.abs(amount),
-          movementDate: date,
-          description: val("description") || null,
-          isMerchandise: direction === "SAIDA" && row.querySelector('[data-f="isMerchandise"]').checked,
-        });
-      }
-      if (!movements.length) return toast("Adicione pelo menos um movimento com data e valor.", { type: "error" });
-
-      const opening = $("st_open").value === "" ? null : Number($("st_open").value);
-      const closing = $("st_close").value === "" ? null : Number($("st_close").value);
-      if (opening !== null && closing !== null) {
-        const inflow = movements.filter((m) => m.direction === "ENTRADA").reduce((a, m) => a + m.amount, 0);
-        const outflow = movements.filter((m) => m.direction === "SAIDA").reduce((a, m) => a + m.amount, 0);
-        const diff = closing - (opening + inflow - outflow);
-        if (Math.abs(diff) >= 0.01 && !window.confirm(`Os movimentos não conferem com o saldo final (diferença de ${money(diff)}). Importar mesmo assim?`)) return;
-      }
-
-      setButtonLoading(btn, true);
-      try {
-        const res = await apiRequest("/finance/bank-statements", {
-          method: "POST",
-          body: {
-            name,
-            cardId: $("st_card").value,
-            fileName: $("st_file").value.trim() || null,
-            periodStart: $("st_start").value || null,
-            periodEnd: $("st_end").value || null,
-            openingBalance: opening,
-            closingBalance: closing,
-            movements,
-          },
-        });
-        toast(`Extrato importado com ${movements.length} movimentos.`, { type: "success" });
-        close();
-        await loadStatements();
-        if (res.statement?.id) await openDetail(res.statement.id);
-      } catch (err) {
-        setButtonLoading(btn, false);
-        toast(err.message || "Falha ao importar extrato.", { type: "error" });
-      }
-    },
-  });
-}
-
-/* ─── Carregamento ────────────────────────────────────────────────────────── */
-
-async function loadStatements() {
-  const root = document.getElementById("stmtRoot");
-  if (root && !state.statements.length) root.innerHTML = `<div class="ov-kpis">${skeletonHtml(4, "kpi")}</div>`;
+async function moverLote(id) {
+  const sel = root().querySelector(`[data-lotemv="${CSS.escape(id)}"]`);
+  const destino = sel?.value;
+  if (!destino) return toast("Escolha a conta para onde mover.", { type: "error" });
+  const st = S.statements.find((x) => x.id === id);
+  if (!window.confirm(`Mover «${st?.fileName || st?.name}» para ${contaCod(S.cards.find((c) => c.id === destino))}?`)) return;
   try {
-    const [data, balances] = await Promise.all([
+    await apiRequest(`/finance/bank-statements/${encodeURIComponent(id)}`, { method: "PATCH", body: { cardId: destino } });
+    toast("Importação movida.", { type: "success" });
+    await carregar();
+  } catch (err) {
+    toast(err.message || "Falha ao mover.", { type: "error" });
+  }
+}
+
+async function apagarLote(id) {
+  const st = S.statements.find((x) => x.id === id);
+  const n = st?.summary?.count ?? 0;
+  if (!window.confirm(`Apagar a importação «${st?.fileName || st?.name}» e os seus ${n} movimento(s)? As conciliações já feitas perdem-se. Não se pode desfazer.`)) return;
+  try {
+    await apiRequest(`/finance/bank-statements/${encodeURIComponent(id)}`, { method: "DELETE" });
+    toast("Importação apagada.", { type: "success" });
+    await carregar();
+  } catch (err) {
+    toast(err.message || "Falha ao apagar.", { type: "error" });
+  }
+}
+
+// ── Carregamento e eventos ──────────────────────────────────
+
+async function carregar() {
+  try {
+    const [cards, sts, movs, regras] = await Promise.all([
+      apiRequest("/finance/options/cards"),
       apiRequest("/finance/bank-statements"),
-      apiRequest("/finance/treasury/balances").catch(() => null),
+      apiRequest("/finance/bank-movements?limit=20000"),
+      apiRequest("/finance/bank-rules").catch(() => ({ items: [] })),
     ]);
-    state.statements = data.items || [];
-    state.balances = balances?.balances || balances || null;
-    renderList();
+    S.cards = cards.items || [];
+    S.statements = sts.items || [];
+    S.movs = movs.items || [];
+    S.regras = regras.items || [];
+    S.erro = null;
   } catch (err) {
-    if (root) root.innerHTML = `<div class="ov-empty ov-empty--lg">Falha ao carregar: ${esc(err.message)}</div>`;
-    toast(err.message || "Falha ao carregar extratos.", { type: "error" });
+    S.erro = err.message || String(err);
   }
+  S.carregado = true;
+  desenhar();
+}
+
+function ligar() {
+  const el = root();
+  if (!el || el.dataset.t3) return;
+  el.dataset.t3 = "1";
+  el.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-t3]");
+    if (!b || b.disabled) return;
+    const [a, id] = b.dataset.t3.split("|");
+    if (a === "impcancel") {
+      S.imp = null;
+      desenhar();
+    } else if (a === "impgo") importar(b);
+    else if (a === "regras") abrirRegras({ regras: S.regras, onSaved: (r) => ((S.regras = r), S.imp && desenhar()) });
+    else if (a === "tipos") abrirTipos();
+    else if (a === "lotemv") moverLote(id);
+    else if (a === "lotedel") apagarLote(id);
+  });
+  el.addEventListener("change", (e) => {
+    const t = e.target;
+    if (t.dataset.t3conta) {
+      S.conta = t.value;
+      if (S.imp && t.value) S.imp.contaId = t.value;
+      desenhar();
+    } else if (t.dataset.t3file && t.files?.[0]) {
+      lerFicheiro(t.files[0]).catch((err) => toast(`Não foi possível ler o ficheiro: ${err.message || err}`, { type: "error" }));
+    } else if (t.dataset.impconta !== undefined) {
+      S.imp.contaId = t.value;
+      desenhar();
+    } else if (t.dataset.impsi) {
+      S.imp.usarSI = t.checked;
+    } else if (t.dataset.impmap) {
+      const k = t.dataset.impmap;
+      if (k === "hi") S.imp.hi = Math.max(-1, Number(t.value) - 1);
+      else S.imp.map[k] = Number(t.value);
+      recalcular();
+      desenhar();
+      const d = root().querySelector(".t3-cols");
+      if (d) d.open = true;
+    }
+  });
 }
 
 export async function render() {
-  destroyCharts();
-  Object.assign(state, { statements: [], detail: null, view: "all", query: "" });
-  try {
-    state.options = await loadMovementOptions();
-  } catch (err) {
-    toast(err.message || "Falha ao carregar opções.", { type: "error" });
-    state.options = { projects: [], suppliers: [], categories: [], cards: [] };
-  }
-  renderShell();
-  await loadStatements();
+  Object.assign(S, { cards: [], statements: [], movs: [], regras: [], imp: null, erro: null, carregado: false });
+  ligar();
+  desenhar();
+  await carregar();
 }
