@@ -16,7 +16,7 @@
  * decide vê o efeito nos totais antes de gravar.
  */
 
-import { apiRequest } from "/services/api.js";
+import { apiRequest, apiUpload } from "/services/api.js";
 import { toast, escapeHtml } from "/shared/ui.js";
 
 const esc = (v) => escapeHtml(String(v ?? ""));
@@ -41,6 +41,7 @@ const FONTE = {
   catalogo: "catálogo de fornecedor",
   armazem: "entrada em armazém",
   ordem: "ordem de compra",
+  proforma: "fatura pró-forma",
 };
 
 const S = {
@@ -58,7 +59,7 @@ function envolver(corpo) {
     <div class="cm-head" style="margin-bottom:.5rem">
       <div>
         <div class="cm-head-num">Comercial · preços de compra</div>
-        <h2 class="cm-panel-title" style="font-size:1.0625rem">Preços do histórico</h2>
+        <h2 class="cm-panel-title" style="font-size:1.0625rem">${S.ctx?.file ? "Preços da fatura pró-forma" : "Preços do histórico"}</h2>
       </div>
       <button class="cm-chip" type="button" id="phFechar">Fechar</button>
     </div>
@@ -119,12 +120,22 @@ function corpo() {
   const r = S.resposta;
   const escolhidas = r.linhas.filter((l) => l.escolhido !== null);
   const f = r.fontes || {};
+  const pf = r.proforma;
   return envolver(`
-    <p class="cm-lead">
+    ${
+      pf
+        ? `<p class="cm-lead">
+             A IA leu <b>${esc(pf.ficheiro || "a pró-forma")}</b>${pf.fornecedor ? ` de <b>${esc(pf.fornecedor)}</b>` : ""}${
+               pf.documento ? ` (${esc(pf.documento)})` : ""
+             }: ${pf.artigos} artigo(s) com preço. Para cada linha da folha propõe-se o artigo da pró-forma
+             que lhe corresponde, pelas mesmas regras dos preços do histórico. Confira antes de preencher.
+           </p>`
+        : `<p class="cm-lead">
       Os preços vêm do que a casa já comprou, cotou ou recebeu por escrito de um fornecedor —
       nunca de uma estimativa. Cada um traz a origem e a data. Só a correspondência <b>igual</b>
       vem escolhida; as outras ficam por decidir.
-    </p>
+    </p>`
+    }
     <div class="imp-resumo">
       <span><b>${escolhidas.length}</b> de ${r.linhas.length} linha(s) com preço escolhido</span>
       <span>histórico: <b>${(f.artigos || 0).toLocaleString("pt-PT")}</b> artigos</span>
@@ -154,19 +165,34 @@ function corpo() {
 function desenhar() {
   const host = el("cmDrawer") || el("cmModal");
   if (!host) return;
-  host.innerHTML = S.resposta ? corpo() : envolver(`<p class="cm-lead">A procurar no histórico…</p>`);
+  host.innerHTML = S.resposta
+    ? corpo()
+    : envolver(`<p class="cm-lead">${S.ctx?.file ? "A IA está a ler a pró-forma… (pode levar até um minuto)" : "A procurar no histórico…"}</p>`);
 }
 
 async function carregar() {
   S.aCorrer = true;
   desenhar();
   try {
-    S.resposta = await apiRequest(`/budgets/${encodeURIComponent(S.ctx.id)}/purchase-prices`, {
-      method: "POST",
-      body: { folha: S.ctx.folha, apenasSemPreco: S.apenasSemPreco, linhas: S.ctx.rows() },
-    });
+    if (S.ctx.file) {
+      // Pró-forma: a IA lê o documento uma vez; o filtro «só as que faltam» filtra no ecrã.
+      if (!S.proforma) {
+        const fd = new FormData();
+        fd.append("file", S.ctx.file);
+        fd.append("folha", S.ctx.folha);
+        fd.append("linhas", JSON.stringify(S.ctx.rows()));
+        S.proforma = await apiUpload(`/budgets/${encodeURIComponent(S.ctx.id)}/proforma-prices`, fd);
+      }
+      const r = S.proforma;
+      S.resposta = { ...r, linhas: S.apenasSemPreco ? r.linhas.filter((l) => !(l.preco > 0)) : r.linhas };
+    } else {
+      S.resposta = await apiRequest(`/budgets/${encodeURIComponent(S.ctx.id)}/purchase-prices`, {
+        method: "POST",
+        body: { folha: S.ctx.folha, apenasSemPreco: S.apenasSemPreco, linhas: S.ctx.rows() },
+      });
+    }
   } catch (err) {
-    toast(err.message || "Não foi possível procurar no histórico.", { type: "error" });
+    toast(err.message || (S.ctx.file ? "Não foi possível ler a pró-forma." : "Não foi possível procurar no histórico."), { type: "error" });
     (el("cmDrawer") || el("cmModal")).innerHTML = "";
     return;
   } finally {
@@ -257,11 +283,13 @@ export function wirePrecosHistorico() {
  * @param {() => object[]} o.rows as linhas da folha como estão no ecrã
  * @param {(r:{folha:string, campos:object, escolhas:{i:number, candidato:object}[]}) => void} o.onAplicar
  */
-export function abrirPrecosHistorico({ id, folha, rows, onAplicar }) {
+export function abrirPrecosHistorico({ id, folha, rows, onAplicar, file = null }) {
   S.resposta = null;
-  S.apenasSemPreco = true;
+  S.proforma = null;
+  // Da pró-forma interessam todas as linhas: é o preço que se quer, mesmo que já haja outro.
+  S.apenasSemPreco = !file;
   S.procura = {};
   S.aCorrer = false;
-  S.ctx = { id, folha, rows, onAplicar };
+  S.ctx = { id, folha, rows, onAplicar, file };
   carregar();
 }

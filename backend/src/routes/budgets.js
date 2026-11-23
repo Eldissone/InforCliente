@@ -19,6 +19,12 @@ const { calcBudget, QTY_SHEET, CATS, PRICE_METHODS } = require("../services/budg
 const { normalizeUnit, summarizeUnits } = require("../services/budget/units");
 const { buildCatalog, searchCatalog, catalogStats } = require("../services/budget/articleCatalog");
 const PC = require("../services/budget/purchaseCatalog");
+const { readInvoiceDocument } = require("../services/invoiceScanService");
+const { resolveInvoiceAiConfig } = require("../services/ai/settingsService");
+const { dispatchNotification, CHANNELS } = require("../services/notifications/dispatcher");
+
+/** Pró-forma para «Ler fatura pró-forma (IA)»: PDF ou imagem, até 12 MB (o limite da leitura). */
+const proformaUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 12 * 1024 * 1024 } });
 const { consumptionRows, CONSUMPTION_TYPES } = require("../services/budget/stockConsumption");
 
 const {
@@ -843,6 +849,120 @@ budgetRoutes.post(
       comCandidatos: r.linhas.filter((l) => l.candidatos.length).length,
       semCandidatos: r.linhas.filter((l) => !l.candidatos.length).length,
     });
+  })
+);
+
+/**
+ * 03 Materiais › «Ler fatura pró-forma (IA)»: lê a pró-forma (PDF ou imagem)
+ * com a mesma leitura das faturas do Financeiro e propõe, para cada linha da
+ * folha, o artigo da pró-forma que lhe corresponde — com as mesmas regras de
+ * comparação dos preços do histórico. Nada se grava: o painel preenche as
+ * linhas escolhidas e o orçamento fica por gravar.
+ */
+budgetRoutes.post(
+  "/:id/proforma-prices",
+  requirePermission(MODULE, "edit"),
+  proformaUpload.single("file"),
+  asyncHandler(async (req, res) => {
+    const budget = await prisma.budget.findUnique({ where: { id: String(req.params.id) } });
+    if (!budget) return res.status(404).json({ error: "NOT_FOUND" });
+    if (!req.file) return res.status(400).json({ error: "SEM_FICHEIRO", errors: ["Escolha a pró-forma (PDF ou imagem)."] });
+    const folha = PC.SHEET_FIELDS[req.body.folha] ? req.body.folha : "mat";
+    let linhas = null;
+    try {
+      linhas = req.body.linhas ? JSON.parse(req.body.linhas) : null;
+    } catch {
+      linhas = null;
+    }
+    const doc = asDocument(budget);
+    let lido;
+    try {
+      lido = await readInvoiceDocument({
+        buffer: req.file.buffer,
+        mimeType: req.file.mimetype,
+        fileName: req.file.originalname,
+        aiConfig: await resolveInvoiceAiConfig(),
+        userId: req.user?.sub,
+        io: req.app.get("io"),
+      });
+    } catch (err) {
+      return res.status(err.status || 503).json({ error: err.code || "IA_INDISPONIVEL", errors: [err.message] });
+    }
+    const registos = PC.proformaRecords(lido);
+    const catalog = PC.buildPurchaseCatalog(registos);
+    const r = PC.matchSheet(catalog, {
+      folha,
+      rows: Array.isArray(linhas) ? linhas : doc.sheets?.[folha] || [],
+      moedaBase: doc.params?.moedaBase || "AOA",
+      moedas: (doc.params?.currencies || []).map((c) => c.moeda).filter(Boolean),
+      // A pró-forma é o preço que se quer: substitui o que lá estiver.
+      apenasSemPreco: false,
+    });
+    res.json({
+      ...r,
+      version: budget.version,
+      fontes: { proforma: registos.length },
+      proforma: {
+        fornecedor: lido.supplierName || null,
+        documento: lido.docNumber || null,
+        data: lido.docDate || null,
+        moeda: lido.currency || null,
+        artigos: registos.length,
+        ficheiro: req.file.originalname || null,
+      },
+      comCandidatos: r.linhas.filter((l) => l.candidatos.length).length,
+      semCandidatos: r.linhas.filter((l) => !l.candidatos.length).length,
+    });
+  })
+);
+
+/**
+ * 03 Materiais › «Pedir cotação à Logística»: avisa quem tem acesso à Logística
+ * de que as quantidades deste orçamento estão prontas para pedir preços, com a
+ * ligação ao orçamento. O registo do pedido fica no próprio orçamento (o ecrã
+ * marca-o e o orçamento grava-se como sempre).
+ */
+budgetRoutes.post(
+  "/:id/quote-request",
+  requirePermission(MODULE, "edit"),
+  asyncHandler(async (req, res) => {
+    const budget = await prisma.budget.findUnique({ where: { id: String(req.params.id) }, select: { id: true, number: true, projectName: true } });
+    if (!budget) return res.status(404).json({ error: "NOT_FOUND" });
+    const body = z
+      .object({
+        linhas: z.number().int().min(0).default(0),
+        prazo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+        nota: z.string().max(1000).nullable().optional(),
+      })
+      .parse(req.body || {});
+    const users = await prisma.user.findMany({ where: { role: { not: "cliente" } }, select: { id: true, role: true, email: true, profile: { select: { whatsapp: true } } } });
+    const destino = [];
+    for (const u of users) {
+      if (u.id === req.user?.sub) continue;
+      if (u.role === "admin" || (await checkUserPermission(u.id, u.role, "logistica", "view"))?.allowed === "true") destino.push(u);
+    }
+    const quem = req.user?.name || req.user?.email || "Comercial";
+    const titulo = `Pedido de cotação · ${budget.number || ""} ${budget.projectName || ""}`.trim();
+    const texto = [
+      `${quem} pede preços para ${body.linhas} linha(s) de materiais`,
+      body.prazo ? `até ${body.prazo.split("-").reverse().join("/")}` : null,
+      body.nota ? `— ${body.nota}` : null,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    for (const u of destino) {
+      await dispatchNotification({
+        io: req.app.get("io"),
+        user: u,
+        type: "SYSTEM",
+        title: titulo,
+        body: texto,
+        link: `/comercial/orcamento?id=${encodeURIComponent(budget.id)}#mat`,
+        metadata: { event: "BUDGET_QUOTE_REQUEST", budgetId: budget.id, linhas: body.linhas, prazo: body.prazo || null },
+        channels: [CHANNELS.IN_APP],
+      });
+    }
+    res.json({ ok: true, avisados: destino.length, por: quem });
   })
 );
 

@@ -436,3 +436,26 @@ test("a pontuação interna da procura não sai na resposta", () => {
   const r = matchPrices(catalogo(), "Eletrodo de Terra 2 m", { unit: "un" });
   assert.equal("_q" in r[0], false);
 });
+
+test("proformaRecords: as linhas da pró-forma viram registos do catálogo e casam com a folha", () => {
+  const PC = require("../src/services/budget/purchaseCatalog");
+  const reg = PC.proformaRecords({
+    currency: "aoa",
+    supplierName: "Kitanda Lda",
+    docNumber: "PF 12",
+    docDate: "2026-11-20",
+    items: [
+      { description: "Cabo VAV 4x16mm2", unit: "m", unitPrice: 4500 },
+      { description: "Transporte", unit: "vg", unitPrice: 0 },
+      { description: "", unitPrice: 9 },
+    ],
+  });
+  assert.equal(reg.length, 1);
+  assert.equal(reg[0].currency, "AOA");
+  assert.equal(reg[0].sourceLabel, "Pró-forma PF 12");
+  const cat = PC.buildPurchaseCatalog(reg);
+  const r = PC.matchSheet(cat, { folha: "mat", rows: [{ desc: "Cabo VAV 4x16mm2", un: "m", q: 100, preco: 3000 }], moedaBase: "AOA", moedas: ["AOA"], apenasSemPreco: false });
+  assert.equal(r.linhas.length, 1);
+  assert.equal(r.linhas[0].candidatos[0].preco, 4500);
+  assert.equal(r.linhas[0].escolhido, 0);
+});

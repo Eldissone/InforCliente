@@ -706,3 +706,10 @@ button.fx2-k:hover { background: #f8fafc; }
 
 /* ─── R3 Planear Autos Previstos ──────────────────────────────────────────── */
 .pl-out { max-height: 260px; overflow: auto; }
+
+/* ─── 03 Materiais: barra de ações (como a do protótipo) ──────────────────── */
+.cm-matbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 10px; }
+.cm-matbar label.cm-chip { cursor: pointer; }
+.cm-pronto { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; margin-left: 4px; }
+.cm-field { display: grid; gap: .25rem; font-size: .8125rem; color: var(--cm-muted); margin-top: .625rem; }
+.cm-modal--wide { width: min(900px, 96vw); max-width: 96vw; }

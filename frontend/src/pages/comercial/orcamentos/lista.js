@@ -92,7 +92,9 @@ function render() {
 function rowHtml(b) {
   const pill = MARGIN_PILL[b.marginState] || "";
   return `<tr>
-    <td><a href="/comercial/orcamento?id=${esc(b.id)}"><b>${esc(b.number)}</b></a></td>
+    <td><a href="/comercial/orcamento?id=${esc(b.id)}"><b>${esc(b.number)}</b></a>${
+      b.params?.prontoCot ? ` <span class="cm-pill is-good" title="Quantidades prontas para cotação: as Compras já podem pedir preços">pronto p/ cotação</span>` : ""
+    }</td>
     <td>${esc(b.revision)}</td>
     <td>${esc(b.client ? b.client.name : "—")}</td>
     <td style="min-width:14rem">${esc(b.projectName)}</td>

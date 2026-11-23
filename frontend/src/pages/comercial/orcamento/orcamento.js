@@ -10,7 +10,7 @@
  * cálculo corre no espelho local a cada tecla e o servidor recalcula ao gravar.
  */
 
-import { apiRequest } from "/services/api.js";
+import { apiRequest, apiUpload } from "/services/api.js";
 import { toast, escapeHtml } from "/shared/ui.js";
 import { initComercialPage, canEdit } from "/shared/comercial/page.js";
 import { calcBudget, CATS, SHEET_KEYS } from "/shared/comercial/budgetCalc.js";
@@ -540,6 +540,7 @@ function viewSheet(key) {
         }
       </div>
     </div>
+    ${key === "mat" ? barraMateriais(editable) : ""}
     ${
       venda && !S.R.precoDado && (S.R.QT || 0) > 0
         ? `<div class="cm-note is-warn" style="margin-bottom:.625rem">
@@ -1282,6 +1283,130 @@ async function loadBaremes() {
   }
 }
 
+// ─────────────── 03 Materiais: cotação, mapa do cliente, pró-forma ───────────────
+
+/** Os botões da folha de materiais, como a barra do protótipo. */
+function barraMateriais(editable) {
+  const p = S.doc.params || {};
+  const ult = (p.pedidosCotacao || []).slice(-1)[0];
+  return `<div class="cm-matbar">
+    ${
+      editable
+        ? `<button class="cm-chip is-on" type="button" id="bPedirCot">Pedir cotação à Logística</button>
+           <button class="cm-chip" type="button" id="bMapaCli" title="A IA lê o mapa de quantidades do cliente (Excel) e as linhas de material entram nesta folha">Importar mapa de quantidades do cliente (Excel)</button>
+           <label class="cm-chip" title="A IA lê a pró-forma e propõe o preço de cada linha">Ler fatura pró-forma (IA)<input type="file" hidden accept="application/pdf,image/jpeg,image/png,image/webp" id="bProforma"></label>`
+        : ""
+    }
+    <label class="cm-pronto"><input type="checkbox" id="bPronto" ${p.prontoCot ? "checked" : ""} ${editable ? "" : "disabled"}>
+      Quantidades prontas para cotação <span class="cm-calc">(avisa as Compras de que já podem pedir preços)</span></label>
+    ${ult ? `<span class="cm-calc">Último pedido de cotação: ${esc(String(ult.data).slice(0, 10).split("-").reverse().join("/"))} · ${esc(ult.por || "")} · ${ult.linhas} linha(s)${ult.avisados !== undefined ? ` · ${ult.avisados} aviso(s)` : ""}</span>` : ""}
+  </div>`;
+}
+
+const linhasMat = () => (S.doc.sheets.mat || []).filter((l) => String(l.desc || "").trim() && Number(l.q) > 0 && l.cli !== "Sim");
+
+function pedirCotacao() {
+  const n = linhasMat().length;
+  if (!n) return toast("Não há materiais com quantidade para cotar.", { type: "info" });
+  const wrap = document.createElement("div");
+  wrap.className = "cm-modal-back";
+  wrap.innerHTML = `<div class="cm-modal" role="dialog" aria-modal="true">
+    <h3 class="cm-panel-title">Pedir cotação à Logística</h3>
+    <p class="cm-lead">Avisa quem tem acesso à Logística de que as ${n} linha(s) de materiais deste orçamento estão prontas para pedir preços,
+      com a ligação ao orçamento. As quantidades ficam marcadas como prontas e o pedido fica registado no orçamento (grave-o a seguir).</p>
+    <label class="cm-field"><span>Preços até (opcional)</span><input type="date" id="pcPrazo" class="cell-manual"></label>
+    <label class="cm-field"><span>Nota para a Logística (opcional)</span><textarea id="pcNota" class="cell-manual" rows="3" maxlength="1000"></textarea></label>
+    <div class="cm-head-actions" style="margin-top:.75rem">
+      <button class="cm-chip is-on" type="button" id="pcEnviar">Enviar pedido</button>
+      <button class="cm-chip" type="button" id="pcFechar">Cancelar</button>
+    </div></div>`;
+  document.body.appendChild(wrap);
+  wrap.querySelector("#pcFechar").onclick = () => wrap.remove();
+  wrap.querySelector("#pcEnviar").onclick = async (e) => {
+    const prazo = wrap.querySelector("#pcPrazo").value || null;
+    const nota = wrap.querySelector("#pcNota").value.trim() || null;
+    e.target.disabled = true;
+    try {
+      const r = await apiRequest(`/budgets/${encodeURIComponent(S.id)}/quote-request`, { method: "POST", body: { linhas: n, prazo, nota } });
+      S.doc.params.prontoCot = true;
+      S.doc.params.pedidosCotacao = [
+        ...(S.doc.params.pedidosCotacao || []),
+        { data: new Date().toISOString(), por: r.por || "", linhas: n, prazo, nota, avisados: r.avisados },
+      ];
+      markDirty();
+      render();
+      wrap.remove();
+      toast(r.avisados ? `Pedido enviado a ${r.avisados} pessoa(s) da Logística. Grave o orçamento.` : "Ninguém com acesso à Logística para avisar. O pedido ficou registado; grave o orçamento.", {
+        type: r.avisados ? "success" : "info",
+      });
+    } catch (err) {
+      e.target.disabled = false;
+      toast(err.message || "Não foi possível enviar o pedido.", { type: "error" });
+    }
+  };
+}
+
+/** «Importar mapa de quantidades do cliente»: a IA lê o Excel; as linhas de material escolhidas entram nesta folha. */
+function importarMapaCliente() {
+  const wrap = document.createElement("div");
+  wrap.className = "cm-modal-back";
+  const fechar = () => wrap.remove();
+  wrap.innerHTML = `<div class="cm-modal cm-modal--wide" role="dialog" aria-modal="true">
+    <h3 class="cm-panel-title">Importar mapa de quantidades do cliente</h3>
+    <p class="cm-lead">Escolha a folha de Excel do cliente. A IA separa o que é material; reveja e escolha as linhas que entram na folha 03.
+      O preço fica por pôr (use «Preços do histórico» ou «Ler fatura pró-forma»).</p>
+    <input type="file" id="mcFile" accept=".xlsx,.xls,.csv">
+    <div id="mcOut" style="margin-top:.75rem"></div>
+    <div class="cm-head-actions" style="margin-top:.75rem">
+      <button class="cm-chip is-on" type="button" id="mcJuntar" disabled>Acrescentar à folha</button>
+      <button class="cm-chip" type="button" id="mcFechar">Fechar</button>
+    </div></div>`;
+  document.body.appendChild(wrap);
+  wrap.querySelector("#mcFechar").onclick = fechar;
+  let itens = [];
+  const desenharLista = () => {
+    const out = wrap.querySelector("#mcOut");
+    out.innerHTML = itens.length
+      ? `<p class="cm-calc">${itens.length} linha(s) de material · ${itens.filter((x) => x.on).length} escolhida(s)</p>
+         <div class="cm-table-wrap" style="max-height:340px"><table class="cm-table"><thead><tr><th></th><th>Código</th><th>Descrição</th><th>Un.</th><th>Quantidade</th></tr></thead><tbody>${itens
+           .map((x, i) => `<tr><td><input type="checkbox" data-mci="${i}" ${x.on ? "checked" : ""}></td><td>${esc(x.cod || "")}</td><td>${esc(x.desc)}${x.dup ? ' <span class="imp-dup">repetida</span>' : ""}</td><td>${esc(x.un || "")}</td><td class="num">${fmt(x.q)}</td></tr>`)
+           .join("")}</tbody></table></div>`
+      : '<p class="cm-calc">A IA não encontrou linhas de material neste ficheiro.</p>';
+    wrap.querySelector("#mcJuntar").disabled = !itens.some((x) => x.on);
+  };
+  wrap.addEventListener("change", async (e) => {
+    if (e.target.dataset.mci !== undefined) {
+      itens[Number(e.target.dataset.mci)].on = e.target.checked;
+      return desenharLista();
+    }
+    if (e.target.id !== "mcFile") return;
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const out = wrap.querySelector("#mcOut");
+    out.innerHTML = '<p class="cm-calc">A IA está a ler o mapa… (pode levar até um minuto)</p>';
+    try {
+      const fd = new FormData();
+      fd.append("file", f);
+      const r = await apiUpload("/budgets/import/analyze", fd);
+      itens = (r.itens || []).filter((x) => x.cat === "material").map((x) => ({ ...x, on: x.on !== false && !x.dup }));
+      desenharLista();
+    } catch (err) {
+      out.innerHTML = `<p class="cm-calc" style="color:var(--cm-bad,#c0392b)">${esc(err.message || "Não foi possível ler o ficheiro.")}</p>`;
+    }
+  });
+  wrap.querySelector("#mcJuntar").onclick = () => {
+    const novas = itens.filter((x) => x.on);
+    S.doc.sheets.mat = [
+      ...(S.doc.sheets.mat || []),
+      ...novas.map((x) => ({ cod: x.cod || null, fam: x.fam || null, desc: x.desc, un: x.un || null, q: x.q || 0, moeda: S.doc.params.moedaBase || "AOA", obs: "Do mapa do cliente" })),
+    ];
+    markDirty();
+    render();
+    fechar();
+    toast(`${novas.length} linha(s) acrescentada(s) à folha de materiais. Grave o orçamento.`, { type: "success" });
+  };
+}
+
 // ───────────────────────── edição ─────────────────────────
 
 function markDirty() {
@@ -1501,6 +1626,39 @@ function wire() {
   window.addEventListener("scroll", catalogoFechar, { passive: true });
   document.addEventListener("change", (e) => {
     const t = e.target;
+    if (t?.id === "bPronto") {
+      S.doc.params.prontoCot = t.checked;
+      markDirty();
+      render();
+      toast(t.checked ? "Marcado como pronto para cotação. Grave o orçamento para as Compras verem." : "Desmarcado.");
+      return;
+    }
+    if (t?.id === "bProforma") {
+      const file = t.files?.[0];
+      t.value = "";
+      if (!file) return;
+      abrirPrecosHistorico({
+        id: S.id,
+        folha: "mat",
+        file,
+        rows: () => S.doc.sheets.mat || [],
+        onAplicar: ({ campos, escolhas }) => {
+          const linhas = S.doc.sheets.mat || [];
+          for (const { i, candidato } of escolhas) {
+            const linha = linhas[i];
+            if (!linha) continue;
+            linha[campos.preco] = candidato.preco;
+            if (campos.moeda) linha[campos.moeda] = candidato.moeda;
+            if (campos.forn && candidato.forn && !linha[campos.forn]) linha[campos.forn] = candidato.forn;
+            if (campos.obs) linha[campos.obs] = [linha[campos.obs], candidato.nota].filter(Boolean).join(" · ");
+          }
+          markDirty();
+          render();
+          toast(`${escolhas.length} preço(s) da pró-forma preenchido(s). Grave o orçamento.`, { type: "success" });
+        },
+      });
+      return;
+    }
     if (t?.dataset?.term) {
       S.terms.previstas = { ...S.terms.previstas, [t.dataset.term]: t.value };
       S.termsDirty = true;
@@ -1518,8 +1676,10 @@ function wire() {
   });
 
   document.addEventListener("click", async (e) => {
-    const t = e.target.closest("[data-view],[data-addrow],[data-delrow],[data-cfx],[data-milx],#bSave,#bApply,#tSave,#bImportQt,#bComporQt,#bPrecosHist");
+    const t = e.target.closest("[data-view],[data-addrow],[data-delrow],[data-cfx],[data-milx],#bSave,#bApply,#tSave,#bImportQt,#bComporQt,#bPrecosHist,#bPedirCot,#bMapaCli");
     if (!t) return;
+    if (t.id === "bPedirCot") return pedirCotacao();
+    if (t.id === "bMapaCli") return importarMapaCliente();
     if (t.id === "tSave") return saveTerms();
     if (t.id === "bImportQt") return openImportQt();
     if (t.id === "bPrecosHist") {

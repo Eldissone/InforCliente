@@ -420,6 +420,29 @@ function matchSheet(catalog, { folha, rows, moedaBase, moedas = null, apenasSemP
   return { folha, campos, linhas };
 }
 
+/**
+ * As linhas de uma fatura pró-forma lida com IA, como registos do catálogo:
+ * cada artigo com o preço unitário sem IVA, na moeda do documento.
+ *
+ * @param {object} doc `readInvoiceDocument` — `{ items, currency, supplierName, docNumber, docDate }`
+ */
+function proformaRecords(doc) {
+  const forn = doc?.supplierName || null;
+  const rotulo = ["Pró-forma", doc?.docNumber].filter(Boolean).join(" ");
+  return (doc?.items || [])
+    .filter((it) => String(it?.description || "").trim() && Number(it?.unitPrice) > 0)
+    .map((it) => ({
+      description: String(it.description).trim(),
+      unit: it.unit || "un",
+      unitPrice: Number(it.unitPrice),
+      currency: String(doc?.currency || "AOA").toUpperCase(),
+      source: "proforma",
+      sourceLabel: rotulo,
+      supplier: forn,
+      date: doc?.docDate || null,
+    }));
+}
+
 /** A frase que fica na observação da linha, a dizer de onde veio o preço. */
 function origemTexto(c) {
   const marca = c.confianca === "igual" ? "" : "≈ ";
@@ -429,6 +452,7 @@ function origemTexto(c) {
 }
 
 module.exports = {
+  proformaRecords,
   foldTec,
   specs,
   compararDescricao,
