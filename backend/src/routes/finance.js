@@ -41,6 +41,7 @@ const OBR = require("../services/finance/projects");
 const DSB = require("../services/finance/dashboard");
 const TAX = require("../services/finance/taxes");
 const CARDS = require("../services/finance/cards");
+const FIN = require("../services/finance/financing");
 const { orderTotals: taxOrderTotals, derivedStatus: taxDerivedStatus } = require("../services/purchase/purchaseTotals");
 const { planear } = require("../services/finance/autosPrevistos");
 
@@ -152,7 +153,8 @@ function toDateKeyUtc(value) {
 
 /** Estado derivado da fatura (Em Aberto, Pago-Parcial, Pago-Total, Atrasado). */
 function invoiceDerivedStatus(invoice) {
-  const net = toNumber(invoice.netAmount ?? invoice.grossAmount);
+  // As notas de crédito abatem ao valor a receber, como um recebimento.
+  const net = toNumber(invoice.netAmount ?? invoice.grossAmount) - toNumber(invoice.creditedAmount);
   const received = toNumber(invoice.receivedAmount);
   if (net > 0 && received >= net - 0.005) return "PAGO_TOTAL";
   const due = invoiceDueOf(invoice);
@@ -165,6 +167,7 @@ function invoiceDerivedStatus(invoice) {
 function mapInvoice(invoice) {
   const net = toNumber(invoice.netAmount ?? invoice.grossAmount);
   const received = toNumber(invoice.receivedAmount);
+  const credited = toNumber(invoice.creditedAmount);
   return {
     ...invoice,
     grossAmount: toNumber(invoice.grossAmount),
@@ -175,7 +178,8 @@ function mapInvoice(invoice) {
     netAmount: net,
     workPercent: invoice.workPercent === null ? null : toNumber(invoice.workPercent),
     receivedAmount: received,
-    missingAmount: round2(net - received),
+    creditedAmount: credited,
+    missingAmount: round2(net - received - credited),
     status: invoiceDerivedStatus(invoice),
     // Sem cliente na fatura, vale o cliente da obra.
     client: invoice.client || invoice.project?.client || null,
@@ -2988,6 +2992,282 @@ financeRoutes.get(
   })
 );
 
+// ─── Financiamentos: E1 bancários, E2 obtidos e concedidos, E3 garantias, E4 sócios ───
+
+async function loadFinancings(hoje) {
+  const rows = await prisma.financing.findMany({ include: { project: { select: { id: true, code: true, name: true } } }, orderBy: [{ startDate: "desc" }, { createdAt: "desc" }] });
+  return rows.map((e) => FIN.resumo({ ...e, amount: toNumber(e.amount), used: e.used === null ? null : toNumber(e.used), rate: e.rate === null ? null : toNumber(e.rate), commissionPct: e.commissionPct === null ? null : toNumber(e.commissionPct) }, hoje));
+}
+
+/** E1 / E2 / E3 — todos os financiamentos, com os resumos. */
+financeRoutes.get(
+  "/financings",
+  view,
+  asyncHandler(async (req, res) => {
+    const hoje = todayKeyLocal();
+    const itens = await loadFinancings(hoje);
+    const moedas = [...new Set(itens.map((x) => x.moeda))].sort((a, b) => (a === "AOA" ? -1 : b === "AOA" ? 1 : a.localeCompare(b)));
+    const moeda = String(req.query.moeda || moedas[0] || "AOA").toUpperCase();
+    // E2: os empréstimos concedidos são pedidos de pagamento do tipo Empréstimo.
+    const pedidos = await prisma.purchaseOrder.findMany({
+      where: { requestType: "EMPRESTIMO", deletedAt: null, status: { notIn: ["CANCELADO", "NAO_APROVADO", "RASCUNHO"] } },
+      select: {
+        id: true,
+        number: true,
+        status: true,
+        typeData: true,
+        totalValue: true,
+        requestType: true,
+        supplierName: true,
+        createdAt: true,
+        paymentPlan: { select: { installments: { select: { amount: true, status: true } } } },
+      },
+    });
+    const concedidos = pedidos.map((o) => {
+      const td = o.typeData || {};
+      return {
+        id: o.id,
+        numero: o.number,
+        beneficiario: td.por || o.supplierName || "—",
+        valor: taxOrderTotals(o).total,
+        pago: (o.paymentPlan?.installments || []).filter((i) => i.status === "PAGO").reduce((s, i) => s + toNumber(i.amount), 0),
+        devolvido: toNumber(td.devolvido),
+        fim: td.fim || null,
+        data: o.createdAt,
+      };
+    });
+    return res.json({
+      hoje,
+      moedas: moedas.length ? moedas : ["AOA"],
+      moeda,
+      tipos: Object.entries(FIN.TIPOS).map(([k, v]) => ({ k, l: v.l, cat: v.cat })),
+      itens,
+      e1: FIN.resumoE1(itens, moeda),
+      e2: FIN.posicaoEmpresas(itens.filter((x) => x.moeda === moeda), concedidos),
+      concedidos,
+      e3: FIN.resumoE3(itens.filter((x) => x.moeda === moeda)),
+    });
+  })
+);
+
+const finBody = z.object({
+  tipo: z.enum(Object.keys(FIN.TIPOS)),
+  origem: z.enum(["BANCO", "GRUPO", "OUTRA"]).nullable().optional(),
+  entidade: z.string().trim().min(2).max(160),
+  contrato: z.string().trim().max(80).nullable().optional(),
+  moeda: z.string().trim().min(3).max(3).default("AOA"),
+  montante: z.number().positive(),
+  utilizado: z.number().min(0).nullable().optional(),
+  taxa: z.number().min(0).max(100).nullable().optional(),
+  inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  prazoMeses: z.number().int().min(1).max(600).nullable().optional(),
+  periodoMeses: z.number().int().min(1).max(12).nullable().optional(),
+  carenciaMeses: z.number().int().min(0).max(120).nullable().optional(),
+  fim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  validade: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  obraId: z.string().nullable().optional(),
+  beneficiario: z.string().trim().max(160).nullable().optional(),
+  modalidade: z.string().trim().max(80).nullable().optional(),
+  comissao: z.number().min(0).max(100).nullable().optional(),
+  estado: z.enum(["ATIVA", "LIQUIDADO", "LIBERTADA"]).default("ATIVA"),
+  notas: z.string().max(1000).nullable().optional(),
+});
+
+function finData(b) {
+  const dt = (v) => (v ? new Date(`${v}T00:00:00Z`) : null);
+  const out = {};
+  const map = {
+    tipo: ["kind", (v) => v],
+    origem: ["origin", (v) => v || FIN.TIPOS[b.tipo]?.origem || null],
+    entidade: ["entity", (v) => v],
+    contrato: ["contract", (v) => v || null],
+    moeda: ["currency", (v) => String(v).toUpperCase()],
+    montante: ["amount", (v) => v],
+    utilizado: ["used", (v) => v ?? null],
+    taxa: ["rate", (v) => v ?? null],
+    inicio: ["startDate", dt],
+    prazoMeses: ["termMonths", (v) => v ?? null],
+    periodoMeses: ["periodMonths", (v) => v ?? null],
+    carenciaMeses: ["graceMonths", (v) => v ?? null],
+    fim: ["endDate", dt],
+    validade: ["validUntil", dt],
+    obraId: ["projectId", (v) => v || null],
+    beneficiario: ["beneficiary", (v) => v || null],
+    modalidade: ["modality", (v) => v || null],
+    comissao: ["commissionPct", (v) => v ?? null],
+    estado: ["state", (v) => v],
+    notas: ["notes", (v) => v || null],
+  };
+  for (const [k, [col, f]] of Object.entries(map)) if (b[k] !== undefined) out[col] = f(b[k]);
+  return out;
+}
+
+financeRoutes.post(
+  "/financings",
+  edit,
+  asyncHandler(async (req, res) => {
+    const b = finBody.parse(req.body);
+    const item = await prisma.financing.create({ data: { ...finData(b), createdBy: req.user?.name || req.user?.email || null } });
+    return res.status(201).json({ item });
+  })
+);
+
+financeRoutes.patch(
+  "/financings/:id",
+  edit,
+  asyncHandler(async (req, res) => {
+    const b = finBody.partial().parse(req.body);
+    const item = await prisma.financing.update({ where: { id: String(req.params.id) }, data: finData(b) });
+    return res.json({ item });
+  })
+);
+
+financeRoutes.delete(
+  "/financings/:id",
+  edit,
+  asyncHandler(async (req, res) => {
+    await prisma.financing.delete({ where: { id: String(req.params.id) } });
+    return res.json({ ok: true });
+  })
+);
+
+/** E2 › registar o que um empréstimo concedido já devolveu (fica no pedido, em `typeData.devolvido`). */
+financeRoutes.post(
+  "/financings/granted/:orderId/returned",
+  edit,
+  asyncHandler(async (req, res) => {
+    const b = z.object({ devolvido: z.number().min(0) }).parse(req.body);
+    const o = await prisma.purchaseOrder.findUnique({ where: { id: String(req.params.orderId) }, select: { id: true, requestType: true, typeData: true } });
+    if (!o || o.requestType !== "EMPRESTIMO") return res.status(404).json({ error: "NOT_FOUND" });
+    await prisma.purchaseOrder.update({ where: { id: o.id }, data: { typeData: { ...(o.typeData || {}), devolvido: b.devolvido } } });
+    return res.json({ ok: true });
+  })
+);
+
+/** E4 Distribuição aos Sócios. */
+financeRoutes.get(
+  "/partners",
+  view,
+  asyncHandler(async (_req, res) => {
+    const [dist, pags] = await Promise.all([
+      prisma.profitDistribution.findMany({ orderBy: { date: "desc" } }),
+      prisma.distributionPayment.findMany({ orderBy: { date: "desc" } }),
+    ]);
+    const distribuicoes = dist.map((d) => ({ id: d.id, data: d.date.toISOString().slice(0, 10), exercicio: d.exercise, descricao: d.description, total: toNumber(d.total), iacPct: d.iacPct === null ? 10 : toNumber(d.iacPct), parts: Array.isArray(d.parts) ? d.parts : [] }));
+    const pagamentos = pags.map((p) => ({ id: p.id, socio: p.partner, tipo: p.kind, data: p.date.toISOString().slice(0, 10), valor: toNumber(p.amount), notas: p.notes }));
+    return res.json({ distribuicoes, pagamentos, ...FIN.distribuicaoSocios(distribuicoes, pagamentos) });
+  })
+);
+
+const distBody = z.object({
+  data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  exercicio: z.string().trim().max(20).nullable().optional(),
+  descricao: z.string().trim().max(300).nullable().optional(),
+  total: z.number().positive(),
+  iacPct: z.number().min(0).max(100).nullable().optional(),
+  parts: z.array(z.object({ nome: z.string().trim().min(2).max(160), pct: z.number().positive().max(100) })).min(1),
+});
+
+financeRoutes.post(
+  "/partners/distributions",
+  edit,
+  asyncHandler(async (req, res) => {
+    const b = distBody.parse(req.body);
+    const soma = b.parts.reduce((s, p) => s + p.pct, 0);
+    if (Math.abs(soma - 100) > 0.01) return res.status(400).json({ error: "REPARTICAO", errors: [`A repartição soma ${soma}%: tem de somar 100%.`] });
+    const item = await prisma.profitDistribution.create({
+      data: { date: new Date(`${b.data}T00:00:00Z`), exercise: b.exercicio || null, description: b.descricao || null, total: b.total, iacPct: b.iacPct ?? 10, parts: b.parts, createdBy: req.user?.name || req.user?.email || null },
+    });
+    return res.status(201).json({ item });
+  })
+);
+
+financeRoutes.delete(
+  "/partners/distributions/:id",
+  edit,
+  asyncHandler(async (req, res) => {
+    await prisma.profitDistribution.delete({ where: { id: String(req.params.id) } });
+    return res.json({ ok: true });
+  })
+);
+
+financeRoutes.post(
+  "/partners/payments",
+  edit,
+  asyncHandler(async (req, res) => {
+    const b = z
+      .object({ socio: z.string().trim().min(2).max(160), tipo: z.enum(["LUCRO", "IAC"]).default("LUCRO"), data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), valor: z.number().positive(), notas: z.string().max(300).nullable().optional() })
+      .parse(req.body);
+    const item = await prisma.distributionPayment.create({
+      data: { partner: b.socio, kind: b.tipo, date: new Date(`${b.data}T00:00:00Z`), amount: b.valor, notes: b.notas || null, createdBy: req.user?.name || req.user?.email || null },
+    });
+    return res.status(201).json({ item });
+  })
+);
+
+financeRoutes.delete(
+  "/partners/payments/:id",
+  edit,
+  asyncHandler(async (req, res) => {
+    await prisma.distributionPayment.delete({ where: { id: String(req.params.id) } });
+    return res.json({ ok: true });
+  })
+);
+
+// ─── R5: notas de crédito ───
+
+/** As notas de crédito (de uma fatura com `?fatura=`, ou todas). */
+financeRoutes.get(
+  "/credit-notes",
+  view,
+  asyncHandler(async (req, res) => {
+    const items = await prisma.creditNote.findMany({
+      where: req.query.fatura ? { invoiceId: String(req.query.fatura) } : {},
+      include: { invoice: { select: { id: true, docNumber: true, project: { select: { code: true, name: true, currency: true } }, client: { select: { name: true } } } } },
+      orderBy: { date: "desc" },
+    });
+    return res.json({ items: items.map((n) => ({ ...n, amount: toNumber(n.amount) })) });
+  })
+);
+
+/** Emitir uma nota de crédito sobre uma fatura: não pode passar do que falta receber. */
+financeRoutes.post(
+  "/invoices/:id/credit-notes",
+  edit,
+  asyncHandler(async (req, res) => {
+    const b = z
+      .object({ numero: z.string().trim().max(60).nullable().optional(), data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), valor: z.number().positive(), motivo: z.string().trim().max(300).nullable().optional() })
+      .parse(req.body);
+    const inv = await prisma.invoice.findUnique({ where: { id: String(req.params.id) } });
+    if (!inv) return res.status(404).json({ error: "NOT_FOUND" });
+    const falta = round2(toNumber(inv.netAmount ?? inv.grossAmount) - toNumber(inv.receivedAmount) - toNumber(inv.creditedAmount));
+    if (b.valor > falta + 0.005) return res.status(400).json({ error: "VALOR", errors: [`A nota de crédito não pode passar do que falta receber (${falta}).`] });
+    const nota = await prisma.$transaction(async (tx) => {
+      const n = await tx.creditNote.create({
+        data: { invoiceId: inv.id, number: b.numero || null, date: new Date(`${b.data}T00:00:00Z`), amount: b.valor, reason: b.motivo || null, createdBy: req.user?.name || req.user?.email || null },
+      });
+      await tx.invoice.update({ where: { id: inv.id }, data: { creditedAmount: { increment: b.valor } } });
+      return n;
+    });
+    return res.status(201).json({ item: nota });
+  })
+);
+
+/** Apagar uma nota de crédito (o valor volta a estar por receber). */
+financeRoutes.delete(
+  "/credit-notes/:id",
+  edit,
+  asyncHandler(async (req, res) => {
+    const n = await prisma.creditNote.findUnique({ where: { id: String(req.params.id) } });
+    if (!n) return res.status(404).json({ error: "NOT_FOUND" });
+    await prisma.$transaction([
+      prisma.creditNote.delete({ where: { id: n.id } }),
+      prisma.invoice.update({ where: { id: n.invoiceId }, data: { creditedAmount: { decrement: toNumber(n.amount) } } }),
+    ]);
+    return res.json({ ok: true });
+  })
+);
+
 // ─── F-2: conta corrente de clientes, contas e saldos, fluxos, centros de custo, DSC ───
 
 /** Faturas com o que é preciso para a conta corrente: valor líquido, vencimento efetivo e recebimentos. */
@@ -2998,6 +3278,7 @@ async function loadInvoicesForAccounts() {
       project: { select: { code: true, name: true, currency: true, client: { select: { id: true, name: true } } } },
       measurement: { select: { reportNumber: true } },
       receipts: { select: { amount: true, receivedDate: true, method: true }, orderBy: { receivedDate: "asc" } },
+      creditNotes: { select: { id: true, number: true, date: true, amount: true, reason: true }, orderBy: { date: "asc" } },
     },
   });
   return rows.map((inv) => {
@@ -3009,6 +3290,8 @@ async function loadInvoicesForAccounts() {
       due: m.effectiveDueDate,
       net: m.netAmount,
       received: m.receivedAmount,
+      credited: m.creditedAmount,
+      creditNotes: inv.creditNotes,
       currency: inv.project?.currency || "AOA",
       client: m.client,
       project: inv.project,

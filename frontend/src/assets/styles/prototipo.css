@@ -755,3 +755,13 @@ button.fx2-k:hover { background: #f8fafc; }
 .p4-n1 td { background: #f6f7f9; }
 .p4-n3 td { font-size: 12.5px; color: var(--pt-muted); }
 .p4-now { background: #eaf6ef; }
+
+/* ─── Financiamentos ──────────────────────────────────────────────────────── */
+.e1-plano { max-width: 900px; }
+.e1-pago td { opacity: .55; }
+.e4-parte { display: flex; gap: 6px; margin-bottom: 4px; }
+.e4-parte input:first-child { flex: 1; }
+.e4-parte input:last-child { width: 90px; }
+
+/* R5: nota de crédito no extrato */
+.fx2-tp--NC { background: #fdf0d4; color: #8a5a00; }

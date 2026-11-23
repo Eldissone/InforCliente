@@ -92,11 +92,15 @@ function buildClientAccounts(invoices, hoje, moeda = "AOA") {
     let pool = 0;
     const I = [];
 
+    let nc = 0;
     for (const inv of c.X) {
       const v = N(inv.net);
       const r = N(inv.received);
+      const cr = N(inv.credited);
       fat += v;
-      const ab = v - r;
+      nc += cr;
+      // As notas de crédito abatem ao que falta receber.
+      const ab = v - r - cr;
       if (ab > EPS) I.push({ ab, venc: dayKey(inv.due), id: inv.id });
       else if (ab < -EPS) pool += -ab;
       for (const p of inv.receipts || []) {
@@ -124,6 +128,7 @@ function buildClientAccounts(invoices, hoje, moeda = "AOA") {
       faturas: c.X.length,
       fat: round2(fat),
       rec: round2(rec),
+      nc: round2(nc),
       ult,
       ag: aging(abertos, hoje),
       fav: round2(fav),
@@ -140,6 +145,7 @@ function buildClientAccounts(invoices, hoje, moeda = "AOA") {
     emAtraso: soma((c) => c.ag.atr),
     mais90: soma((c) => c.ag.b4),
     credito: soma((c) => Math.max(0, -c.saldo)),
+    notasCredito: soma((c) => c.nc),
     comSaldo: clientes.filter((c) => c.saldo > EPS).length,
     comAtraso: clientes.filter((c) => c.ag.atr > EPS).length,
     com90: clientes.filter((c) => c.ag.b4 > EPS).length,
@@ -161,7 +167,7 @@ function clientStatement(invoices, clienteId, hoje, moeda = "AOA") {
   const L = [];
   for (const inv of X) {
     const v = N(inv.net);
-    const ab = v - N(inv.received);
+    const ab = v - N(inv.received) - N(inv.credited);
     const venc = dayKey(inv.due);
     let situacao = "liquidada";
     let atraso = 0;
@@ -195,6 +201,21 @@ function clientStatement(invoices, clienteId, hoje, moeda = "AOA") {
         deb: 0,
         cred: round2(p.amount),
         faturaId: inv.id,
+      });
+    }
+    for (const n of inv.creditNotes || []) {
+      L.push({
+        data: dayKey(n.date),
+        tipo: "NC",
+        doc: n.number || "Nota de crédito",
+        obra: inv.docNumber || "",
+        descricao: n.reason ? `Nota de crédito · ${n.reason}` : "Nota de crédito",
+        venc: null,
+        situacao: null,
+        deb: 0,
+        cred: round2(n.amount),
+        faturaId: inv.id,
+        notaId: n.id,
       });
     }
   }

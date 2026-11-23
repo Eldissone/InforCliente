@@ -60,8 +60,7 @@ function cabecalho() {
     const num = h.querySelector("[data-fcal-num]");
     const tit = h.querySelector("h1, h2");
     if (tit) tit.textContent = ver.titulo;
-    if (num) num.textContent = ver.num;
-    else if (tit) tit.insertAdjacentHTML("beforebegin", `<span class="fcal-num" data-fcal-num>${ver.num}</span>`);
+    if (num) num.remove();
   }
   document.title = `Info Gestor — ${ver.titulo}`;
 }

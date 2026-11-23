@@ -171,6 +171,16 @@ const APP_MENU = [
         ],
       },
       {
+        label: "Financiamentos",
+        icon: "account_balance",
+        children: [
+          { label: "Financiamentos Bancários", icon: "account_balance", href: "/Financeiro/financiamentos", perm: "financeiro:view" },
+          { label: "Empréstimos Obtidos e Concedidos", icon: "swap_horiz", href: "/Financeiro/emprestimos", perm: "financeiro:view" },
+          { label: "Garantias e Livranças", icon: "verified_user", href: "/Financeiro/garantias", perm: "financeiro:view" },
+          { label: "Distribuição aos Sócios", icon: "groups", href: "/Financeiro/socios", perm: "financeiro:view" },
+        ],
+      },
+      {
         label: "Tesouraria",
         icon: "account_balance_wallet",
         children: [

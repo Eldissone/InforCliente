@@ -657,6 +657,7 @@ async function buildProjectFinancials({ projectIds, includeInactive = true } = {
         vatAmount: true,
         withholdingAmount: true,
         receivedAmount: true,
+        creditedAmount: true,
         dueDate: true,
         status: true,
       },
@@ -709,7 +710,7 @@ async function buildProjectFinancials({ projectIds, includeInactive = true } = {
     const received = round2(projectInvoices.reduce((a, i) => a + toNumber(i.receivedAmount), 0));
     const missing = round2(
       projectInvoices.reduce(
-        (a, i) => a + (toNumber(i.netAmount ?? i.grossAmount) - toNumber(i.receivedAmount)),
+        (a, i) => a + (toNumber(i.netAmount ?? i.grossAmount) - toNumber(i.receivedAmount) - toNumber(i.creditedAmount)),
         0
       )
     );

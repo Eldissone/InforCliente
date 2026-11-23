@@ -20,7 +20,6 @@ function renderPageHeader({ kicker, title, subtitle, code }) {
     ${VOLTAR_HTML}
     <header class="finance-page-header">
       <div>
-        ${code ? `<span class="fcal-num" data-fcal-num>${escapeFinanceHtml(code)}</span>` : ""}
         <h1 class="finance-title">${escapeFinanceHtml(title || "Financeiro")}</h1>
         ${subtitle ? `<p class="finance-subtitle">${escapeFinanceHtml(subtitle)}</p>` : ""}
       </div>

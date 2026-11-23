@@ -142,7 +142,6 @@ function renderNav() {
         ${g.items
           .map(
             (it) => `<button type="button" class="cm-sidenav-link${S.view === it.id ? " is-on" : ""}" data-view="${it.id}">
-              <span class="cm-sidenav-tag">${esc(it.tag)}</span>
               <span class="cm-sidenav-label">${esc(it.label)}</span>
               ${it.total !== null && it.total !== undefined ? `<span class="cm-sidenav-total">${fmt(it.total)}</span>` : ""}
             </button>`
@@ -515,7 +514,6 @@ function viewSheet(key) {
   return `
     <div class="cm-head" style="margin-bottom:.5rem">
       <div>
-        <div class="cm-head-num">${esc(def.tag)}</div>
         <h2 class="cm-panel-title" style="font-size:1.0625rem">${esc(def.title)}</h2>
         <p class="cm-lead" style="margin-top:.25rem">${esc(def.lead)}</p>
       </div>
@@ -665,7 +663,6 @@ function viewParams() {
   return `
     <div class="cm-head" style="margin-bottom:.5rem">
       <div>
-        <div class="cm-head-num">16</div>
         <h2 class="cm-panel-title" style="font-size:1.0625rem">Parâmetros do orçamento</h2>
         <p class="cm-lead" style="margin-top:.25rem">
           Começaram como cópia dos parâmetros da empresa. A partir daqui só valem para este orçamento:
@@ -794,7 +791,6 @@ function viewDash() {
   return `
     <div class="cm-head" style="margin-bottom:.5rem">
       <div>
-        <div class="cm-head-num">01</div>
         <h2 class="cm-panel-title" style="font-size:1.0625rem">Dashboard do orçamento</h2>
         <p class="cm-lead" style="margin-top:.25rem">
           Onde está o dinheiro deste orçamento e se a margem chega. Em ${esc(mb)}, sem IVA.
@@ -907,7 +903,6 @@ function viewTerms() {
   return `
     <div class="cm-head" style="margin-bottom:.5rem">
       <div>
-        <div class="cm-head-num">T3</div>
         <h2 class="cm-panel-title" style="font-size:1.0625rem">Condições de pagamento</h2>
         <p class="cm-lead" style="margin-top:.25rem">
           Como é que o cliente paga esta obra. Estas são as <b>condições previstas</b> na proposta;
@@ -1070,7 +1065,6 @@ function viewVerif() {
   return `
     <div class="cm-head" style="margin-bottom:.5rem">
       <div>
-        <div class="cm-head-num">02</div>
         <h2 class="cm-panel-title" style="font-size:1.0625rem">Verificação dos cálculos</h2>
         <p class="cm-lead" style="margin-top:.25rem">
           Cada número do orçamento com a conta que o produziu, de cima a baixo. Serve para confirmar
@@ -1157,7 +1151,6 @@ function viewAbc() {
   return `
     <div class="cm-head" style="margin-bottom:.5rem">
       <div>
-        <div class="cm-head-num">17</div>
         <h2 class="cm-panel-title" style="font-size:1.0625rem">Análise ABC</h2>
         <p class="cm-lead" style="margin-top:.25rem">
           Pareto dos componentes de custo direto: A = maior impacto (até ${pct(P.abcA, 0)} acumulado),
@@ -1210,7 +1203,6 @@ function viewBaremes() {
   return `
     <div class="cm-head" style="margin-bottom:.5rem">
       <div>
-        <div class="cm-head-num">14</div>
         <h2 class="cm-panel-title" style="font-size:1.0625rem">Baremes deste orçamento</h2>
         <p class="cm-lead" style="margin-top:.25rem">
           Cópia dos baremes da empresa no momento em que o orçamento foi criado, como no ficheiro Excel.

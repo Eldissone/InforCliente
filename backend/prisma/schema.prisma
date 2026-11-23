@@ -333,6 +333,7 @@ model Project {
   measurementReports  MeasurementReport[]
   plannedMeasurements PlannedMeasurement[]
   cardAllocations CardAllocation[]
+  financings      Financing[]
   transactions        ProjectTransaction[]
   stockMovements      StockMovement[]
   warehouses          Warehouse[]
@@ -2326,6 +2327,9 @@ model Invoice {
   flagGuarantee      Boolean       @default(false)
   status             InvoiceStatus @default(EM_ABERTO)
   receivedAmount     Decimal       @default(0) @db.Decimal(16, 2)
+  /// Soma das notas de crédito emitidas sobre esta fatura (abate ao que falta receber)
+  creditedAmount     Decimal       @default(0) @db.Decimal(16, 2)
+  creditNotes        CreditNote[]
   receivedDate       DateTime?
   notes              String?
   createdBy          String?
@@ -2982,4 +2986,88 @@ model TaxPaymentPlan {
   updatedAt   DateTime @updatedAt
 
   installments TaxObligation[]
+}
+
+/// E1–E3 Financiamentos: empréstimos (bancário, grupo, outra empresa), leasing,
+/// linhas de crédito, livranças e garantias bancárias.
+model Financing {
+  id            String    @id @default(cuid())
+  /// EMPRESTIMO_BANCARIO, EMPRESTIMO_GRUPO, EMPRESTIMO_OUTRA, LEASING, LINHA_CREDITO, LIVRANCA, GARANTIA_BANCARIA
+  kind          String
+  /// BANCO, GRUPO, OUTRA
+  origin        String?
+  entity        String
+  contract      String?
+  currency      String    @default("AOA")
+  amount        Decimal   @db.Decimal(16, 2)
+  /// Linhas de crédito: o já utilizado
+  used          Decimal?  @db.Decimal(16, 2)
+  /// Taxa anual nominal (%)
+  rate          Decimal?  @db.Decimal(7, 4)
+  startDate     DateTime?
+  termMonths    Int?
+  periodMonths  Int?
+  graceMonths   Int?
+  endDate       DateTime?
+  /// Garantias: válida até
+  validUntil    DateTime?
+  projectId     String?
+  beneficiary   String?
+  modality      String?
+  commissionPct Decimal?  @db.Decimal(7, 4)
+  /// ATIVA, LIQUIDADO, LIBERTADA
+  state         String    @default("ATIVA")
+  notes         String?
+  createdBy     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([kind])
+}
+
+/// E4: distribuição de lucros aprovada e a repartição pelos sócios.
+model ProfitDistribution {
+  id          String   @id @default(cuid())
+  date        DateTime
+  exercise    String?
+  description String?
+  total       Decimal  @db.Decimal(16, 2)
+  /// IAC (%) — 10 por omissão
+  iacPct      Decimal? @db.Decimal(5, 2)
+  /// [{ nome, pct }]
+  parts       Json     @default("[]")
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+/// E4: pagamentos aos sócios (lucro líquido) e do IAC ao Estado, por sócio.
+model DistributionPayment {
+  id        String   @id @default(cuid())
+  partner   String
+  /// LUCRO ou IAC
+  kind      String   @default("LUCRO")
+  date      DateTime
+  amount    Decimal  @db.Decimal(16, 2)
+  notes     String?
+  createdBy String?
+  createdAt DateTime @default(now())
+}
+
+/// R5 Conta Corrente: nota de crédito emitida ao cliente, sobre uma fatura.
+model CreditNote {
+  id        String   @id @default(cuid())
+  invoiceId String
+  number    String?
+  date      DateTime
+  amount    Decimal  @db.Decimal(16, 2)
+  reason    String?
+  createdBy String?
+  createdAt DateTime @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
 }

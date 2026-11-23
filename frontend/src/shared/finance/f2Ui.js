@@ -17,13 +17,8 @@ export const fmt0 = (v) => Number(v || 0).toLocaleString("pt-PT", { maximumFract
 export const fmtPct = (v) => `${(Number(v || 0) * 100).toLocaleString("pt-PT", { maximumFractionDigits: 0 })}%`;
 export const fmtData = (k) => (k ? String(k).slice(0, 10).split("-").reverse().join("/") : "—");
 
-/** O código do ecrã do protótipo (F2, R4, T1…) antes do título da página. */
-export function codigoNoCabecalho(num) {
-  const h = document.getElementById("financePageHeader");
-  const tit = h?.querySelector("h1, h2");
-  if (!tit || h.querySelector("[data-fcal-num]")) return;
-  tit.insertAdjacentHTML("beforebegin", `<span class="fcal-num" data-fcal-num>${esc(num)}</span>`);
-}
+// Os códigos do protótipo (F2, R4, T1…) deixaram de aparecer nos cabeçalhos.
+export function codigoNoCabecalho() {}
 
 /**
  * Botões de segmento. `attr` é o atributo `data-*` que o ecrã escuta;

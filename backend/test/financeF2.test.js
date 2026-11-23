@@ -659,3 +659,29 @@ test("P2/R3 calendário: atalhos de vencimento, só faturas / só previstos e fi
   assert.equal(buildCalendar(mix, { ...F, sel: "tudo", moeda: "AOA" }, hoje).receber.total, 50);
   assert.equal(buildCalendar(mix, { ...F, sel: "tudo", moeda: "USD" }, hoje).receber.total, 7);
 });
+
+test("R5: a nota de crédito abate ao saldo do cliente e aparece no extrato", () => {
+  const { buildClientAccounts, clientStatement } = require("../src/services/finance/clientAccounts");
+  const hoje = "2026-11-23";
+  const inv = {
+    id: "f1",
+    docNumber: "FT 1",
+    docDate: "2026-10-01",
+    due: "2026-10-31",
+    net: 1000,
+    received: 300,
+    credited: 200,
+    currency: "AOA",
+    client: { id: "c1", name: "Cliente" },
+    project: { code: "OBR", currency: "AOA" },
+    receipts: [{ amount: 300, receivedDate: "2026-10-10" }],
+    creditNotes: [{ id: "n1", number: "NC 1", date: "2026-11-02", amount: 200, reason: "desconto" }],
+  };
+  const r = buildClientAccounts([inv], hoje);
+  assert.equal(r.clientes[0].saldo, 500);
+  assert.equal(r.clientes[0].nc, 200);
+  assert.equal(r.totais.notasCredito, 200);
+  const L = clientStatement([inv], "c1", hoje);
+  assert.deepEqual(L.map((l) => [l.tipo, l.deb, l.cred, l.saldo]), [["FT", 1000, 0, 1000], ["RC", 0, 300, 700], ["NC", 0, 200, 500]]);
+  assert.equal(L[0].emAberto, 500);
+});
