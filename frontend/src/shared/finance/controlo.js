@@ -2,12 +2,12 @@ import { apiRequest } from "../../services/api.js";
 import { toast } from "../ui.js";
 import { formatCurrency } from "../format.js";
 import { escapeFinanceHtml as esc } from "../financePage.js";
-import { chartCardHtml, compactMoney as compact, drawBarChart, drawComboChart, destroyCharts, TONES } from "./charts.js";
-import { kpiCardsHtml, meterHtml as meter, num, skeletonHtml, stripHtml, toneOf } from "./widgets.js";
+import { compactMoney as compact, destroyCharts } from "./charts.js";
+import { meterHtml as meter, num, toneOf } from "./widgets.js";
 import { renderEstrutura } from "./controloEstrutura.js";
 
 /**
- * Ecrã «Controlo Financeiro».
+ * Ecrã «Controlo Financeiro» (Previsto × Realizado).
  *
  * Confronta o previsto com o realizado tendo em conta o avanço da obra:
  *  - custo esperado à data = orçamento de custo × avanço (físico; sem ele, a
@@ -19,8 +19,6 @@ import { renderEstrutura } from "./controloEstrutura.js";
  *    dos pagamentos sai do custo).
  */
 
-/** Desvio (em % do esperado / do orçamento) a partir do qual se avisa. */
-const DEVIATION_ALERT_PCT = 5;
 /** Margem realizada abaixo da prevista, em pontos percentuais, que gera aviso. */
 const MARGIN_GAP_ALERT = 5;
 
@@ -32,7 +30,6 @@ const PROGRESS_SOURCE = {
 };
 
 const state = {
-  months: 12,
   query: "",
   scope: "active",
   sort: "deviation",
@@ -79,51 +76,6 @@ function isTracked(p) {
 function renderShell() {
   document.getElementById("financeRoot").innerHTML = `
     <div class="ov">
-      <div id="ctrlKpis" class="ov-kpis">${skeletonHtml(4, "kpi")}</div>
-      <div id="ctrlStrip" class="ov-strip">${skeletonHtml(6, "cell")}</div>
-
-      <div class="ov-row ov-row--8-4">
-        ${chartCardHtml({
-          id: "ctrlChartMonthly",
-          title: "Faturado, recebido e custo",
-          subtitle: "Por mês · a linha é o resultado acumulado (faturado − custo)",
-          hint: "Custo pela data do custo, com IVA (como saiu do caixa). O resultado dos cartões de cima é sem IVA.",
-          height: 280,
-          actionsHtml: `
-            <div class="finance-seg finance-seg--sm" id="ctrlRange">
-              <button type="button" data-months="6">6M</button>
-              <button type="button" data-months="12" class="active">12M</button>
-            </div>`,
-          beforeChartHtml: `<div id="ctrlFlowTotals" class="ov-flow-totals"></div>`,
-        })}
-        <section class="finance-card ov-panel">
-          <header class="finance-chart-head">
-            <div>
-              <h2 class="finance-chart-title">Onde atuar</h2>
-              <p class="finance-chart-subtitle">Obras com desvio, margem abaixo da prevista ou dados em falta</p>
-            </div>
-          </header>
-          <ul id="ctrlAlerts" class="ov-alerts">${skeletonHtml(3, "line")}</ul>
-        </section>
-      </div>
-
-      <div class="ov-row ov-row--6-6">
-        ${chartCardHtml({
-          id: "ctrlChartDeviation",
-          title: "Desvio de custo à data",
-          subtitle: "Realizado − esperado para o avanço de cada obra",
-          hint: "Só obras com orçamento de custo e avanço conhecido.",
-          height: 300,
-        })}
-        ${chartCardHtml({
-          id: "ctrlChartMargins",
-          title: "Margem prevista vs realizada",
-          subtitle: "Em % da venda · obras com faturação",
-          hint: "Prevista = venda prevista − orçamento de custo. Realizada = faturado − custo realizado, sem IVA.",
-          height: 300,
-        })}
-      </div>
-
       <section class="finance-card ov-panel" id="ctrlTableCard">
         <header class="finance-chart-head finance-chart-head--row">
           <div>
@@ -152,13 +104,6 @@ function renderShell() {
       <div id="ctrlEstrutura"></div>
     </div>`;
 
-  document.querySelectorAll("#ctrlRange button").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      state.months = Number(btn.dataset.months);
-      document.querySelectorAll("#ctrlRange button").forEach((b) => b.classList.toggle("active", b === btn));
-      renderMonthly();
-    });
-  });
   document.querySelectorAll("#ctrlScope button").forEach((btn) => {
     btn.addEventListener("click", () => {
       state.scope = btn.dataset.scope;
@@ -173,281 +118,6 @@ function renderShell() {
   document.getElementById("ctrlSearch").addEventListener("input", (e) => {
     state.query = e.target.value;
     renderTable();
-  });
-}
-
-/* ─── Indicadores ─────────────────────────────────────────────────────────── */
-
-function renderKpis() {
-  const t = state.data.totals || {};
-  const items = state.data.byProject || [];
-  const tracked = items.filter(isTracked);
-  const untracked = items.filter((p) => !isTracked(p) && num(p.realizedCost) > 0).length;
-  const marginGap = num(t.marginBase) - num(t.plannedMarginPct);
-  const cashNet = num(t.received) - num(t.realizedCost);
-  // Só as obras com avanço: realizado delas = esperado + desvio.
-  const trackedRealized = num(t.expectedCost) + num(t.deviationToDate);
-  const realizedVsExpected = num(t.expectedCost) > 0 ? (trackedRealized / num(t.expectedCost)) * 100 : 0;
-
-  const cards = [
-    {
-      key: "result",
-      label: "Resultado (sem IVA)",
-      icon: "trending_up",
-      tone: num(t.resultBase) >= 0 ? "emerald" : "red",
-      value: compact(t.resultBase),
-      badge: pct(t.marginBase),
-      badgeTone: marginGap >= 0 ? "emerald" : "amber",
-      body: `
-        <div class="ov-kpi-compare">
-          <span>Faturado ${esc(compact(t.revenue))} − custo ${esc(compact(t.realizedCostBase))}</span>
-        </div>`,
-      foot: `Margem prevista ${pct(t.plannedMarginPct)}`,
-    },
-    {
-      key: "deviation",
-      label: "Desvio de custo à data",
-      icon: "rule",
-      tone: num(t.deviationToDate) > 0 ? "red" : "emerald",
-      value: tracked.length ? signed(t.deviationToDate) : "—",
-      badge: tracked.length ? signedPct(t.deviationToDatePct) : null,
-      badgeTone: num(t.deviationToDatePct) > DEVIATION_ALERT_PCT ? "red" : num(t.deviationToDate) > 0 ? "amber" : "emerald",
-      body: tracked.length
-        ? meter([{ value: Math.min(realizedVsExpected, 100), tone: num(t.deviationToDate) > 0 ? "red" : "blue" }], { marker: 100 / Math.max(realizedVsExpected / 100, 1), title: "Realizado face ao esperado" })
-        : `<div class="ov-kpi-compare"><span>Nenhuma obra com avanço registado</span></div>`,
-      foot: tracked.length
-        ? `Gasto ${compact(trackedRealized)} de ${compact(t.expectedCost)} esperado · ${tracked.length} obra${tracked.length === 1 ? "" : "s"}${untracked ? ` · ${untracked} sem avanço` : ""}`
-        : "Registe o avanço físico nas obras",
-    },
-    {
-      key: "eac",
-      label: "Custo final previsto",
-      icon: "flag",
-      tone: num(t.eacDeviation) > 0 ? "amber" : "blue",
-      value: compact(t.eac),
-      badge: num(t.eacDeviation) > 0 ? signedPct(t.eacDeviationPct) : "No orçamento",
-      badgeTone: num(t.eacDeviation) > 0 ? "red" : "emerald",
-      body: `
-        <div class="ov-kpi-compare">
-          <span>Orçamento de custo ${esc(compact(t.forecastCost))}</span>
-        </div>`,
-      foot: num(t.eacDeviation) > 0 ? `${signed(t.eacDeviation)} acima do orçamento` : "Realizado + comprometido dentro do orçamento",
-    },
-    {
-      key: "cash",
-      label: "Caixa das obras",
-      icon: "account_balance_wallet",
-      tone: cashNet >= 0 ? "violet" : "red",
-      value: signed(cashNet),
-      body: `
-        <div class="ov-kpi-compare">
-          <span>Recebido ${esc(compact(t.received))} − pago ${esc(compact(t.realizedCost))}</span>
-        </div>`,
-      foot: num(t.revenue) > 0 ? `${pct((num(t.received) / num(t.revenue)) * 100)} do faturado recebido` : "Sem faturação",
-    },
-  ];
-  document.getElementById("ctrlKpis").innerHTML = kpiCardsHtml(cards, "ctrl");
-}
-
-function renderStrip() {
-  const t = state.data.totals || {};
-  const executed = num(t.saleForecast) > 0 ? (num(t.revenue) / num(t.saleForecast)) * 100 : 0;
-  const consumed = num(t.forecastCost) > 0 ? ((num(t.realizedCost) + num(t.committedCost)) / num(t.forecastCost)) * 100 : 0;
-  document.getElementById("ctrlStrip").innerHTML = stripHtml([
-    { label: "Venda prevista", icon: "request_quote", value: compact(t.saleForecast), sub: "Tabela de quantidades", title: money(t.saleForecast) },
-    { label: "Faturado", icon: "receipt_long", value: compact(t.revenue), sub: `${pct(executed)} da venda`, href: "/Financeiro/faturacao", title: money(t.revenue) },
-    { label: "Por faturar", icon: "pending_actions", value: compact(t.toInvoice), sub: "Venda ainda por faturar", subTone: num(t.toInvoice) > 0 ? "warn" : null, title: money(t.toInvoice) },
-    { label: "Orçamento de custo", icon: "account_tree", value: compact(t.forecastCost), sub: "Centros de custo", title: money(t.forecastCost) },
-    { label: "Custo realizado", icon: "payments", value: compact(t.realizedCost), sub: `IVA dedutível ${compact(num(t.realizedCost) - num(t.realizedCostBase))}`, href: "/Financeiro/custos/realizados", title: money(t.realizedCost) },
-    { label: "Comprometido", icon: "hourglass_top", value: compact(t.committedCost), sub: `${pct(consumed)} do orçamento usado`, subTone: consumed > 100 ? "neg" : null, href: "/Financeiro/contas?tab=pagar", title: money(t.committedCost) },
-  ]);
-}
-
-/* ─── Alertas ─────────────────────────────────────────────────────────────── */
-
-function buildAlerts() {
-  const alerts = [];
-  (state.data.byProject || []).forEach((p) => {
-    const name = p.project.name;
-    if (isTracked(p) && num(p.deviationToDatePct) > DEVIATION_ALERT_PCT) {
-      alerts.push({
-        tone: "red",
-        icon: "trending_up",
-        weight: num(p.deviationToDate),
-        title: `${name}: custo acima do avanço`,
-        text: `${signed(p.deviationToDate)} (${signedPct(p.deviationToDatePct)}) face ao esperado para ${pct(p.progressPct, 0)} de avanço`,
-        project: name,
-      });
-    }
-    if (num(p.eacDeviation) > 0 && num(p.eacDeviationPct) > DEVIATION_ALERT_PCT) {
-      alerts.push({
-        tone: "red",
-        icon: "flag",
-        weight: num(p.eacDeviation),
-        title: `${name}: vai ultrapassar o orçamento`,
-        text: `Realizado + comprometido ${compact(p.eac)} · ${signed(p.eacDeviation)} acima`,
-        project: name,
-      });
-    }
-    if (num(p.revenue) > 0 && num(p.saleForecast) > 0 && num(p.plannedMarginPct) - num(p.marginBase) > MARGIN_GAP_ALERT) {
-      alerts.push({
-        tone: "amber",
-        icon: "percent",
-        weight: num(p.revenue),
-        title: `${name}: margem abaixo da prevista`,
-        text: `Realizada ${pct(p.marginBase)} contra ${pct(p.plannedMarginPct)} prevista`,
-        project: name,
-      });
-    }
-    if (num(p.realizedCost) > 0 && num(p.forecastCost) <= 0) {
-      alerts.push({
-        tone: "amber",
-        icon: "account_tree",
-        weight: num(p.realizedCost),
-        title: `${name}: custos sem orçamento`,
-        text: `${compact(p.realizedCost)} gastos sem orçamento de custo nos centros de custo`,
-        project: name,
-      });
-    } else if (num(p.realizedCost) > 0 && p.progressSource === "SEM_AVANCO") {
-      alerts.push({
-        tone: "amber",
-        icon: "construction",
-        weight: num(p.realizedCost) / 2,
-        title: `${name}: sem avanço registado`,
-        text: `${compact(p.realizedCost)} gastos — registe o avanço físico para medir o desvio`,
-        project: name,
-      });
-    }
-    if (num(p.revenue) > 0 && num(p.saleForecast) <= 0) {
-      alerts.push({
-        tone: "amber",
-        icon: "request_quote",
-        weight: num(p.revenue) / 4,
-        title: `${name}: faturação sem venda prevista`,
-        text: `${compact(p.revenue)} faturados sem tabela de quantidades nem valor global`,
-        project: name,
-      });
-    }
-  });
-  return alerts.sort((a, b) => (a.tone === b.tone ? b.weight - a.weight : a.tone === "red" ? -1 : 1));
-}
-
-function renderAlerts() {
-  const alerts = buildAlerts();
-  const list = document.getElementById("ctrlAlerts");
-  if (!alerts.length) {
-    list.innerHTML = `<li class="ov-empty"><span class="material-symbols-outlined">verified</span>Tudo dentro do previsto.</li>`;
-    return;
-  }
-  const shown = alerts.slice(0, 5);
-  list.innerHTML =
-    shown
-      .map(
-        (a) => `
-      <li>
-        <a class="ov-alert ov-alert--${a.tone}" href="#ctrlTableCard" data-project="${esc(a.project)}">
-          <span class="ov-alert-icon"><span class="material-symbols-outlined">${a.icon}</span></span>
-          <span class="ov-alert-text">
-            <strong>${esc(a.title)}</strong>
-            <span title="${esc(a.text)}">${esc(a.text)}</span>
-          </span>
-          <span class="material-symbols-outlined ov-alert-go">chevron_right</span>
-        </a>
-      </li>`
-      )
-      .join("") +
-    (alerts.length > shown.length ? `<li class="ov-table-more">+${alerts.length - shown.length} avisos na tabela abaixo</li>` : "");
-
-  list.querySelectorAll("[data-project]").forEach((a) =>
-    a.addEventListener("click", () => {
-      state.query = a.dataset.project;
-      state.scope = "all";
-      document.getElementById("ctrlSearch").value = state.query;
-      document.querySelectorAll("#ctrlScope button").forEach((b) => b.classList.toggle("active", b.dataset.scope === "all"));
-      renderTable();
-    })
-  );
-}
-
-/* ─── Gráficos ────────────────────────────────────────────────────────────── */
-
-function renderMonthly() {
-  const monthly = (state.data.charts?.monthly || []).slice(-state.months);
-  const sum = (key) => monthly.reduce((a, m) => a + num(m[key]), 0);
-  const invoiced = sum("invoiced");
-  const received = sum("received");
-  const cost = sum("cost");
-  document.getElementById("ctrlFlowTotals").innerHTML = [
-    { label: "Faturado", value: invoiced, tone: "blue" },
-    { label: "Recebido", value: received, tone: "emerald" },
-    { label: "Custo", value: cost, tone: "red" },
-    { label: "Resultado", value: invoiced - cost, tone: invoiced - cost >= 0 ? "emerald" : "red" },
-  ]
-    .map(
-      (c) => `
-      <div class="ov-flow-total">
-        <span><i class="ov-dot ov-dot--${c.tone}"></i>${c.label}</span>
-        <strong class="${c.label === "Resultado" ? `ov-${toneOf(c.value)}` : ""}">${esc(compact(c.value))}</strong>
-      </div>`
-    )
-    .join("");
-
-  let running = 0;
-  drawComboChart("ctrlChartMonthly", {
-    categories: monthly.map((m) => m.label),
-    height: 280,
-    series: [
-      { name: "Faturado", type: "column", data: monthly.map((m) => num(m.invoiced)), color: TONES.blue },
-      { name: "Recebido", type: "column", data: monthly.map((m) => num(m.received)), color: TONES.emerald },
-      { name: "Custo", type: "column", data: monthly.map((m) => num(m.cost)), color: TONES.red },
-      {
-        name: "Resultado acumulado",
-        type: "line",
-        data: monthly.map((m) => {
-          running += num(m.invoiced) - num(m.cost);
-          return Math.round(running);
-        }),
-        color: TONES.violet,
-      },
-    ],
-  });
-}
-
-function shortName(p) {
-  const name = p.project.name || p.project.code || "—";
-  return name.length > 28 ? `${name.slice(0, 27)}…` : name;
-}
-
-function renderCharts() {
-  renderMonthly();
-
-  const tracked = (state.data.byProject || [])
-    .filter(isTracked)
-    .sort((a, b) => Math.abs(num(b.deviationToDate)) - Math.abs(num(a.deviationToDate)))
-    .slice(0, 8);
-  drawBarChart("ctrlChartDeviation", {
-    categories: tracked.map(shortName),
-    horizontal: true,
-    stacked: true,
-    height: Math.max(220, tracked.length * 44 + 90),
-    series: [
-      { name: "Acima do esperado", data: tracked.map((p) => Math.max(num(p.deviationToDate), 0)), color: TONES.red },
-      { name: "Abaixo do esperado", data: tracked.map((p) => Math.min(num(p.deviationToDate), 0)), color: TONES.emerald },
-    ],
-  });
-
-  const billed = (state.data.byProject || [])
-    .filter((p) => num(p.revenue) > 0 || num(p.saleForecast) > 0)
-    .sort((a, b) => num(b.saleForecast) + num(b.revenue) - (num(a.saleForecast) + num(a.revenue)))
-    .slice(0, 8);
-  drawBarChart("ctrlChartMargins", {
-    categories: billed.map(shortName),
-    height: 300,
-    percent: true,
-    series: [
-      { name: "Margem prevista", data: billed.map((p) => (num(p.saleForecast) > 0 ? num(p.plannedMarginPct) : 0)), color: "#c4b5fd" },
-      { name: "Margem realizada", data: billed.map((p) => (num(p.revenue) > 0 ? num(p.marginBase) : 0)), color: TONES.violet },
-    ],
   });
 }
 
@@ -620,11 +290,7 @@ function renderTable() {
 async function load() {
   try {
     state.data = await apiRequest("/finance/control");
-    renderKpis();
-    renderStrip();
-    renderAlerts();
     renderTable();
-    renderCharts();
   } catch (err) {
     const wrap = document.getElementById("ctrlTable");
     if (wrap) wrap.innerHTML = `<div class="ov-empty ov-empty--lg">Falha ao carregar: ${esc(err.message)}</div>`;
