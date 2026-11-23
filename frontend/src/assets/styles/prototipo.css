@@ -501,18 +501,12 @@ body {
   border-color: #b9e3cb;
   background: var(--pt-good-bg);
   color: var(--pt-brand);
+  padding: 3px 7px;
 }
 
-.pexp-duvidas span {
-  display: inline-grid;
-  place-items: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--pt-brand);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
+.pexp-duvidas .material-symbols-outlined {
+  font-size: 17px;
+  line-height: 1;
 }
 
 .pexp-st { font-size: 12px; color: var(--pt-muted); }

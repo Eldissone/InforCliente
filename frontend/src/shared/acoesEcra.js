@@ -520,7 +520,7 @@ function ligarEventos() {
 /** O HTML dos botões: «← Voltar» à parte, e o grupo Dúvidas · PDF · Word. */
 export const VOLTAR_HTML = `<button type="button" class="pexp-voltar" data-pexp="voltar"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">arrow_back</span> Voltar</button>`;
 export const ACOES_HTML = `<div class="pexp">
-  <button type="button" class="pexp-b pexp-duvidas" data-pexp="duvidas" title="Tirar dúvidas sobre o funcionamento desta página"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">help</span> Dúvidas</button>
+  <button type="button" class="pexp-b pexp-duvidas" data-pexp="duvidas" title="Tirar dúvidas sobre o funcionamento desta página" aria-label="Dúvidas"><span class="material-symbols-outlined">help</span></button>
   <button type="button" class="pexp-b" data-pexp="pdf" title="Gerar este ecrã em PDF, em papel timbrado da MBT"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">download</span> PDF</button>
   <button type="button" class="pexp-b" data-pexp="docx" title="Gerar este ecrã em Word, em papel timbrado da MBT"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">download</span> Word</button>
   <span class="pexp-st" id="pexpSt"></span>
