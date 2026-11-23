@@ -2169,7 +2169,7 @@ async function renderCartoes() {
     lead: "O cartão fica disponível para várias obras. Não fica preso a uma obra só.",
     submitLabel: "Guardar cartão",
     topLink: {
-      href: "/Financeiro/tesouraria/atm",
+      href: "/Financeiro/contas-cartoes",
       label: "Tesouraria & Cartões",
       icon: "credit_card",
     },

@@ -141,7 +141,6 @@ const APP_MENU = [
           { label: "Despesas sem Comprovativo", icon: "receipt", href: "/Financeiro/despesas-sem-comprovativo", perm: "financeiro:view" },
           { label: "Mapa de Obrigações", icon: "table_chart", href: "/Financeiro/mapa-obrigacoes", perm: "financeiro:view" },
           { label: "Conta Corrente de Fornecedores", icon: "account_box", href: "/compras/conta-corrente-fornecedores" },
-          { label: "Contas a Pagar", icon: "pending_actions", href: "/Financeiro/contas?tab=pagar", perm: "financeiro:view" },
           { label: "Pagamentos a Fornecedor", icon: "north_east", href: "/Financeiro/tesouraria/pagamentos", perm: "financeiro:view" },
         ],
       },
@@ -152,12 +151,7 @@ const APP_MENU = [
           { label: "Centro de Recebimentos", icon: "post_add", href: "/Financeiro/faturacao/registar", perm: "financeiro:view" },
           { label: "Calendário de Recebimentos", icon: "event_available", href: "/Financeiro/calendario?ver=receber", perm: "financeiro:view" },
           { label: "Autos de Medição", icon: "straighten", href: "/Financeiro/autos-medicao", perm: "financeiro:view" },
-          { label: "Mapa de Recebimentos", icon: "table_chart", href: "/Financeiro/mapa-recebimentos", perm: "financeiro:view" },
           { label: "Conta Corrente de Clientes", icon: "account_box", href: "/Financeiro/conta-corrente", perm: "financeiro:view" },
-          { label: "Contas a Receber", icon: "pending_actions", href: "/Financeiro/contas?tab=receber", perm: "financeiro:view" },
-          { label: "Faturação Prevista", icon: "event_upcoming", href: "/Financeiro/faturacao/prevista", perm: "financeiro:view" },
-          { label: "Resumo Faturas vs Previsão", icon: "compare_arrows", href: "/Financeiro/faturacao/resumo", perm: "financeiro:view" },
-          { label: "Recebimentos do Cliente", icon: "south_west", href: "/Financeiro/tesouraria/recebimentos", perm: "financeiro:view" },
         ],
       },
       {
@@ -192,8 +186,6 @@ const APP_MENU = [
           { label: "Contas e Cartões", icon: "credit_card", href: "/Financeiro/contas-cartoes", perm: "financeiro:view" },
           { label: "Alocação de Cartões", icon: "badge", href: "/Financeiro/alocacao-cartoes", perm: "financeiro:view" },
           { label: "Fundo de Maneio", icon: "savings", href: "/Financeiro/fundo-maneio", perm: "financeiro:view" },
-          { label: "Transferências Internas", icon: "swap_horiz", href: "/Financeiro/tesouraria/transferencias", perm: "financeiro:view" },
-          { label: "Levantamentos ATM", icon: "local_atm", href: "/Financeiro/tesouraria/atm", perm: "financeiro:view" },
         ],
       },
       {
@@ -201,8 +193,6 @@ const APP_MENU = [
         icon: "payments",
         children: [
           { label: "Custos da Empresa", icon: "task_alt", href: "/Financeiro/custos/realizados", perm: "financeiro:view" },
-          { label: "Overview Custos", icon: "monitoring", href: "/Financeiro/custos/overview", perm: "financeiro:view" },
-          { label: "Registar Custos", icon: "receipt_long", href: "/Financeiro/custos/registar", perm: "financeiro:view" },
         ],
       },
       {

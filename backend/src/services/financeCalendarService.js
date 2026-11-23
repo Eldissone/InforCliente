@@ -133,7 +133,7 @@ function fromOpenMeasurements(reports, hoje, prazoDias) {
       sub: nomeObra(r.project),
       grupo: "Previstos (autos ainda sem fatura)",
       estado: "prev",
-      link: "/Financeiro/faturacao/prevista",
+      link: "/Financeiro/autos-medicao",
     }));
 }
 

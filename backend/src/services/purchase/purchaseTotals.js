@@ -184,8 +184,30 @@ function itemRowForDb(item, index = 0) {
     withholdingPercent: item?.withholdingPercent ?? null,
     discountPercent: item?.discountPercent ?? null,
     docException: item?.docException || null,
+    code: item?.code ? String(item.code).trim() || null : null,
+    lineSupplierName: item?.lineSupplierName ? String(item.lineSupplierName).trim() || null : null,
     order: index,
   };
+}
+
+/**
+ * As parcelas acordadas na requisição (Crédito em Parcelas): `typeData.parcelas`
+ * = [{ data: "AAAA-MM-DD", valor }]. Devolve as prestações a gravar, ou null se
+ * não houver pelo menos duas parcelas válidas que somem o total (±0,5).
+ */
+function parcelasAcordadas(typeData, total) {
+  const L = Array.isArray(typeData?.parcelas) ? typeData.parcelas : [];
+  if (L.length < 2) return null;
+  const out = [];
+  for (const [i, p] of L.entries()) {
+    const data = String(p?.data || "").slice(0, 10);
+    const valor = round2(N(p?.valor));
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(data) || !(valor > 0)) return null;
+    out.push({ number: i + 1, amount: valor, dueDate: data });
+  }
+  const soma = round2(out.reduce((s, p) => s + p.amount, 0));
+  if (!(N(total) > 0) || Math.abs(soma - N(total)) > 0.5) return null;
+  return out;
 }
 
 /** Quanto já foi pago, pelas prestações liquidadas. */
@@ -368,4 +390,5 @@ module.exports = {
   shortDescription,
   splitInstallments,
   decorateOrder,
+  parcelasAcordadas,
 };

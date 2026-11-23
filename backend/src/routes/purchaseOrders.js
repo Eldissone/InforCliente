@@ -397,6 +397,53 @@ purchaseRouter.get(
   })
 );
 
+/**
+ * Crédito em Parcelas: as parcelas que se acordaram na requisição (datas e
+ * valores) passam a ser o plano de pagamento, sem esperar pelo Centro de
+ * Pagamentos. Só enquanto nada foi pago — depois o plano refaz-se à mão.
+ * Devolve true se gravou.
+ */
+async function gravarParcelasAcordadas(order) {
+  if (!order || order.paymentTerm !== "PARCIAL") return false;
+  const total = PT.orderTotals(order).total;
+  const parts = PT.parcelasAcordadas(order.typeData, total);
+  if (!parts) return false;
+  const plan = await prisma.purchasePaymentPlan.findUnique({
+    where: { purchaseOrderId: order.id },
+    include: { installments: true },
+  });
+  if (plan && plan.installments.some((i) => i.status === "PAGO")) return false;
+  const currency = order.currency || "AOA";
+  const installments = parts.map((p) => ({
+    number: p.number,
+    amount: p.amount,
+    currency,
+    dueDate: new Date(`${p.dueDate}T00:00:00Z`),
+  }));
+  await prisma.$transaction(async (tx) => {
+    if (plan) {
+      await tx.purchasePaymentInstallment.deleteMany({ where: { paymentPlanId: plan.id } });
+      await tx.purchasePaymentPlan.update({
+        where: { id: plan.id },
+        data: { totalValue: total, currency, status: "PENDENTE", installments: { create: installments } },
+      });
+    } else {
+      await tx.purchasePaymentPlan.create({
+        data: {
+          purchaseOrderId: order.id,
+          totalValue: total,
+          currency,
+          status: "PENDENTE",
+          notes: `${parts.length} parcelas acordadas na requisição`,
+          installments: { create: installments },
+        },
+      });
+    }
+    await tx.purchaseOrder.update({ where: { id: order.id }, data: { dueDate: installments[0].dueDate } });
+  });
+  return true;
+}
+
 // ─── POST /purchase-orders — Criar pedido ─────────────────────────────────────
 const createOrderSchema = z.object({
   type: z.enum(["PEDIDO", "ORCAMENTO"]).default("PEDIDO"),
@@ -438,6 +485,8 @@ const createOrderSchema = z.object({
         withholdingPercent: z.number().min(0).max(100).optional().nullable(),
         discountPercent: z.number().min(0).max(100).optional().nullable(),
         docException: z.enum(["DSC", "AF"]).optional().nullable(),
+        code: z.string().optional().nullable(),
+        lineSupplierName: z.string().optional().nullable(),
       })
     )
     .default([]),
@@ -555,6 +604,7 @@ purchaseRouter.post(
       include: PURCHASE_ORDER_INCLUDE,
     });
 
+    await gravarParcelasAcordadas(order);
     await logAction(req, { action: "CREATE_PURCHASE_ORDER", purchaseOrderId: order.id });
     if (order.status === "PENDENTE_APROVACAO") notifyOrderForApproval(req, order);
     if (order.requiresQuote) {
@@ -692,6 +742,10 @@ purchaseRouter.patch(
     });
 
     if (order.status !== "PENDENTE_APROVACAO" && updated.status === "PENDENTE_APROVACAO") notifyOrderForApproval(req, updated);
+    if (await gravarParcelasAcordadas(updated)) {
+      const fresh = await prisma.purchaseOrder.findUnique({ where: { id: updated.id }, include: PURCHASE_ORDER_INCLUDE });
+      return res.json(mapOrder(fresh));
+    }
     return res.json(mapOrder(updated));
   })
 );

@@ -5,8 +5,20 @@ import { can } from "../permissions.js";
 import { escapeFinanceHtml as esc } from "../financePage.js";
 import { compactMoney as compact, destroyCharts } from "./charts.js";
 import { num, skeletonHtml, stripHtml } from "./widgets.js";
-import { dueChip } from "./contasRecebimentos.js";
 import { canPayHere, openPayModal } from "./payModal.js";
+
+/** Chip de prazo: vencida há N dias, vence hoje / em N dias (e «estimado» sem data registada). */
+function dueChip(days, { estimated = false } = {}) {
+  const est = estimated
+    ? `<span class="inv-due inv-due--est" title="Sem vencimento registado: data do documento + 30 dias">estimado</span>`
+    : "";
+  if (days === null || days === undefined) return est;
+  if (estimated) return `<span class="inv-due-chips">${dueChip(days)}${est}</span>`;
+  if (days > 0) return `<span class="inv-due inv-due--late">há ${days} d</span>`;
+  if (days === 0) return `<span class="inv-due inv-due--today">hoje</span>`;
+  if (days >= -7) return `<span class="inv-due inv-due--soon">em ${Math.abs(days)} d</span>`;
+  return `<span class="ac-due-ok">em ${Math.abs(days)} d</span>`;
+}
 
 /**
  * Ecrã «Centro de Pagamentos» — a fila de trabalho de quem paga.

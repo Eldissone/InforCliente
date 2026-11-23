@@ -396,7 +396,7 @@ function movementState(m) {
   if (m.movementType === "RECEBIMENTO_CLIENTE") {
     return m.receiptLink?.state === "LIGADO"
       ? receiptStateHtml(m)
-      : `<a href="/Financeiro/tesouraria/recebimentos" title="Ligar em Recebimentos do Cliente">${receiptStateHtml(m)}</a>`;
+      : `<a href="/Financeiro/faturacao/registar" title="Ligar no Centro de Recebimentos">${receiptStateHtml(m)}</a>`;
   }
   if (isIncoming(m)) return `<span class="finance-chip finance-chip--slate">${m.movementType === "OUTRO" ? "Indicar tipo" : "Entrada"}</span>`;
   return costStatusHtml(m);

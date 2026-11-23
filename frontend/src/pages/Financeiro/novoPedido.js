@@ -34,8 +34,7 @@ function returnToUrl() {
 }
 
 function wireBackLink() {
-    const link = document.querySelector(".pf-back");
-    if (link) link.href = returnToUrl();
+    for (const link of document.querySelectorAll(".pf-back, #btnCancelNovoPedido")) link.href = returnToUrl();
 }
 
 function showToast(msg, type = "info") {
@@ -228,8 +227,8 @@ async function onSubmit(e) {
                 ? (number ? `Pedido ${number} actualizado` : "Pedido actualizado")
                 : number
                     ? (requiresQuote
-                        ? `Pedido ${number} criado e enviado para Cotação`
-                        : `Pedido ${number} criado com sucesso`)
+                        ? `Requisição ${number} criada e enviada às Compras para cotação`
+                        : `Requisição ${number} submetida para aprovação`)
                     : "Pedido criado com sucesso",
             "success"
         );
@@ -237,7 +236,7 @@ async function onSubmit(e) {
     } catch (err) {
         showToast(apiError(err), "error");
     } finally {
-        setSubmitLabel(isEdit ? "Guardar alterações" : "Salvar Pedido");
+        setSubmitLabel(isEdit ? "Guardar alterações" : "Submeter para aprovação");
     }
 }
 
@@ -295,8 +294,6 @@ async function startEditPedido(id) {
         resetPedidoForm();
         await fillPedidoForm(order);
 
-        const title = document.getElementById("pedidoPageTitle");
-        if (title) title.textContent = `Editar ${order.number || "pedido"}`;
         document.title = `Info Gestor — ${order.number || "Editar pedido"}`;
         setSubmitLabel("Guardar alterações");
 
@@ -347,8 +344,6 @@ async function startEditExtra(extraId) {
             costCategoryId: extra.costCategoryId,
         });
 
-        const title = document.getElementById("pedidoPageTitle");
-        if (title) title.textContent = `Editar ${order.number}`;
         document.title = `Info Gestor — ${order.number}`;
         setSubmitLabel("Guardar alterações");
     } catch (err) {

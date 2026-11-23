@@ -1969,6 +1969,11 @@ model PurchaseOrderItem {
   vatPercent         Decimal? @db.Decimal(5, 2)
   withholdingPercent Decimal? @db.Decimal(5, 2)
   discountPercent    Decimal? @db.Decimal(5, 2)
+  /// Código do produto do catálogo (o «Código» da requisição de pagamento)
+  code               String?
+  /// Fornecedor da linha, quando a requisição é por fundo de maneio (TRF INT):
+  /// cada item pode ser comprado a um fornecedor diferente.
+  lineSupplierName   String?
   /// Excepção documental: sem comprovativo (DSC) ou autofaturação (AF)
   docException       PurchaseDocException?
   /// P3: decisão do financeiro sobre a linha sem comprovativo — null (por

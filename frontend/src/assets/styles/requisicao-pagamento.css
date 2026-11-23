@@ -1,0 +1,142 @@
+/* ==========================================================================
+   Requisição de Pagamento — o formulário «rpf» do protótipo (versão 624).
+   Valores medidos no protótipo com getComputedStyle: secções com borda de
+   10px, títulos em Barlow Semi Condensed 14px, campos de 30px com a barra à
+   esquerda (amarela nos campos escritos, azul nas escolhas), segmentos com o
+   activo a verde, tabela com cabeçalho cinzento.
+   ========================================================================== */
+
+.rq-page {
+  background: var(--pt-bg, #f6f7f9);
+  color: var(--pt-fg, #1f2937);
+  font-family: var(--pt-body, "Source Sans 3", "Segoe UI", sans-serif);
+}
+
+.rq-wrap {
+  width: 100%;
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 18px 18px 96px;
+  font-size: 13px;
+}
+
+.hidden { display: none !important; }
+
+/* ── Cabeçalho ── */
+.rq-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.rq-kick { color: var(--pt-brand, #168a5a); font: 600 13px var(--pt-display, "Barlow Semi Condensed", sans-serif); letter-spacing: .78px; }
+.rq-title { font: 600 24.8px/1.2 var(--pt-display, "Barlow Semi Condensed", sans-serif); color: var(--pt-fg, #1f2937); margin: 2px 0; }
+.rq-sub { color: var(--pt-muted, #667085); font-size: 12px; }
+
+/* ── Secções ── */
+.rq-sec { border: .8px solid var(--pt-line, #e3e7ec); border-radius: 10px; padding: 10px 12px; margin: 0 0 8px; background: var(--pt-surface, #fff); }
+.rq-sec > h3, .rq-sec h3 { font: 600 14px var(--pt-display, "Barlow Semi Condensed", sans-serif); color: #1b2736; margin: 0 0 6px; }
+.rq-h3flex { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rq-h3acts { margin-left: auto; display: flex; gap: 10px; }
+.rq-h3left .rq-seg { margin-left: 0; }
+.rq-top { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+.rq-dt { display: inline-flex; gap: 6px; align-items: center; color: var(--pt-muted, #667085); font-size: 12.5px; }
+.rq-dt .rq-in { width: 150px; }
+
+/* ── Campos ── */
+.rq-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px 10px; margin-bottom: 6px; }
+.rq-f { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rq-f > span:first-child { font-size: 11.5px; color: var(--pt-muted, #667085); }
+.rq-w2 { grid-column: span 2; }
+.rq-full { grid-column: 1 / -1; }
+.rq-req { color: var(--pt-bad, #c2352b); font-weight: 600; }
+.rq-in {
+  height: 30.4px; width: 100%; box-sizing: border-box;
+  border: .8px solid var(--pt-line-in, #d5dbe3); border-radius: 4px;
+  padding: 4px 6px; font: inherit; font-size: 13px; background: #fff; color: inherit;
+  box-shadow: inset 3px 0 0 #e9c46a;
+}
+select.rq-in { box-shadow: inset 3px 0 0 #8fb3e0; }
+textarea.rq-in { height: auto; min-height: 44px; resize: vertical; }
+.rq-in:focus { outline: 2px solid rgba(31, 163, 106, .25); border-color: var(--pt-brand2, #1fa36a); }
+.rq-in.rq-bad { border-color: #c2412f; }
+.rq-in[readonly] { background: var(--pt-surface2, #f1f4f7); }
+.rq-r { text-align: right; }
+.rq-inline { display: flex; gap: 6px; align-items: center; }
+.rq-inline > .rq-ac, .rq-inline > .rq-in { flex: 1; min-width: 0; }
+.rq-muted { color: var(--pt-muted, #667085); font-size: 12px; margin: 4px 0; }
+.rq-narrow { max-width: 260px; }
+.rq-note { font-size: 12px; color: #3b4a5a; background: #eef4fb; border: .8px solid #cfdcec; border-radius: 6px; padding: 6px 9px; margin: 4px 0 8px; }
+.rq-obs { margin-top: 10px; }
+
+/* ── Botões e segmentos ── */
+.rq-btn {
+  display: inline-flex; align-items: center; gap: 4px; cursor: pointer; text-decoration: none;
+  background: #fff; border: .8px solid var(--pt-line, #e3e7ec); border-radius: 6px;
+  padding: 6px 11px; font: inherit; font-size: 13px; color: inherit; white-space: nowrap;
+}
+.rq-btn:hover { background: var(--pt-surface2, #f1f4f7); }
+.rq-btn.rq-pri { background: var(--pt-brand, #168a5a); border-color: var(--pt-brand, #168a5a); color: #fff; font-weight: 600; }
+.rq-btn.rq-pri:hover { background: #12774d; }
+.rq-btn:disabled { opacity: .6; cursor: default; }
+.rq-lnk { background: none; border: 0; padding: 0; cursor: pointer; color: var(--pt-brand, #168a5a); font: inherit; font-size: 12.5px; font-weight: 600; }
+.rq-lnk:hover { text-decoration: underline; }
+.rq-seg { display: inline-flex; border: .8px solid var(--pt-line-in, #d1d5db); border-radius: 8px; overflow: hidden; vertical-align: middle; background: #fff; }
+.rq-seg button { border: 0; background: transparent; padding: 5px 12px; font: inherit; font-size: 12.5px; cursor: pointer; color: inherit; }
+.rq-seg button + button { border-left: .8px solid var(--pt-line-in, #d1d5db); }
+.rq-seg button.on { background: #1fa36a; color: #fff; font-weight: 600; }
+.rq-seg button:disabled:not(.on) { opacity: .45; cursor: not-allowed; }
+.rq-acts { display: flex; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
+
+/* ── Tabelas ── */
+.rq-table { width: 100%; border-collapse: collapse; }
+.rq-table th { background: #f2f4f6; color: var(--pt-muted, #667085); font-size: 11.5px; font-weight: 600; padding: 7px 6px; text-align: left; }
+.rq-table th.rq-r { text-align: right; }
+.rq-table td { padding: 3px 6px; border-bottom: .8px solid var(--pt-line, #e3e7ec); vertical-align: top; }
+.rq-table td .rq-in { min-width: 0; }
+.rq-tot td { background: #f7f8fa; font-weight: 600; padding: 6px; }
+.rq-items .rq-cell-tot { text-align: right; padding-top: 9px; font-variant-numeric: tabular-nums; }
+.rq-norf .rq-x { display: none; }
+.rq-items:not(.rq-fm) .rq-colforn { display: none; }
+.rq-rowacts { display: flex; gap: 4px; align-items: center; justify-content: flex-end; padding-top: 3px; }
+.rq-obsbtn { border: .8px solid var(--pt-line, #e3e7ec); background: #fff; border-radius: 4px; font-size: 11px; padding: 2px 6px; cursor: pointer; color: var(--pt-muted, #667085); }
+.rq-obsbtn.on { color: var(--pt-brand, #168a5a); border-color: var(--pt-brand2, #1fa36a); }
+.rq-del { background: none; border: 0; cursor: pointer; color: var(--pt-muted, #667085); font-size: 15px; line-height: 1; padding: 2px 4px; }
+.rq-del:hover { color: var(--pt-bad, #c2352b); }
+.rq-sublnk { font-size: 11.5px; color: var(--pt-brand, #168a5a); background: none; border: 0; padding: 2px 0 0; cursor: pointer; }
+.rq-detail td { background: #fafbfc; }
+.rq-detail .rq-grid { margin: 4px 0; }
+.rq-totline { display: flex; justify-content: flex-end; align-items: baseline; gap: 22px; flex-wrap: wrap; margin-top: 10px; font-size: 12.5px; color: var(--pt-muted, #667085); }
+.rq-totline b { color: var(--pt-fg, #1f2937); font-variant-numeric: tabular-nums; }
+.rq-totline .rq-big b { font-size: 16px; }
+.rq-dist td { padding: 4px 6px; }
+.rq-dist .rq-ok { color: var(--pt-good, #1d8a55); }
+.rq-dist .rq-warn, .rq-parc .rq-warn { color: var(--pt-warn, #a86800); }
+.rq-parc { max-width: 760px; margin: 6px 0; }
+.rq-parc .rq-in { max-width: 180px; }
+.rq-parc td.rq-r .rq-in { margin-left: auto; text-align: right; }
+
+/* ── Autocompletar ── */
+.rq-ac { position: relative; }
+.rq-sug {
+  position: absolute; z-index: 40; left: 0; right: 0; top: calc(100% + 2px);
+  background: #fff; border: .8px solid var(--pt-line-in, #d5dbe3); border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .12); max-height: 260px; overflow: auto;
+}
+.rq-sug button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 6px 9px; cursor: pointer; font: inherit; font-size: 12.5px; }
+.rq-sug button:hover, .rq-sug button.on { background: #eef7f2; }
+.rq-sug small { color: var(--pt-muted, #667085); margin-left: 6px; }
+.rq-sug .rq-sug-empty { padding: 6px 9px; color: var(--pt-muted, #667085); font-size: 12px; }
+
+/* ── Novo produto (dentro do formulário) ── */
+.rq-mini { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px 10px; align-items: end; border: .8px dashed var(--pt-line-in, #d5dbe3); border-radius: 8px; padding: 8px 10px; margin: 6px 0; background: #fbfcfd; }
+.rq-mini-acts { display: flex; gap: 6px; }
+
+/* ── Documentos ── */
+.rq-drop { display: flex; align-items: center; gap: 10px; padding: 4px 0; border-radius: 8px; }
+.rq-drop.is-dragover { outline: 2px dashed var(--pt-brand2, #1fa36a); outline-offset: 4px; }
+
+/* ── Rodapé ── */
+.rq-foot { display: flex; justify-content: flex-end; gap: 8px; border-top: .8px solid var(--pt-line, #e3e7ec); padding-top: 12px; margin-top: 12px; }
+
+@media (max-width: 720px) {
+  .rq-wrap { padding: 12px 12px 96px; }
+  .rq-w2 { grid-column: auto; }
+  .rq-items { display: block; overflow-x: auto; }
+  .rq-totline { justify-content: flex-start; gap: 12px; }
+}

@@ -350,7 +350,7 @@ function renderStrip(items) {
       value: String(noDoc.length),
       valueTone: noDoc.length ? "warn" : null,
       sub: noDoc.length ? `${compact(noDoc.reduce((a, c) => a + num(c.paidAmount), 0))} sem documento` : "tudo documentado",
-      href: "/Financeiro/custos/registar?view=missingDoc",
+      href: "/Financeiro/despesas-sem-comprovativo",
     },
   ]);
 }

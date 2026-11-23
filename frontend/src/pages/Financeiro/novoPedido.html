@@ -4,8 +4,8 @@
 <head>
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-    <title>Info Gestor — Novo Pedido de Compra</title>
-    <meta name="description" content="Criar ou editar um pedido de compra.">
+    <title>Info Gestor — Requisição de Pagamento</title>
+    <meta name="description" content="Criar ou editar uma requisição de pagamento.">
     <meta name="theme-color" content="#ffffff">
     <link rel="icon" href="../../assets/icon/favicon.ico" type="image/x-icon">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -22,113 +22,166 @@
     <link href="/assets/styles/pedido-form.css" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="/assets/styles/prototipo.css" rel="stylesheet" />
+    <link href="/assets/styles/requisicao-pagamento.css" rel="stylesheet" />
 </head>
 
-<body data-shell="figma" class="pf-page min-h-screen font-inter flex flex-col">
+<body data-shell="figma" class="pf-page rq-page min-h-screen flex flex-col">
 
     <div id="appHeader"></div>
     <main class="flex-1 w-full pt-16">
-        <form id="formNovoPedido" class="pf-container">
+        <form id="formNovoPedido" class="rq-wrap" novalidate>
             <input type="hidden" id="ccPedidoEditId" value="">
             <input type="hidden" id="ccPedidoExtraId" value="">
+            <!-- Campos que o protótipo não mostra, mas que o pedido guarda -->
+            <select id="ccPedidoType" class="hidden" aria-hidden="true" tabindex="-1">
+                <option value="SEDE">Geral</option>
+                <option value="OBRA">Obra</option>
+                <option value="FROTA">Frota e Equipamentos</option>
+                <option value="IMPOSTOS">Impostos</option>
+                <option value="PESSOAL">Pessoal</option>
+                <option value="EMPRESTIMO">Empréstimo</option>
+            </select>
+            <input type="hidden" id="ccPedidoPriority" value="NORMAL">
+            <input type="hidden" id="ccPedidoSolicitante" value="">
+            <input type="hidden" id="ccPedidoData" value="">
+            <input type="hidden" id="ccPedidoDesc" value="">
+            <select id="ccExtraCostCenterId" class="hidden" aria-hidden="true" tabindex="-1"><option value=""></option></select>
+            <select id="ccPedidoCondicao" class="hidden" aria-hidden="true" tabindex="-1">
+                <option value="PRONTO">Pronto Pagamento</option>
+                <option value="CREDITO">Crédito Total</option>
+                <option value="PARCIAL">Crédito em Parcelas</option>
+            </select>
+            <input type="checkbox" id="ccPedidoRequerCotacao" class="hidden" aria-hidden="true" tabindex="-1">
 
-            <a href="/Financeiro/centro-pagamentos" class="pf-back">
-                <span class="material-symbols-outlined">arrow_back</span>
-                Voltar
-            </a>
-
-            <h1 id="pedidoPageTitle" class="pf-title">Novo Pedido de Compra</h1>
-
-            <!-- ═══ Classificação ═══ -->
-            <div class="filter flex w-full justify-between items-center">
-                <div class="pf-selects-row">
-                    <div class="pf-field">
-                        <label class="pf-label pf-label--lg" for="ccPedidoType">Tipo</label>
-                        <select id="ccPedidoType" class="pf-select" required>
-                            <option value="SEDE">Pedido geral (sede)</option>
-                            <option value="OBRA">Pedido para obra</option>
-                            <option value="FROTA">Frota e equipamentos</option>
-                            <option value="IMPOSTOS">Impostos</option>
-                            <option value="PESSOAL">Pessoal</option>
-                            <option value="EMPRESTIMO">Empréstimo</option>
-                        </select>
-                    </div>
-                    <div class="pf-field">
-                        <label class="pf-label pf-label--lg" for="ccPedidoPriority">Prioridade</label>
-                        <select id="ccPedidoPriority" class="pf-select" required>
-                            <option value="NORMAL">Normal</option>
-                            <option value="ALTA">Alta</option>
-                            <option value="URGENTE">Urgente</option>
-                        </select>
-                    </div>
+            <!-- ═══ Cabeçalho ═══ -->
+            <div class="rq-head">
+                <div>
+                    <div class="rq-kick" id="rqKicker">NOVA REQUISIÇÃO DE PAGAMENTO</div>
+                    <h1 id="pedidoPageTitle" class="rq-title">Requisição de Pagamento</h1>
+                    <div class="rq-sub" id="rqSub">N.º atribuído ao submeter · pedido por —</div>
                 </div>
-
-                <div class="pf-selects-row">
-                    <div class="pf-field">
-                        <label class="pf-label pf-label--lg" for="ccCentroGeralId">Centro Geral</label>
-                        <select id="ccCentroGeralId" class="pf-select">
-                            <option value="">selecione centro geral</option>
-                        </select>
-                    </div>
-                    <div class="pf-field">
-                        <label class="pf-label pf-label--lg" for="ccExtraCostCategoryId">Categorias</label>
-                        <select id="ccExtraCostCategoryId" class="pf-select">
-                            <option value="">selecione primeiro o centro geral</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-            <div class="pf-selects-row">
-                <div id="cc_rowObraProject" class="pf-field hidden">
-                    <label class="pf-label pf-label--lg" for="ccExtraProjectId">Projecto (Obra)</label>
-                    <select id="ccExtraProjectId" class="pf-select">
-                        <option value="">Seleccione projecto...</option>
-                    </select>
-                </div>
-                <div id="cc_rowFrota" class="pf-field hidden">
-                    <label class="pf-label pf-label--lg" for="ccPedidoViatura">Viatura / equipamento</label>
-                    <input id="ccPedidoViatura" type="text" class="pf-input"
-                        placeholder="Matrícula ou identificação">
-                </div>
-                <div id="cc_rowObraCenter" class="pf-field hidden">
-                    <label class="pf-label pf-label--lg" for="ccExtraCostCenterId">Centro de Custo (Obra)</label>
-                    <select id="ccExtraCostCenterId" class="pf-select">
-                        <option value="">Seleccione centro...</option>
-                    </select>
-                </div>
+                <a href="/Financeiro/centro-pagamentos" class="rq-btn pf-back" id="btnFecharPedido">Fechar</a>
             </div>
 
-            <div id="cc_rowCostDetailDesc" class="pf-field hidden" style="max-width:680px">
-                <label class="pf-label" for="ccExtraCostDetailDesc">Descrição Detalhe</label>
-                <textarea id="ccExtraCostDetailDesc" rows="2" class="pf-textarea"
-                    placeholder="Detalhe adicional..."></textarea>
-            </div>
-            <input type="hidden" id="ccExtraCostCategorySelectedId">
+            <!-- ═══ Tipo de requisição + data do pedido ═══ -->
+            <section class="rq-sec rq-top">
+                <span class="rq-seg" id="rqTipoSeg" role="group" aria-label="Tipo de requisição">
+                    <button type="button" data-tipo="GO">Geral / Obra</button><button type="button" data-tipo="FROTA">Frota e Equipamentos</button><button type="button" data-tipo="EMPRESTIMO">Empréstimo</button><button type="button" data-tipo="PESSOAL" class="hidden">Pessoal</button><button type="button" data-tipo="IMPOSTOS" class="hidden">Impostos</button>
+                </span>
+                <label class="rq-dt">Data do pedido <input id="rqDataPedido" type="date" class="rq-in"></label>
+            </section>
 
-            <!-- ═══ Descrição do pedido ═══ -->
-            <div class="pf-grid pf-grid--2">
-                <div class="pf-field">
-                    <label class="pf-label" for="ccPedidoDesc">Resumo / Descrição do Pedido *</label>
-                    <input id="ccPedidoDesc" type="text" required class="pf-input"
-                        placeholder="Ex: Aquisição de material de escritório">
-                </div>
-                <div class="pf-field">
-                    <label class="pf-label" for="ccPedidoJust">Justificação</label>
-                    <input id="ccPedidoJust" type="text" class="pf-input" placeholder="Motivo da compra">
-                </div>
-            </div>
+            <!-- ═══ Dados da Requisição ═══ -->
+            <section class="rq-sec" id="rqDados">
+                <h3>Dados da Requisição</h3>
 
-            <!-- ═══ Dados próprios dos tipos sem itens ═══ -->
-            <section id="cc_blockImpostos" class="hidden pf-section pf-section--pad">
-                <h2 class="pf-card-title">
-                    <span class="material-symbols-outlined">account_balance</span>
-                    Impostos
-                </h2>
-                <p class="pf-hint">O beneficiário é a AGT. Este tipo não leva itens: o valor é o que se escreve aqui.</p>
-                <div class="pf-grid pf-grid--2">
-                    <div class="pf-field">
-                        <label class="pf-label" for="ccImpTipo">Imposto *</label>
-                        <select id="ccImpTipo" class="pf-select">
+                <div id="cc_rowFrota" class="rq-grid hidden">
+                    <label class="rq-f rq-w2"><span>Viatura / equipamento <b class="rq-req">*</b></span>
+                        <input id="ccPedidoViatura" type="text" class="rq-in" placeholder="matrícula ou identificação" autocomplete="off">
+                    </label>
+                    <label class="rq-f"><span>Natureza do custo <b class="rq-req">*</b></span>
+                        <select id="rqFrotaNatureza" class="rq-in">
+                            <option value="">— selecionar —</option>
+                            <option>Manutenção Preventiva</option>
+                            <option>Manutenção Corretiva</option>
+                            <option>Seguro</option>
+                            <option>Outros Custos</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div id="rqPagRow" class="rq-grid">
+                    <label class="rq-f"><span>Tipo de Pagamento <b class="rq-req">*</b></span>
+                        <select id="ccPedidoModo" class="rq-in">
+                            <option value="">— escolher —</option>
+                            <option value="FORN">PF – Pagamento a Fornecedor</option>
+                            <option value="FM">TRF INT – Fundo de Maneio</option>
+                        </select>
+                    </label>
+                    <label class="rq-f" id="rqCotRow"><span>Requer cotação? <b class="rq-req">*</b></span>
+                        <select id="rqCotSel" class="rq-in">
+                            <option value="">— escolher —</option>
+                            <option value="N">Não</option>
+                            <option value="S">Sim</option>
+                        </select>
+                    </label>
+                    <label class="rq-f"><span>Moeda</span>
+                        <select id="ccPedidoMoeda" class="rq-in">
+                            <option value="AOA">AOA</option>
+                            <option value="USD">USD</option>
+                            <option value="EUR">EUR</option>
+                        </select>
+                    </label>
+                    <label class="rq-f rq-w2 hidden" id="cc_rowFundo"><span>Conta do fundo de maneio <b class="rq-req">*</b></span>
+                        <select id="ccPedidoFundId" class="rq-in">
+                            <option value="">— escolher —</option>
+                        </select>
+                    </label>
+                </div>
+                <p id="rqCotHint" class="rq-note hidden">Com cotação, a requisição vai primeiro às <b>Compras</b>
+                    (Compras › Requisições a cotar). As Compras escolhem o fornecedor, preenchem os preços e anexam a
+                    proforma; só depois chega ao Financeiro para aprovação. O fornecedor e os preços podem ficar por
+                    preencher agora.</p>
+
+                <div id="cc_extraSupplierBlock" class="rq-grid">
+                    <div class="rq-f rq-w2"><span>Terceiro <b class="rq-req" id="rqTercReq">*</b></span>
+                        <div class="rq-inline">
+                            <div class="rq-ac">
+                                <input id="rqTerceiro" type="text" class="rq-in" autocomplete="off"
+                                    placeholder="escreva para procurar na base de terceiros">
+                                <div class="rq-sug hidden" id="rqTerceiroSug"></div>
+                            </div>
+                            <button type="button" class="rq-btn" id="rqCriarTerceiro">+ Criar terceiro</button>
+                        </div>
+                        <input type="hidden" id="ccExtraSupplierId">
+                        <input type="hidden" id="ccExtraSupplierName">
+                    </div>
+                    <div class="rq-f"><span>NIF</span>
+                        <span class="rq-inline">
+                            <input id="ccExtraSupplierNif" type="text" class="rq-in" inputmode="numeric" autocomplete="off">
+                            <button type="button" id="btnCcConsultarNif" class="rq-btn hidden">Consultar NIF</button>
+                        </span>
+                        <small id="ccExtraSupplierNifStatus" class="hidden"></small>
+                    </div>
+                    <span></span>
+                    <label class="rq-f rq-w2"><span>IBAN do terceiro</span>
+                        <input id="ccExtraSupplierIban" type="text" class="rq-in" autocomplete="off">
+                    </label>
+                    <label class="rq-f"><span>Banco do terceiro</span>
+                        <input id="rqTercBanco" type="text" class="rq-in" autocomplete="off">
+                    </label>
+                </div>
+
+                <!-- Empréstimo -->
+                <div id="cc_blockEmprestimo" class="rq-grid hidden">
+                    <div class="rq-f rq-w2"><span>Empresa / terceiro <b class="rq-req">*</b></span>
+                        <div class="rq-ac">
+                            <input id="ccEmpPor" type="text" class="rq-in" autocomplete="off" placeholder="⌕ procurar">
+                            <div class="rq-sug hidden" id="rqEmpSug"></div>
+                        </div>
+                        <small class="rq-muted">empresas do grupo aparecem primeiro</small>
+                    </div>
+                    <label class="rq-f"><span>Valor <b class="rq-req">*</b></span>
+                        <input id="ccEmpValor" type="number" step="0.01" min="0" class="rq-in rq-r">
+                    </label>
+                    <label class="rq-f"><span>Data limite <b class="rq-req">*</b></span>
+                        <input id="ccEmpLimite" type="date" class="rq-in">
+                    </label>
+                    <label class="rq-f rq-w2"><span>Conta do terceiro para pagamento</span>
+                        <input id="ccEmpIban" type="text" class="rq-in" placeholder="AO06…">
+                    </label>
+                    <label class="rq-f rq-w2"><span>Finalidade <b class="rq-req">*</b></span>
+                        <input id="ccEmpFim" type="text" class="rq-in">
+                    </label>
+                    <input type="hidden" id="ccEmpModo" value="TRANSFERENCIA">
+                    <input type="hidden" id="ccEmpPrest" value="">
+                </div>
+
+                <!-- Impostos -->
+                <div id="cc_blockImpostos" class="rq-grid hidden">
+                    <p class="rq-note rq-full">O beneficiário é a AGT. Este tipo não leva itens: o valor é o que se escreve aqui.</p>
+                    <label class="rq-f"><span>Imposto <b class="rq-req">*</b></span>
+                        <select id="ccImpTipo" class="rq-in">
                             <option value="IVA">IVA</option>
                             <option value="IRT">IRT</option>
                             <option value="Imposto Industrial">Imposto Industrial</option>
@@ -136,326 +189,155 @@
                             <option value="Imposto de Selo">Imposto de Selo</option>
                             <option value="Outro">Outro</option>
                         </select>
-                    </div>
-                    <div class="pf-field">
-                        <label class="pf-label" for="ccImpMes">Mês de referência *</label>
-                        <input id="ccImpMes" type="month" class="pf-input">
-                    </div>
-                    <div class="pf-field">
-                        <label class="pf-label" for="ccImpRupe">RUPE</label>
-                        <input id="ccImpRupe" type="text" class="pf-input" placeholder="Referência para pagamento">
-                    </div>
-                    <div class="pf-field">
-                        <label class="pf-label" for="ccImpLimite">Data-limite</label>
-                        <input id="ccImpLimite" type="date" class="pf-input">
-                    </div>
-                    <div class="pf-field">
-                        <label class="pf-label" for="ccImpValor">Valor *</label>
-                        <input id="ccImpValor" type="number" step="0.01" min="0" class="pf-input" placeholder="0.00">
-                    </div>
+                    </label>
+                    <label class="rq-f"><span>Mês de referência <b class="rq-req">*</b></span>
+                        <input id="ccImpMes" type="month" class="rq-in">
+                    </label>
+                    <label class="rq-f"><span>RUPE</span>
+                        <input id="ccImpRupe" type="text" class="rq-in" placeholder="referência para pagamento">
+                    </label>
+                    <label class="rq-f"><span>Data-limite</span>
+                        <input id="ccImpLimite" type="date" class="rq-in">
+                    </label>
+                    <label class="rq-f"><span>Valor <b class="rq-req">*</b></span>
+                        <input id="ccImpValor" type="number" step="0.01" min="0" class="rq-in rq-r">
+                    </label>
                 </div>
-            </section>
 
-            <section id="cc_blockPessoal" class="hidden pf-section pf-section--pad">
-                <h2 class="pf-card-title">
-                    <span class="material-symbols-outlined">groups</span>
-                    Pessoal
-                </h2>
-                <p class="pf-hint">Uma linha por colaborador. O valor do pedido é a soma das linhas.</p>
-                <div class="pf-grid pf-grid--2">
-                    <div class="pf-field">
-                        <label class="pf-label" for="ccPesSub">Natureza *</label>
-                        <select id="ccPesSub" class="pf-select">
-                            <option value="Salários">Salários</option>
-                            <option value="Adiantamento">Adiantamento</option>
-                            <option value="Ajudas de custo">Ajudas de custo</option>
-                            <option value="Subsídio">Subsídio</option>
-                            <option value="Outro">Outro</option>
-                        </select>
+                <!-- Pessoal -->
+                <div id="cc_blockPessoal" class="hidden">
+                    <div class="rq-grid">
+                        <label class="rq-f"><span>Natureza <b class="rq-req">*</b></span>
+                            <select id="ccPesSub" class="rq-in">
+                                <option value="Salários">Salários</option>
+                                <option value="Adiantamento">Adiantamento</option>
+                                <option value="Ajudas de custo">Ajudas de custo</option>
+                                <option value="Subsídio">Subsídio</option>
+                                <option value="Outro">Outro</option>
+                            </select>
+                        </label>
+                        <label class="rq-f"><span>Mês <b class="rq-req">*</b></span>
+                            <input id="ccPesMes" type="month" class="rq-in">
+                        </label>
                     </div>
-                    <div class="pf-field">
-                        <label class="pf-label" for="ccPesMes">Mês *</label>
-                        <input id="ccPesMes" type="month" class="pf-input">
-                    </div>
-                </div>
-                <div class="pf-table-head">
-                    <span class="pf-label">Colaboradores</span>
-                    <button type="button" id="btnCCAddPessoa" class="pf-btn-link">
-                        <span class="material-symbols-outlined">add</span>
-                        Acrescentar colaborador
-                    </button>
-                </div>
-                <div class="pf-table-scroll">
-                    <table class="pf-table" id="ccPessoalTable">
-                        <thead>
-                            <tr>
-                                <th style="width:46%">Nome</th>
-                                <th style="width:32%">IBAN</th>
-                                <th class="pf-th-right" style="width:18%">Valor</th>
-                                <th style="width:44px"></th>
-                            </tr>
-                        </thead>
+                    <table class="rq-table" id="ccPessoalTable">
+                        <thead><tr><th>Nome</th><th>IBAN</th><th class="rq-r">Valor</th><th></th></tr></thead>
                         <tbody id="ccPessoalBody"></tbody>
+                        <tfoot><tr class="rq-tot"><td colspan="2"><button type="button" id="btnCCAddPessoa" class="rq-lnk">+ Colaborador</button></td>
+                            <td class="rq-r">Total <span id="ccPessoalTotal">0,00</span></td><td></td></tr></tfoot>
                     </table>
                 </div>
-                <p class="pf-hint" style="text-align:right">Total das linhas: kz <span id="ccPessoalTotal">0.00</span></p>
             </section>
 
-            <section id="cc_blockEmprestimo" class="hidden pf-section pf-section--pad">
-                <h2 class="pf-card-title">
-                    <span class="material-symbols-outlined">payments</span>
-                    Empréstimo
-                </h2>
-                <div class="pf-grid pf-grid--2">
-                    <div class="pf-field">
-                        <label class="pf-label" for="ccEmpPor">Solicitante *</label>
-                        <input id="ccEmpPor" type="text" class="pf-input" placeholder="Quem pede">
-                    </div>
-                    <div class="pf-field">
-                        <label class="pf-label" for="ccEmpModo">Modo de entrega</label>
-                        <select id="ccEmpModo" class="pf-select">
-                            <option value="TRANSFERENCIA">Transferência</option>
-                            <option value="DINHEIRO">Dinheiro</option>
-                            <option value="DESCONTO_SALARIO">Desconto no salário</option>
-                        </select>
-                    </div>
-                    <div class="pf-field">
-                        <label class="pf-label" for="ccEmpValor">Valor *</label>
-                        <input id="ccEmpValor" type="number" step="0.01" min="0" class="pf-input" placeholder="0.00">
-                    </div>
-                    <div class="pf-field">
-                        <label class="pf-label" for="ccEmpIban">IBAN</label>
-                        <input id="ccEmpIban" type="text" class="pf-input" placeholder="AO06 ...">
-                    </div>
-                    <div class="pf-field">
-                        <label class="pf-label" for="ccEmpPrest">Prestações</label>
-                        <input id="ccEmpPrest" type="number" min="1" max="24" step="1" class="pf-input" placeholder="1">
-                    </div>
-                    <div class="pf-field">
-                        <label class="pf-label" for="ccEmpFim">Finalidade</label>
-                        <input id="ccEmpFim" type="text" class="pf-input" placeholder="Para que é">
-                    </div>
+            <!-- ═══ Itens a Requisitar ═══ -->
+            <section class="rq-sec" id="ccItemsSection">
+                <h3 class="rq-h3flex">Itens a Requisitar
+                    <span class="rq-h3acts">
+                        <button type="button" class="rq-lnk" id="rqMaisBtn">mostrar RF e desconto</button>
+                    </span>
+                </h3>
+                <table class="rq-table rq-items rq-norf" id="ccItemsTable">
+                    <thead>
+                        <tr>
+                            <th style="width:110px">Código</th>
+                            <th>Descrição</th>
+                            <th class="rq-colforn" style="width:18%">Fornecedor <b class="rq-req">*</b></th>
+                            <th style="width:62px">Un.</th>
+                            <th class="rq-r" style="width:72px">Qtd.</th>
+                            <th class="rq-r" style="width:120px">V. unit.</th>
+                            <th class="rq-r" style="width:64px">IVA %</th>
+                            <th class="rq-r rq-x" style="width:60px">RF %</th>
+                            <th class="rq-r rq-x" style="width:64px">Desc. %</th>
+                            <th class="rq-r" style="width:110px">Total s/ IVA</th>
+                            <th style="width:78px"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="ccItemsBody"></tbody>
+                </table>
+                <p id="rqFmNote" class="rq-note hidden">Sem IBAN (paga-se com o cartão). Feita a transferência, cada item passa a pagamento a fornecedor já pago.</p>
+                <div class="rq-acts">
+                    <button type="button" id="btnCCAddItem" class="rq-btn">+ Adicionar item</button>
+                    <button type="button" id="rqCriarProduto" class="rq-btn">+ Criar produto / serviço</button>
                 </div>
+                <div id="rqNovoProduto" class="rq-mini hidden">
+                    <label class="rq-f rq-w2"><span>Nome do produto / serviço <b class="rq-req">*</b></span><input id="rqNpNome" class="rq-in"></label>
+                    <label class="rq-f"><span>Código</span><input id="rqNpCod" class="rq-in" placeholder="opcional"></label>
+                    <label class="rq-f"><span>Unidade</span>
+                        <select id="rqNpUn" class="rq-in"><option>UN</option><option>KG</option><option>M</option><option>L</option><option>CX</option><option>PAR</option><option>MT2</option><option>MT3</option></select></label>
+                    <label class="rq-f"><span>Tipo</span>
+                        <select id="rqNpCat" class="rq-in"><option value="MATERIAL">Material / serviço</option><option value="CONSUMABLE">Consumível</option><option value="TOOL">Ferramenta</option><option value="EQUIPMENT">Equipamento</option></select></label>
+                    <span class="rq-mini-acts"><button type="button" class="rq-btn rq-pri" id="rqNpGravar">Criar</button> <button type="button" class="rq-btn" id="rqNpCancelar">Cancelar</button></span>
+                </div>
+                <label class="rq-f rq-obs"><span>Observações do pedido</span>
+                    <textarea id="ccPedidoJust" rows="2" class="rq-in" placeholder="informação adicional para quem aprova ou paga (opcional)"></textarea>
+                </label>
+                <div id="ccTotalsWrap" class="rq-totline">
+                    <span class="hidden"><span id="ccPedidoTotal_iliquido">0,00</span><span id="ccPedidoTotal_descontos">0,00</span></span>
+                    <span>Total s/ IVA <b id="ccPedidoTotal_liquido">0,00</b></span>
+                    <span>IVA <b id="ccPedidoTotal_iva">0,00</b></span>
+                    <span>Retenção na fonte <b id="ccPedidoTotal_retencao">0,00</b></span>
+                    <span class="rq-big">Total a pagar <b><span id="ccPedidoTotal_doc">0,00</span> <span class="rq-moeda">AOA</span></b></span>
+                </div>
+                <p class="rq-muted">IVA e RF podem ser alterados em cada linha.</p>
             </section>
 
-            <!-- ═══ Fornecedor + Datas ═══ -->
-            <div class="pf-grid pf-grid--12">
-                <div class="pf-card pf-col-8">
-                    <h2 class="pf-card-title pf-card-title--divided">
-                        <span class="material-symbols-outlined">store</span>
-                        Informações do fornecedor
-                    </h2>
+            <!-- ═══ Centros de Custo (Geral / Obra) ═══ -->
+            <section class="rq-sec" id="rqCentros">
+                <h3 class="rq-h3flex">Centros de Custo
+                    <span class="rq-seg rq-h3acts" id="rqDistModo"><button type="button" data-m="pct" class="on">%</button><button type="button" data-m="val">Valor</button></span>
+                </h3>
+                <table class="rq-table rq-dist"><tbody id="rqDistBody"></tbody></table>
+            </section>
 
-                    <div class="pf-field">
-                        <label class="pf-label" for="ccPedidoSolicitante">Solicitante *</label>
-                        <input id="ccPedidoSolicitante" type="text" required class="pf-input">
-                    </div>
-
-                    <label class="pf-checkbox">
-                        <input id="ccPedidoRequerCotacao" type="checkbox" checked>
-                        <span>
-                            <span class="pf-checkbox-label">Pedido requer cotação (Requisição formal com
-                                proforma)</span>
-                            <span class="pf-hint">Se marcado, o fornecedor e a origem de pagamento são preenchidos na
-                                requisição. Caso contrário, preencha-os neste pedido.</span>
-                        </span>
+            <!-- ═══ Condições de Pagamento ═══ -->
+            <section class="rq-sec" id="rqCond">
+                <h3 class="rq-h3flex rq-h3left"><span id="rqCondTitulo">Condições de Pagamento</span>
+                    <span class="rq-seg" id="rqCondSeg"><button type="button" data-c="PRONTO">Pronto Pagamento</button><button type="button" data-c="CREDITO">Crédito Total</button><button type="button" data-c="PARCIAL">Crédito em Parcelas</button></span>
+                </h3>
+                <div id="cc_rowPronto" class="rq-grid">
+                    <label class="rq-f"><span>Data limite de pagamento <b class="rq-req">*</b></span>
+                        <input id="ccPedidoDataPretendida" type="date" class="rq-in">
                     </label>
-
-                    <div id="cc_extraSupplierBlock" class="hidden pf-grid pf-grid--2">
-                        <div id="ccSupplierRow" class="pf-col-full pf-grid pf-grid--2">
-                            <div class="pf-field">
-                                <label class="pf-label" for="ccExtraSupplierId">Nome do Fornecedor</label>
-                                <select id="ccExtraSupplierId" class="pf-select">
-                                    <option value="">Select a supplier...</option>
-                                </select>
-                            </div>
-                            <div class="pf-field">
-                                <label class="pf-label" for="ccExtraSupplierNif">NIF</label>
-                                <div class="flex gap-2">
-                                    <input id="ccExtraSupplierNif" type="text" inputmode="numeric" autocomplete="off"
-                                        class="pf-input" placeholder="e.g. 501234567">
-                                    <button type="button" id="btnCcConsultarNif" class="pf-btn-inline">Consultar
-                                        NIF</button>
-                                </div>
-                                <p id="ccExtraSupplierNifStatus" class="hidden text-[11px] font-semibold"></p>
-                            </div>
-                            <div class="pf-field pf-col-full">
-                                <label class="pf-label" for="ccExtraSupplierName">Nome registado</label>
-                                <input id="ccExtraSupplierName" type="text" class="pf-input"
-                                    placeholder="Preenchido após consulta do NIF">
-                            </div>
-                        </div>
-                    </div>
-
-                    <div id="cc_extraPaymentBlock" class="hidden pf-grid pf-grid--2">
-                        <div class="pf-field pf-col-full">
-                            <label class="pf-label" for="ccExtraSource">Origem do Pagamento</label>
-                            <select id="ccExtraSource" class="pf-select">
-                                <option value="SOLICITACAO_TRANSFERENCIA">Transferência para o fornecedor</option>
-                                <option value="CARTAO">Cartão multibanco</option>
-                            </select>
-                        </div>
-                        <div id="ccIbanRow" class="pf-field pf-col-full">
-                            <label class="pf-label" for="ccExtraSupplierIban">IBAN do fornecedor *</label>
-                            <input id="ccExtraSupplierIban" type="text" class="pf-input" placeholder="AO06 ...">
-                        </div>
-                        <div id="ccCardRow" class="pf-field pf-col-full hidden">
-                            <label class="pf-label" for="ccExtraCardId">Cartão multibanco *</label>
-                            <select id="ccExtraCardId" class="pf-select">
-                                <option value="">Seleccione o cartão...</option>
-                            </select>
-                        </div>
-                    </div>
                 </div>
-
-                <div class="pf-card pf-col-4">
-                    <h2 class="pf-card-title pf-card-title--divided">
-                        <span class="material-symbols-outlined">calendar_month</span>
-                        Datas e Pagamento
-                    </h2>
-                    <div class="pf-field">
-                        <label class="pf-label" for="ccPedidoData">Data prevista de entrega</label>
-                        <input id="ccPedidoData" type="date" class="pf-input">
-                    </div>
-                    <div class="pf-field">
-                        <label class="pf-label" for="ccPedidoModo">Modo de pagamento</label>
-                        <select id="ccPedidoModo" class="pf-select">
-                            <option value="FORN">Transferência ao fornecedor</option>
-                            <option value="FM">Fundo de maneio</option>
-                        </select>
-                    </div>
-                    <div id="cc_rowFundo" class="pf-field hidden">
-                        <label class="pf-label" for="ccPedidoFundId">Fundo de maneio *</label>
-                        <select id="ccPedidoFundId" class="pf-select">
-                            <option value="">Seleccione o fundo...</option>
-                        </select>
-                    </div>
-                    <div class="pf-field">
-                        <label class="pf-label" for="ccPedidoCondicao">Condição de pagamento</label>
-                        <select id="ccPedidoCondicao" class="pf-select">
-                            <option value="PRONTO">Pronto pagamento</option>
-                            <option value="CREDITO">Crédito</option>
-                            <option value="PARCIAL">Prestações</option>
-                        </select>
-                    </div>
-                    <div id="cc_rowPronto" class="pf-field">
-                        <label class="pf-label" for="ccPedidoDataPretendida">Data pretendida de pagamento</label>
-                        <input id="ccPedidoDataPretendida" type="date" class="pf-input">
-                    </div>
-                    <div id="cc_rowCredito" class="pf-field hidden">
-                        <label class="pf-label" for="ccPedidoDiasCredito">Dias de crédito *</label>
-                        <input id="ccPedidoDiasCredito" type="number" min="0" max="365" step="1" class="pf-input"
-                            placeholder="30">
-                        <p id="ccPedidoVencimentoHint" class="pf-hint"></p>
-                    </div>
-                    <div id="cc_rowParcial" class="pf-field hidden">
-                        <label class="pf-label" for="ccPedidoPrestacoes">Número de prestações *</label>
-                        <input id="ccPedidoPrestacoes" type="number" min="2" max="24" step="1" class="pf-input"
-                            placeholder="3">
-                        <p class="pf-hint">Iguais, de 30 em 30 dias a partir da data pretendida.</p>
-                    </div>
+                <div id="cc_rowCredito" class="rq-grid hidden">
+                    <label class="rq-f"><span>Prazo de crédito (dias)</span>
+                        <input id="ccPedidoDiasCredito" type="number" min="0" max="365" step="1" class="rq-in rq-r">
+                    </label>
+                    <label class="rq-f"><span>Data de Vencimento do Crédito <b class="rq-req">*</b></span>
+                        <input id="rqVencimento" type="date" class="rq-in">
+                    </label>
                 </div>
-            </div>
+                <div id="cc_rowParcial" class="hidden">
+                    <div class="rq-grid">
+                        <label class="rq-f"><span>N.º de parcelas acordadas</span>
+                            <input id="ccPedidoPrestacoes" type="number" min="2" max="24" step="1" class="rq-in rq-r" value="2">
+                        </label>
+                    </div>
+                    <p class="rq-muted rq-narrow">2, 3, 4… — cada parcela aparece como uma linha no centro de pagamentos, com o mesmo n.º de requisição</p>
+                    <table class="rq-table rq-parc">
+                        <thead><tr><th>Parcela</th><th>Data de pagamento</th><th class="rq-r">Valor</th></tr></thead>
+                        <tbody id="rqParcelasBody"></tbody>
+                        <tfoot><tr class="rq-tot"><td colspan="2">Total das parcelas</td><td class="rq-r" id="rqParcTotal">0,00</td></tr></tfoot>
+                    </table>
+                    <button type="button" class="rq-btn" id="rqParcIguais">Repartir em partes iguais</button>
+                </div>
+            </section>
 
-            <!-- ═══ Anexos ═══ -->
-            <section id="ccAttachmentsCard" class="hidden pf-section pf-section--pad">
-                <h2 class="pf-card-title">
-                    <span class="material-symbols-outlined">description</span>
-                    Anexos de documentos
-                </h2>
-                <p class="pf-hint">Anexe a proforma, facturas, orçamentos ou outros ficheiros PDF/imagem de suporte.</p>
-
-                <div id="ccDropzone" class="pf-dropzone" role="button" tabindex="0"
-                    aria-label="Arraste ficheiros ou clique para seleccionar">
-                    <span class="material-symbols-outlined">cloud_upload</span>
-                    <span class="pf-dropzone-text">Arraste os ficheiros para aqui ou clique para seleccionar</span>
+            <!-- ═══ Documentos ═══ -->
+            <section class="rq-sec" id="ccAttachmentsCard">
+                <h3>Documentos</h3>
+                <p class="rq-muted">Nesta fase anexa-se só a <b>proforma / orçamento</b> do fornecedor (opcional). A fatura e o comprovativo anexam-se depois do pagamento.</p>
+                <div id="ccDropzone" class="rq-drop">
+                    <button type="button" id="btnCCAddFile" class="rq-btn rq-pri">📎 Anexar documentos</button>
+                    <span class="rq-muted">ou arraste os ficheiros para aqui</span>
                 </div>
                 <input id="ccAttachmentInput" type="file" accept=".pdf,image/*" multiple class="hidden">
-
-                <button type="button" id="btnCCAddFile" class="pf-btn-link self-start">
-                    <span class="material-symbols-outlined">add</span>
-                    Adicionar ficheiro
-                </button>
-
                 <div id="ccAttachmentList" class="pf-attach-list"></div>
             </section>
 
-            <!-- ═══ Itens ═══ -->
-            <section id="ccItemsSection" class="pf-section">
-                <div class="pf-table-head">
-                    <h2 class="pf-card-title">
-                        <span class="material-symbols-outlined">table_rows</span>
-                        Itens do pedido
-                    </h2>
-                    <button type="button" id="btnCCAddItem" class="pf-btn-link">
-                        <span class="material-symbols-outlined">add</span>
-                        Acrescentar item
-                    </button>
-                </div>
-                <p id="ccItemsToolHint" class="hidden px-4 pt-3 text-[11px] font-semibold"
-                    style="color:var(--pf-brand)">
-                    Ferramentas: escreva para sugerir o catálogo. Se não existir, é criada automaticamente.
-                </p>
-                <div class="pf-table-scroll">
-                    <table class="pf-table" id="ccItemsTable">
-                        <thead>
-                            <tr>
-                                <th style="width:22%">Descrição</th>
-                                <th style="width:7%">Qtd.</th>
-                                <th style="width:6%">Un.</th>
-                                <th style="width:11%">Preço unit.</th>
-                                <th style="width:7%">IVA %</th>
-                                <th style="width:7%">Ret. %</th>
-                                <th style="width:7%">Desc. %</th>
-                                <th style="width:12%">Obs.</th>
-                                <th style="width:10%">Documento</th>
-                                <th class="pf-th-right" style="width:11%">Total da linha</th>
-                                <th style="width:44px"></th>
-                            </tr>
-                        </thead>
-                        <tbody id="ccItemsBody"></tbody>
-                    </table>
-                </div>
-            </section>
-
-            <!-- ═══ Totais ═══ -->
-            <div id="ccTotalsWrap" class="pf-totals-wrap">
-                <dl id="ccPedidoTotalsPanel" class="pf-totals">
-                    <div class="pf-totals-rows">
-                        <div class="pf-totals-row">
-                            <dt>Subtotal</dt>
-                            <dd>kz <span id="ccPedidoTotal_iliquido">0.00</span></dd>
-                        </div>
-                        <div class="pf-totals-row">
-                            <dt>Total Descontos</dt>
-                            <dd>- kz <span id="ccPedidoTotal_descontos">0.00</span></dd>
-                        </div>
-                        <div class="pf-totals-row">
-                            <dt>Total Líquido</dt>
-                            <dd>kz <span id="ccPedidoTotal_liquido">0.00</span></dd>
-                        </div>
-                        <div class="pf-totals-row">
-                            <dt>Total IVA</dt>
-                            <dd>kz <span id="ccPedidoTotal_iva">0.00</span></dd>
-                        </div>
-                        <div class="pf-totals-row">
-                            <dt>Total Retenção</dt>
-                            <dd>kz <span id="ccPedidoTotal_retencao">0.00</span></dd>
-                        </div>
-                    </div>
-                    <div class="pf-totals-grand">
-                        <dt>Total</dt>
-                        <dd>kz <span id="ccPedidoTotal_doc">0.00</span></dd>
-                    </div>
-                </dl>
-            </div>
-
-            <div class="pf-footer">
-                <a href="/Financeiro/centro-pagamentos" id="btnCancelNovoPedido" class="pf-btn-ghost">Cancelar</a>
-                <button type="submit" id="btnSubmitNovoPedido" class="pf-btn-primary">
-                    <span class="material-symbols-outlined">save</span>
-                    <span class="pf-btn-label">Salvar Pedido</span>
-                </button>
+            <div class="rq-foot">
+                <a href="/Financeiro/centro-pagamentos" id="btnCancelNovoPedido" class="rq-btn">Cancelar</a>
+                <button type="submit" id="btnSubmitNovoPedido" class="rq-btn rq-pri"><span class="pf-btn-label">Submeter para aprovação</span></button>
             </div>
         </form>
     </main>

@@ -77,7 +77,7 @@ function resultadoHtml(d) {
   const a = d.anterior || {};
   return kpis([
     { tom: "neu", titulo: "Faturação (s/ IVA)", valor: fmt(r.faturacao), nota: `${r.faturas} fatura(s) · ${vs(r.faturacao, a.faturacao)}`, acao: "/Financeiro/faturacao/registar" },
-    { tom: "good", titulo: "Recebido (c/ IVA)", valor: fmt(r.recebido), nota: `${r.recebimentos} recebimento(s) · ${vs(r.recebido, a.recebido)}`, acao: "/Financeiro/tesouraria/recebimentos" },
+    { tom: "good", titulo: "Recebido (c/ IVA)", valor: fmt(r.recebido), nota: `${r.recebimentos} recebimento(s) · ${vs(r.recebido, a.recebido)}`, acao: "/Financeiro/faturacao/registar" },
     { tom: "warn", titulo: "Custos Pagos", valor: fmt(r.custos), nota: `${r.pagamentos} pagamento(s) · ${vs(r.custos, a.custos)}`, acao: "/Financeiro/centro-pagamentos" },
     { tom: r.cash >= 0 ? "good" : "bad", titulo: "Cash Líquido", valor: fmt(r.cash), nota: "recebido − custos pagos", acao: "/Financeiro/mapa-fluxos" },
   ]);
@@ -89,8 +89,8 @@ function posicaoHtml(d) {
     p.saldo === null
       ? { tom: "neu", titulo: "Saldo Bancário", valor: "—", nota: "as contas não são de uma obra" }
       : { tom: "good", titulo: "Saldo Bancário", valor: fmt(p.saldo), nota: `${p.contas} conta(s)`, acao: "/Financeiro/contas-saldos" },
-    { tom: p.porReceberAtraso > 0.5 ? "warn" : "neu", titulo: "Por Receber de Clientes", valor: fmt(p.porReceber), nota: `${fmt(p.porReceberAtraso)} em atraso`, acao: "/Financeiro/contas?tab=receber" },
-    { tom: p.porPagarAtraso > 0.5 ? "bad" : "neu", titulo: "Por Pagar a Fornecedores", valor: fmt(p.porPagar), nota: `${fmt(p.porPagarAtraso)} em atraso`, acao: "/Financeiro/contas?tab=pagar" },
+    { tom: p.porReceberAtraso > 0.5 ? "warn" : "neu", titulo: "Por Receber de Clientes", valor: fmt(p.porReceber), nota: `${fmt(p.porReceberAtraso)} em atraso`, acao: "/Financeiro/faturacao/registar" },
+    { tom: p.porPagarAtraso > 0.5 ? "bad" : "neu", titulo: "Por Pagar a Fornecedores", valor: fmt(p.porPagar), nota: `${fmt(p.porPagarAtraso)} em atraso`, acao: "/Financeiro/centro-pagamentos" },
     { tom: p.desvio > 0.5 ? "warn" : "good", titulo: "Margem Prevista das Obras", valor: pc(p.margemPct), nota: `${fmt(p.margem)} · desvio de custo ${pc(p.desvioPct)}`, acao: "/Financeiro/controlo" },
   ]);
 }
