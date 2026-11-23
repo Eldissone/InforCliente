@@ -39,6 +39,9 @@ const { costCenterSummary } = require("../services/finance/costCenters");
 const { dscLines, DECISOES: DSC_DECISOES } = require("../services/finance/dsc");
 const OBR = require("../services/finance/projects");
 const DSB = require("../services/finance/dashboard");
+const TAX = require("../services/finance/taxes");
+const CARDS = require("../services/finance/cards");
+const { orderTotals: taxOrderTotals, derivedStatus: taxDerivedStatus } = require("../services/purchase/purchaseTotals");
 const { planear } = require("../services/finance/autosPrevistos");
 
 /** Autos previstos (R3) com a forma dos autos, para a previsão de recebimentos. */
@@ -2371,13 +2374,32 @@ async function loadCalendarItems(hoje, ledgerArg) {
   ]);
   // Os autos previstos (R3) entram como os autos por faturar.
   const previstos = await loadPlannedAsReports();
+  // Os impostos (G1) por pagar e ainda sem pedido: quando têm pedido, é o pedido que conta (não se duplica).
+  const { linhas: taxLinhas } = await loadTaxes(hoje);
+  const impostos = taxLinhas
+    .filter((l) => l.origem === "obrigacao" && !l.pedido && l.estado !== "Pago" && l.valor > 0)
+    .map((l) => ({
+      id: `T:${l.id}`,
+      lado: "P",
+      data: l.limite,
+      estimada: false,
+      valor: l.valor,
+      moeda: "AOA",
+      entidade: "AGT",
+      doc: [l.plano ? `PPP ${l.plano.nome} ${l.plano.prestacao}/${l.plano.prestacoes || "?"}` : l.tipo, l.mes, l.rupe ? `RUPE ${l.rupe}` : null].filter(Boolean).join(" · "),
+      sub: "Impostos",
+      grupo: "Impostos",
+      estado: l.estado === "Atrasado" ? "atr" : "abe",
+      link: "/Financeiro/impostos",
+    }));
   return {
     itens: [
       ...FCAL.fromPayables(payables, hoje),
       ...FCAL.fromReceivables(receivables, hoje),
       ...FCAL.fromOpenMeasurements([...autos, ...previstos], hoje, DEFAULT_INVOICE_TERM_DAYS),
+      ...impostos,
     ],
-    fontes: { pagar: payables.length, faturas: receivables.length, autos: autos.length },
+    fontes: { pagar: payables.length, faturas: receivables.length, autos: autos.length, impostos: impostos.length },
   };
 }
 
@@ -2503,6 +2525,464 @@ financeRoutes.get(
           currency: g.currency || "AOA",
         })),
         F,
+      }),
+    });
+  })
+);
+
+// ─── F-4 Impostos: G1 Impostos, G2 Planos PPP, G3 IVA e Retenções, G4 Mapa Fiscal ───
+
+/** As obrigações, os pedidos IMPOSTOS e os planos, já em linhas do G1. */
+async function loadTaxes(hoje) {
+  const [obrigacoes, pedidosRaw, planos] = await Promise.all([
+    prisma.taxObligation.findMany({ include: { plan: { select: { id: true, name: true, _count: { select: { installments: true } } } } } }),
+    prisma.purchaseOrder.findMany({
+      where: { requestType: "IMPOSTOS", deletedAt: null },
+      select: {
+        id: true,
+        number: true,
+        status: true,
+        onHold: true,
+        deletedAt: true,
+        dueDate: true,
+        typeData: true,
+        totalValue: true,
+        requestType: true,
+        createdAt: true,
+        paymentPlan: { select: { installments: { select: { amount: true, dueDate: true, status: true } } } },
+      },
+    }),
+    prisma.taxPaymentPlan.findMany({ orderBy: { name: "asc" } }),
+  ]);
+  const agora = new Date(`${hoje}T12:00:00`);
+  const pedidos = pedidosRaw
+    .map((o) => ({ ...o, estado: taxDerivedStatus(o, agora).code, total: taxOrderTotals(o).total }))
+    .filter((o) => !["CANCELADO", "REJEITADO", "ELIMINADO"].includes(o.estado));
+  const obs = obrigacoes.map((o) => ({ ...o, plan: o.plan ? { ...o.plan, n: o.plan._count.installments } : null }));
+  return { linhas: TAX.linhasImpostos({ obrigacoes: obs, pedidos, hoje }), planos };
+}
+
+/** G1 Impostos — todas as linhas; o ecrã filtra por mês, grupo, estado e plano. */
+financeRoutes.get(
+  "/taxes",
+  view,
+  asyncHandler(async (_req, res) => {
+    const hoje = todayKeyLocal();
+    const { linhas, planos } = await loadTaxes(hoje);
+    return res.json({
+      hoje,
+      linhas,
+      resumo: TAX.resumoImpostos(linhas),
+      tipos: TAX.TIPOS_FIN,
+      tiposRH: TAX.TIPOS_RH,
+      grupos: TAX.GRUPOS,
+      planos: planos.map((p) => ({ id: p.id, nome: p.name })),
+    });
+  })
+);
+
+/** A data limite habitual de um imposto (`?tipo=&mes=AAAA-MM`). */
+financeRoutes.get(
+  "/taxes/due-date",
+  view,
+  asyncHandler(async (req, res) => res.json({ limite: TAX.limiteAuto(String(req.query.tipo || ""), String(req.query.mes || "")) }))
+);
+
+const taxBody = z.object({
+  tipo: z.string().trim().min(2).max(60),
+  mes: z.string().regex(/^\d{4}-\d{2}$/),
+  limite: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  valor: z.number().min(0),
+  nl: z.string().trim().max(60).nullable().optional(),
+  rupe: z.string().trim().max(60).nullable().optional(),
+  notas: z.string().max(1000).nullable().optional(),
+});
+
+/** G1 › Registo Rápido / + Novo Imposto. */
+financeRoutes.post(
+  "/taxes",
+  edit,
+  asyncHandler(async (req, res) => {
+    const b = taxBody.parse(req.body);
+    const limite = b.limite || TAX.limiteAuto(b.tipo, b.mes);
+    const item = await prisma.taxObligation.create({
+      data: {
+        type: b.tipo,
+        referenceMonth: b.mes,
+        dueDate: limite ? new Date(`${limite}T00:00:00Z`) : null,
+        amount: b.valor,
+        liquidationNote: b.nl || null,
+        rupe: b.rupe || null,
+        notes: b.notas || null,
+        createdBy: req.user?.name || req.user?.email || null,
+      },
+    });
+    return res.status(201).json({ item });
+  })
+);
+
+/** G1 › editar um imposto (e as prestações de um PPP: nota, RUPE). */
+financeRoutes.patch(
+  "/taxes/:id",
+  edit,
+  asyncHandler(async (req, res) => {
+    const b = taxBody.partial().parse(req.body);
+    const data = {};
+    if (b.tipo !== undefined) data.type = b.tipo;
+    if (b.mes !== undefined) data.referenceMonth = b.mes;
+    if (b.limite !== undefined) data.dueDate = b.limite ? new Date(`${b.limite}T00:00:00Z`) : null;
+    if (b.valor !== undefined) data.amount = b.valor;
+    if (b.nl !== undefined) data.liquidationNote = b.nl || null;
+    if (b.rupe !== undefined) data.rupe = b.rupe || null;
+    if (b.notas !== undefined) data.notes = b.notas || null;
+    const item = await prisma.taxObligation.update({ where: { id: String(req.params.id) }, data });
+    return res.json({ item });
+  })
+);
+
+/** G1 › registar como pago fora de um pedido (`{ data, nota }`), ou desfazer (`{ data: null }`). */
+financeRoutes.post(
+  "/taxes/:id/paid",
+  edit,
+  asyncHandler(async (req, res) => {
+    const b = z.object({ data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(), nota: z.string().max(500).nullable().optional() }).parse(req.body);
+    const item = await prisma.taxObligation.update({
+      where: { id: String(req.params.id) },
+      data: { paidAt: b.data ? new Date(`${b.data}T00:00:00Z`) : null, paidNote: b.data ? b.nota || null : null },
+    });
+    return res.json({ item });
+  })
+);
+
+/** G1 › apagar um imposto ainda não pago nem com pedido. */
+financeRoutes.delete(
+  "/taxes/:id",
+  edit,
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const o = await prisma.taxObligation.findUnique({ where: { id } });
+    if (!o) return res.status(404).json({ error: "NOT_FOUND" });
+    const pedido = await prisma.purchaseOrder.findFirst({ where: { requestType: "IMPOSTOS", deletedAt: null, typeData: { path: ["obrigacaoId"], equals: id } }, select: { number: true } });
+    if (o.paidAt || pedido) return res.status(409).json({ error: "EM_USO", errors: [pedido ? `Tem o pedido ${pedido.number}.` : "Já está pago."] });
+    await prisma.taxObligation.delete({ where: { id } });
+    if (o.docPath) await deleteStoredFile(o.docPath).catch(() => null);
+    return res.json({ ok: true });
+  })
+);
+
+/** G1 › anexar a nota de liquidação. */
+financeRoutes.post(
+  "/taxes/:id/document",
+  edit,
+  documentUpload.single("file"),
+  asyncHandler(async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "NO_FILE_UPLOADED", message: "Escolha a nota de liquidação." });
+    const mimeType = String(req.file.mimetype || "").toLowerCase();
+    if (mimeType && !ALLOWED_INVOICE_DOC_MIME.has(mimeType)) return res.status(415).json({ error: "UNSUPPORTED_FILE_TYPE", message: "PDF, JPG, PNG ou WEBP." });
+    const o = await prisma.taxObligation.findUnique({ where: { id: String(req.params.id) }, select: { id: true, docPath: true } });
+    if (!o) return res.status(404).json({ error: "NOT_FOUND" });
+    const extension = path.extname(req.file.originalname || "").toLowerCase() || ".pdf";
+    const docPath = await uploadToSupabase(`finance/impostos/${o.id}/${Date.now()}-${safeFileName(req.file.originalname, extension)}`, req.file.buffer, req.file.mimetype);
+    await prisma.taxObligation.update({ where: { id: o.id }, data: { docPath, docName: req.file.originalname || null } });
+    if (o.docPath && o.docPath !== docPath) await deleteStoredFile(o.docPath).catch(() => null);
+    return res.status(201).json({ ok: true, docPath });
+  })
+);
+
+/** G2 Planos de Pagamento (PPP). */
+financeRoutes.get(
+  "/tax-plans",
+  view,
+  asyncHandler(async (_req, res) => {
+    const hoje = todayKeyLocal();
+    const { linhas, planos } = await loadTaxes(hoje);
+    const resumos = planos.map((p) => TAX.resumoPlano(p, linhas.filter((l) => l.plano?.id === p.id), hoje));
+    const ativos = resumos.filter((r) => r.falta > 0.5);
+    const prox = ativos.map((r) => r.proxima && { ...r.proxima, plano: r.nome }).filter(Boolean).sort((a, b) => (a.limite || "9").localeCompare(b.limite || "9"))[0] || null;
+    return res.json({
+      hoje,
+      planos: resumos,
+      resumo: { ativos: ativos.length, divida: Math.round(ativos.reduce((s, r) => s + r.falta, 0) * 100) / 100, proxima: prox, atrasadas: resumos.reduce((s, r) => s + r.atrasadas, 0) },
+    });
+  })
+);
+
+const planBody = z.object({
+  nome: z.string().trim().min(2).max(160),
+  processo: z.string().trim().max(80).nullable().optional(),
+  imposto: z.string().trim().max(60).nullable().optional(),
+  acordo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  notas: z.string().max(1000).nullable().optional(),
+  n: z.number().int().min(1).max(240),
+  valor: z.number().positive(),
+  d1: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
+/** G2 › + Novo PPP: o plano e as prestações (cada uma vira um imposto do tipo PPP). */
+financeRoutes.post(
+  "/tax-plans",
+  edit,
+  asyncHandler(async (req, res) => {
+    const b = planBody.parse(req.body);
+    const prest = TAX.gerarPrestacoes({ n: b.n, valor: b.valor, d1: b.d1 });
+    const quem = req.user?.name || req.user?.email || null;
+    const plano = await prisma.$transaction(async (tx) => {
+      const p = await tx.taxPaymentPlan.create({
+        data: {
+          name: b.nome,
+          reference: b.processo || null,
+          taxType: b.imposto || null,
+          totalAmount: Math.round(prest.reduce((s, x) => s + x.valor, 0) * 100) / 100,
+          startDate: new Date(`${b.acordo}T00:00:00Z`),
+          notes: b.notas || null,
+          createdBy: quem,
+        },
+      });
+      await tx.taxObligation.createMany({
+        data: prest.map((x) => ({
+          type: "PPP",
+          referenceMonth: x.mes,
+          dueDate: new Date(`${x.limite}T00:00:00Z`),
+          amount: x.valor,
+          planId: p.id,
+          installment: x.prestacao,
+          createdBy: quem,
+        })),
+      });
+      return p;
+    });
+    return res.status(201).json({ id: plano.id, prestacoes: prest.length });
+  })
+);
+
+/** G2 › editar o plano (nome, processo, imposto, notas). As prestações editam-se uma a uma em G1. */
+financeRoutes.patch(
+  "/tax-plans/:id",
+  edit,
+  asyncHandler(async (req, res) => {
+    const b = planBody.pick({ nome: true, processo: true, imposto: true, notas: true }).partial().parse(req.body);
+    const data = {};
+    if (b.nome !== undefined) data.name = b.nome;
+    if (b.processo !== undefined) data.reference = b.processo || null;
+    if (b.imposto !== undefined) data.taxType = b.imposto || null;
+    if (b.notas !== undefined) data.notes = b.notas || null;
+    const p = await prisma.taxPaymentPlan.update({ where: { id: String(req.params.id) }, data });
+    return res.json({ id: p.id });
+  })
+);
+
+/** G2 › apagar um plano sem prestações pagas nem pedidos. */
+financeRoutes.delete(
+  "/tax-plans/:id",
+  edit,
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const prest = await prisma.taxObligation.findMany({ where: { planId: id }, select: { id: true, paidAt: true } });
+    const ids = prest.map((x) => x.id);
+    const comPedido = ids.length
+      ? await prisma.purchaseOrder.count({ where: { requestType: "IMPOSTOS", deletedAt: null, OR: ids.map((x) => ({ typeData: { path: ["obrigacaoId"], equals: x } })) } })
+      : 0;
+    if (prest.some((x) => x.paidAt) || comPedido) return res.status(409).json({ error: "EM_USO", errors: ["O plano já tem prestações pagas ou com pedido."] });
+    await prisma.taxPaymentPlan.delete({ where: { id } });
+    return res.json({ ok: true });
+  })
+);
+
+/** G3 IVA e Retenções (`?mes=AAAA-MM` para a lista de retenções). */
+financeRoutes.get(
+  "/taxes/vat",
+  view,
+  asyncHandler(async (req, res) => {
+    const hoje = todayKeyLocal();
+    const desde = new Date(Date.UTC(Number(hoje.slice(0, 4)), Number(hoje.slice(5, 7)) - 12, 1));
+    const [faturas, pedidos] = await Promise.all([
+      prisma.invoice.findMany({
+        where: { docDate: { gte: desde } },
+        select: { docDate: true, vatAmount: true, withholdingAmount: true, project: { select: { currency: true } } },
+      }),
+      prisma.purchaseOrder.findMany({
+        where: { deletedAt: null, createdAt: { gte: desde }, status: { in: ["APROVADO", "EM_PAGAMENTO", "CONCLUIDO"] }, requestType: { notIn: ["IMPOSTOS", "PESSOAL", "EMPRESTIMO"] } },
+        select: { id: true, number: true, createdAt: true, currency: true, supplierName: true, requestType: true, typeData: true, totalValue: true, supplier: { select: { name: true, nif: true } }, items: true },
+      }),
+    ]);
+    return res.json({
+      hoje,
+      ...TAX.ivaRetencoes({
+        hoje,
+        mes: /^\d{4}-\d{2}$/.test(String(req.query.mes || "")) ? String(req.query.mes) : null,
+        faturas: faturas.map((f) => ({ docDate: f.docDate, vatAmount: f.vatAmount, withholdingAmount: f.withholdingAmount, moeda: f.project?.currency })),
+        pedidos: pedidos.map((o) => {
+          const t = taxOrderTotals(o);
+          return { id: o.id, number: o.number, createdAt: o.createdAt, fornecedor: o.supplier?.name || o.supplierName, nif: o.supplier?.nif || null, moeda: o.currency, base: t.base, vat: t.vat, withheld: t.withheld };
+        }),
+      }),
+    });
+  })
+);
+
+/** G4 Mapa Fiscal (`?ano=`). */
+financeRoutes.get(
+  "/taxes/map",
+  view,
+  asyncHandler(async (req, res) => {
+    const hoje = todayKeyLocal();
+    const ano = /^\d{4}$/.test(String(req.query.ano || "")) ? Number(req.query.ano) : Number(hoje.slice(0, 4));
+    const { linhas, planos } = await loadTaxes(hoje);
+    return res.json({ hoje, ...TAX.mapaFiscal({ linhas, planos, ano, hoje }) });
+  })
+);
+
+// ─── Tesouraria: T5 lista de contas e cartões, T6 alocações, T7 fundo de maneio ───
+
+/** T5 — os cartões e contas (também os inativos), com o saldo e a alocação em uso. */
+financeRoutes.get(
+  "/cards",
+  view,
+  asyncHandler(async (_req, res) => {
+    const [cards, balances, alocacoes] = await Promise.all([
+      prisma.pettyCashCard.findMany({
+        include: { fund: { select: { id: true, name: true, currency: true, project: { select: { id: true, code: true, name: true } } } } },
+        orderBy: [{ bank: "asc" }, { label: "asc" }],
+      }),
+      loadBankBalances(),
+      prisma.cardAllocation.findMany({ where: { endDate: null }, include: { project: { select: { id: true, code: true, name: true } } } }),
+    ]);
+    const saldo = new Map(balances.items.map((b) => [b.card.id, b]));
+    return res.json({
+      items: cards.map((c) => {
+        const al = CARDS.alocacaoAtual(alocacoes, c.id);
+        const b = saldo.get(c.id);
+        return {
+          id: c.id,
+          label: c.label,
+          bank: c.bank,
+          lastDigits: c.lastDigits,
+          type: c.type,
+          holderName: c.holderName,
+          active: c.active,
+          expiresAt: c.expiresAt,
+          limitAmount: c.limitAmount === null ? null : toNumber(c.limitAmount),
+          fund: c.fund ? { id: c.fund.id, name: c.fund.name, currency: c.fund.currency } : null,
+          project: al?.project || c.fund?.project || null,
+          responsible: al?.responsible || c.responsibleName || null,
+          balance: b ? b.balance : round2(toNumber(c.currentBalance)),
+          estimated: b ? b.source === "CARTAO" : true,
+        };
+      }),
+    });
+  })
+);
+
+/** T6 — o histórico das alocações. */
+financeRoutes.get(
+  "/card-allocations",
+  view,
+  asyncHandler(async (_req, res) => {
+    const items = await prisma.cardAllocation.findMany({
+      include: {
+        card: { select: { id: true, label: true, bank: true, lastDigits: true, type: true } },
+        project: { select: { id: true, code: true, name: true } },
+      },
+      orderBy: [{ startDate: "desc" }],
+    });
+    return res.json({ items });
+  })
+);
+
+/** T6 › + Nova Alocação. */
+financeRoutes.post(
+  "/card-allocations",
+  edit,
+  asyncHandler(async (req, res) => {
+    const b = z
+      .object({
+        cardId: z.string().min(1),
+        responsavel: z.string().trim().min(2).max(120),
+        obraId: z.string().nullable().optional(),
+        inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        notas: z.string().max(500).nullable().optional(),
+      })
+      .parse(req.body);
+    const abertas = await prisma.cardAllocation.findMany({ where: { cardId: b.cardId, endDate: null } });
+    const v = CARDS.podeAlocar(abertas, b.cardId);
+    if (!v.ok) return res.status(409).json({ error: "CARTAO_ENTREGUE", errors: [v.erro] });
+    const item = await prisma.$transaction(async (tx) => {
+      const a = await tx.cardAllocation.create({
+        data: {
+          cardId: b.cardId,
+          responsible: b.responsavel,
+          projectId: b.obraId || null,
+          startDate: new Date(`${b.inicio}T00:00:00Z`),
+          notes: b.notas || null,
+          createdBy: req.user?.name || req.user?.email || null,
+        },
+      });
+      // O responsável do cartão passa a ser o da alocação.
+      await tx.pettyCashCard.update({ where: { id: b.cardId }, data: { responsibleName: b.responsavel } });
+      return a;
+    });
+    return res.status(201).json({ item });
+  })
+);
+
+/** T6 › Devolver: fecha a alocação, com o estado em que o cartão voltou. */
+financeRoutes.post(
+  "/card-allocations/:id/return",
+  edit,
+  asyncHandler(async (req, res) => {
+    const b = z
+      .object({ fim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), estado: z.enum(["BOM", "ESTRAGADO"]).default("BOM"), obs: z.string().max(500).nullable().optional() })
+      .parse(req.body);
+    const a = await prisma.cardAllocation.findUnique({ where: { id: String(req.params.id) } });
+    if (!a) return res.status(404).json({ error: "NOT_FOUND" });
+    if (a.endDate) return res.status(409).json({ error: "JA_DEVOLVIDO", errors: ["Esta alocação já foi fechada."] });
+    if (b.fim < a.startDate.toISOString().slice(0, 10)) return res.status(400).json({ error: "DATA", errors: ["A devolução não pode ser antes da entrega."] });
+    await prisma.$transaction([
+      prisma.cardAllocation.update({ where: { id: a.id }, data: { endDate: new Date(`${b.fim}T00:00:00Z`), returnState: b.estado, returnNotes: b.obs || null } }),
+      // Só se limpa o responsável do cartão se for o desta alocação.
+      prisma.pettyCashCard.updateMany({ where: { id: a.cardId, responsibleName: a.responsible }, data: { responsibleName: null } }),
+    ]);
+    return res.json({ ok: true });
+  })
+);
+
+/** T6 › apagar uma alocação registada por engano. */
+financeRoutes.delete(
+  "/card-allocations/:id",
+  edit,
+  asyncHandler(async (req, res) => {
+    const a = await prisma.cardAllocation.findUnique({ where: { id: String(req.params.id) } });
+    if (!a) return res.status(404).json({ error: "NOT_FOUND" });
+    await prisma.cardAllocation.delete({ where: { id: a.id } });
+    if (!a.endDate) await prisma.pettyCashCard.updateMany({ where: { id: a.cardId, responsibleName: a.responsible }, data: { responsibleName: null } });
+    return res.json({ ok: true });
+  })
+);
+
+/** T7 Fundo de Maneio. */
+financeRoutes.get(
+  "/working-capital",
+  view,
+  asyncHandler(async (_req, res) => {
+    const [cards, balances, movFundo, movBanco, pedidos, alocacoes] = await Promise.all([
+      prisma.pettyCashCard.findMany({
+        where: { active: true },
+        include: { fund: { select: { name: true, currency: true, project: { select: { code: true, name: true } } } } },
+      }),
+      loadBankBalances(),
+      prisma.pettyCashMovement.findMany({ select: { fundId: true, cardId: true, type: true, amount: true, createdAt: true } }),
+      prisma.bankMovement.findMany({ where: { cardId: { not: null } }, select: { cardId: true, direction: true, amount: true, movementDate: true, movementType: true } }),
+      prisma.extraRequest.findMany({ where: { status: "APROVADO", OR: [{ cardId: { not: null } }, { fundId: { not: null } }] }, select: { fundId: true, cardId: true, status: true, amount: true, netAmount: true } }),
+      prisma.cardAllocation.findMany({ where: { endDate: null }, include: { project: { select: { code: true, name: true } } } }),
+    ]);
+    const saldo = new Map(balances.items.map((b) => [b.card.id, b.balance]));
+    return res.json({
+      items: CARDS.fundoManeio({
+        cartoes: cards.map((c) => ({ ...c, saldo: saldo.has(c.id) ? saldo.get(c.id) : toNumber(c.currentBalance) })),
+        movFundo,
+        movBanco,
+        pedidos,
+        alocacoes,
       }),
     });
   })

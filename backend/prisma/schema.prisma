@@ -332,6 +332,7 @@ model Project {
   progressTasks       ProjectProgressTask[]
   measurementReports  MeasurementReport[]
   plannedMeasurements PlannedMeasurement[]
+  cardAllocations CardAllocation[]
   transactions        ProjectTransaction[]
   stockMovements      StockMovement[]
   warehouses          Warehouse[]
@@ -1303,11 +1304,33 @@ model PettyCashCard {
   bankStatements        BankStatement[]
   bankMovements         BankMovement[]
   bankBalances          BankBalance[]
+  allocations           CardAllocation[]
 
   @@index([fundId])
 }
 
 // Histórico auditável de todas as movimentações de um Fundo de Maneio.
+/// T6 Alocação de Cartões: a quem (e a que obra) um cartão está entregue, de/até.
+model CardAllocation {
+  id            String    @id @default(cuid())
+  cardId        String
+  responsible   String
+  projectId     String?
+  startDate     DateTime
+  endDate       DateTime?
+  /// Estado em que o cartão foi devolvido: BOM ou ESTRAGADO
+  returnState   String?
+  returnNotes   String?
+  notes         String?
+  createdBy     String?
+  createdAt     DateTime  @default(now())
+
+  card    PettyCashCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  project Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([cardId, startDate])
+}
+
 model PettyCashMovement {
   id             String           @id @default(cuid())
   fundId         String
@@ -2919,6 +2942,9 @@ model TaxObligation {
   liquidationNote String?
   /// Referência Única de Pagamento ao Estado
   rupe            String?
+  /// A nota de liquidação (PDF ou imagem)
+  docPath         String?
+  docName         String?
   /// Pago fora de um pedido de pagamento (registo manual)
   paidAt          DateTime?
   paidNote        String?

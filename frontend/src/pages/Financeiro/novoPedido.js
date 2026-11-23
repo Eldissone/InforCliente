@@ -275,6 +275,17 @@ function readCreatePresets() {
         costCategoryId: q.get("costCategoryId") || q.get("generalCostCenterId") || "",
         lockType: flag("lockType"),
         lockProject: flag("lockProject"),
+        // G1 Impostos › «Criar pedido de pagamento».
+        imposto: q.get("obrigacao")
+            ? {
+                  obrigacaoId: q.get("obrigacao"),
+                  tipo: q.get("imp") || "",
+                  mes: q.get("mes") || "",
+                  limite: q.get("limite") || "",
+                  valor: q.get("valor") || "",
+                  rupe: q.get("rupe") || "",
+              }
+            : null,
     };
 }
 

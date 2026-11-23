@@ -719,3 +719,39 @@ button.fx2-k:hover { background: #f8fafc; }
 
 /* ─── P2 Vencimentos: atalhos ─────────────────────────────────────────────── */
 .fcal-janelas { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+
+/* ─── F-4 Impostos ────────────────────────────────────────────────────────── */
+.g1-qr { padding: 10px 12px; margin-bottom: 10px; }
+.g1-qrow { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; margin: 6px 0; }
+.g1-qrow .finance-input { width: 150px; }
+.g1-num { text-align: right; }
+.g1-req { color: #c0392b; }
+.g1-file { cursor: pointer; }
+.g1-warn { color: #b26b00; }
+.g1-acts { white-space: nowrap; }
+.g1-pago { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; }
+.g1-pago .finance-input { width: auto; }
+.g3-nota { margin: 0 0 10px; }
+.g4-mac { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.g4-mac > div { background: #fff; border: 1px solid var(--pt-line, #e3e7ec); border-radius: 8px; padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; }
+.g4-mac span { font-size: 12px; color: var(--pt-muted); text-transform: uppercase; letter-spacing: .03em; }
+.g4-mac b { font-family: var(--pt-display); font-size: 20px; }
+.g4-mac small { color: var(--pt-muted); }
+.g4-mac .g4-bad { border-color: #f3b4b4; }
+.g4-mac .g4-bad b { color: #c0392b; }
+.g4-ms { display: flex; gap: 2px; }
+.g4-ms i, .g4-leg i { font-style: normal; font-size: 10.5px; min-width: 30px; text-align: center; padding: 2px 0; border-radius: 3px; background: #f1f3f5; color: #8a96a3; }
+.g4-leg { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0; font-size: 12px; color: var(--pt-muted); }
+.g4-leg i { display: inline-block; min-width: 14px; height: 10px; margin-right: 4px; vertical-align: middle; }
+.g4-pg { background: #d7f0e2 !important; color: #1d7a4a !important; }
+.g4-pp { background: #dbe7fb !important; color: #1f5fd1 !important; }
+.g4-fu { background: #fdf0d4 !important; color: #8a5a00 !important; }
+.g4-at { background: #f8d4d4 !important; color: #b42318 !important; font-weight: 600; }
+.g4-sr { background: #fff !important; color: #b42318 !important; border: 1px dashed #e0a0a0; }
+
+/* ─── P4 / R4 mapas ───────────────────────────────────────────────────────── */
+.p4-t td, .p4-t th { white-space: nowrap; }
+.p4-t td:first-child { white-space: normal; min-width: 220px; }
+.p4-n1 td { background: #f6f7f9; }
+.p4-n3 td { font-size: 12.5px; color: var(--pt-muted); }
+.p4-now { background: #eaf6ef; }

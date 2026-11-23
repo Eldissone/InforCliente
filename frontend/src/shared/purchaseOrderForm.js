@@ -744,12 +744,15 @@ function collectTypeData(type) {
     return viatura ? { viatura } : {};
   }
   if (type === "IMPOSTOS") {
+    // A obrigação fiscal (G1 Impostos) que este pedido paga, quando vem de lá.
+    const obrigacaoId = impostoObrigacaoId();
     return {
       tipo: val("ccImpTipo"),
       mes: val("ccImpMes"),
       rupe: val("ccImpRupe"),
       limite: val("ccImpLimite"),
       valor: numOrNull(val("ccImpValor")) || 0,
+      ...(obrigacaoId ? { obrigacaoId } : {}),
     };
   }
   if (type === "PESSOAL") {
@@ -795,6 +798,7 @@ function fillTypeData(order) {
   };
   if (type === "FROTA") set("ccPedidoViatura", d.viatura || "");
   if (type === "IMPOSTOS") {
+    IMPOSTO_OBRIGACAO = d.obrigacaoId || null;
     set("ccImpTipo", d.tipo || "IVA");
     set("ccImpMes", d.mes || "");
     set("ccImpRupe", d.rupe || "");
@@ -841,7 +845,13 @@ function selectCostCategory(categoryId) {
   syncCostDetail(catSel.value || categoryId, hit?.requiresDetailText);
 }
 
-/** Aplica valores iniciais vindos de outra página (tipo, obra, categoria). */
+/** A obrigação fiscal ligada ao pedido (vinda do G1 Impostos ou do pedido gravado). */
+let IMPOSTO_OBRIGACAO = null;
+function impostoObrigacaoId() {
+  return IMPOSTO_OBRIGACAO;
+}
+
+/** Aplica valores iniciais vindos de outra página (tipo, obra, categoria; imposto). */
 export async function applyPedidoPresets({
   type,
   projectId,
@@ -849,6 +859,7 @@ export async function applyPedidoPresets({
   costCategoryId,
   lockType,
   lockProject,
+  imposto = null,
 } = {}) {
   const typeSel = document.getElementById("ccPedidoType");
   if (type && typeSel) {
@@ -857,6 +868,22 @@ export async function applyPedidoPresets({
   }
   if (lockType && typeSel) typeSel.disabled = true;
   applyTypeVisibility();
+
+  // Vindo do G1 Impostos: os campos do imposto já preenchidos, e a ligação.
+  if (imposto) {
+    const set = (id, v) => {
+      const el = document.getElementById(id);
+      if (el && v !== undefined && v !== null && v !== "") el.value = String(v);
+    };
+    const sel = document.getElementById("ccImpTipo");
+    if (sel && imposto.tipo && ![...sel.options].some((o) => o.value === imposto.tipo)) sel.add(new Option(imposto.tipo, imposto.tipo));
+    set("ccImpTipo", imposto.tipo);
+    set("ccImpMes", imposto.mes);
+    set("ccImpRupe", imposto.rupe);
+    set("ccImpLimite", imposto.limite);
+    set("ccImpValor", imposto.valor);
+    IMPOSTO_OBRIGACAO = imposto.obrigacaoId || null;
+  }
 
   if (costCategoryId) selectCostCategory(costCategoryId);
 
@@ -1416,6 +1443,7 @@ export async function uploadPedidoAttachment(orderId, file) {
 
 export function resetPedidoForm() {
   document.getElementById("formNovoPedido")?.reset();
+  IMPOSTO_OBRIGACAO = null;
   const editId = document.getElementById("ccPedidoEditId");
   if (editId) editId.value = "";
   const extraId = document.getElementById("ccPedidoExtraId");
