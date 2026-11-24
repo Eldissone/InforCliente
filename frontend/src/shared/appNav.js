@@ -53,10 +53,6 @@ export const APP_MENU = [
       { label: "Equipamentos, Maquinarias e Viaturas", icon: "agriculture", href: "/registos/equipamentos", perm: "ferramentas:view" },
       { label: "Pessoal", icon: "badge", href: "/registos/pessoal", perm: "cadastros:view" },
       { label: "Folha de Ponto", icon: "schedule", href: "/registos/folha-ponto", perm: "cadastros:view" },
-      { label: "Tipo de Custo (Produto ou Serviço)", icon: "category", href: "/registos/tipo-custo", perm: "pedidosExtras:view|financeiro:view" },
-      { label: "Categorias de Custo", icon: "account_tree", href: "/registos/categorias-custo", perm: "pedidosExtras:view|financeiro:view" },
-      { label: "Subcategorias de Custo", icon: "subdirectory_arrow_right", href: "/registos/subcategorias-custo", perm: "pedidosExtras:view|financeiro:view" },
-      { label: "Movimentos Financeiros", icon: "payments", href: "/registos/movimentos", perm: "fundoManeio:view|financeiro:view" },
     ],
   },
   {
@@ -283,9 +279,14 @@ export const APP_MENU = [
       {
         label: "Registos",
         icon: "folder_open",
-        navPerm: "navlinks:nav_financeiro",
+        navPerm: "navlinks:nav_financeiro|navlinks:nav_centros_gerais",
+        autoBadge: true,
         children: [
-          { label: "Centros de Custo", icon: "account_tree", href: "/Financeiro/centros-custo", perm: "financeiro:view" },
+          { label: "Centros de Custo", icon: "account_tree", href: "/Financeiro/centros-custo", navPerm: "navlinks:nav_financeiro", perm: "financeiro:view" },
+          { label: "Tipo de Custo (Produto ou Serviço)", icon: "category", href: "/registos/tipo-custo", perm: "financeiro:view|pedidosExtras:view" },
+          { label: "Categorias de Custo", icon: "account_tree", href: "/registos/categorias-custo", perm: "financeiro:view|pedidosExtras:view" },
+          { label: "Subcategorias de Custo", icon: "subdirectory_arrow_right", href: "/registos/subcategorias-custo", perm: "financeiro:view|pedidosExtras:view" },
+          { label: "Movimentos Financeiros", icon: "payments", href: "/registos/movimentos", perm: "financeiro:view|fundoManeio:view" },
         ],
       },
     ],

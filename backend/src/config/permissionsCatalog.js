@@ -249,6 +249,11 @@ const PERMISSION_GROUPS = [
       { id: "financeiro.centroPagamentos", label: "Centro de Pagamentos", route: "/Financeiro/centro-pagamentos" },
       { id: "financeiro.controlo", label: "Controlo Financeiro", route: "/Financeiro/controlo" },
       { id: "financeiro.centrosGerais", label: "Compras e Pedidos e Pedidos Extra", route: "/Financeiro/centroDeCompras.html" },
+      { id: "financeiro.centrosCusto", label: "Registos: Centros de Custo", route: "/Financeiro/centros-custo" },
+      { id: "financeiro.tipoCusto", label: "Registos: Tipo de Custo", route: "/registos/tipo-custo" },
+      { id: "financeiro.categoriasCusto", label: "Registos: Categorias de Custo", route: "/registos/categorias-custo" },
+      { id: "financeiro.subcategoriasCusto", label: "Registos: Subcategorias de Custo", route: "/registos/subcategorias-custo" },
+      { id: "financeiro.movimentos", label: "Registos: Movimentos Financeiros", route: "/registos/movimentos" },
       { id: "financeiro.obras", label: "Financeiro por obra", route: "/Projectos/projectView.html" },
       { id: "financeiro.relatorios", label: "Resumos financeiros", route: "/Projectos/projectView.html" },
     ],
@@ -456,10 +461,10 @@ const PAGE_ROUTE_GUARDS = [
   { route: "/registos/armazens", module: "stock", action: "tab_warehouses" },
   { route: "/registos/pessoal", module: "cadastros", action: "view" },
   { route: "/registos/folha-ponto", module: "cadastros", action: "view" },
-  { route: "/registos/tipo-custo", module: "pedidosExtras", action: "view" },
-  { route: "/registos/categorias-custo", module: "pedidosExtras", action: "view" },
-  { route: "/registos/subcategorias-custo", module: "pedidosExtras", action: "view" },
-  { route: "/registos/movimentos", module: "fundoManeio", action: "view" },
+  { route: "/registos/tipo-custo", module: "financeiro", action: "view" },
+  { route: "/registos/categorias-custo", module: "financeiro", action: "view" },
+  { route: "/registos/subcategorias-custo", module: "financeiro", action: "view" },
+  { route: "/registos/movimentos", module: "financeiro", action: "view" },
 ];
 
 /**
