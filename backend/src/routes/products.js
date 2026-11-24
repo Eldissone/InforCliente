@@ -19,6 +19,65 @@ const upload = multer({
 });
 
 const productRoutes = express.Router();
+
+/** As unidades do protótipo (UN, M, M², M³, KG, TON, L, H, DIA, MÊS) e as que já havia (CX, PAR). */
+const PRODUCT_UNITS = ["UN", "KG", "M", "L", "CX", "PAR", "MT2", "MT3", "TON", "H", "DIA", "MES"];
+
+/** A ficha RG1 do protótipo: tipo, condição, IVA, retenção, categoria, observações. */
+const fichaSchema = {
+  kind: z.enum(["PRODUTO", "SERVICO"]).optional(),
+  conditions: z.array(z.string().trim().min(1).max(40)).max(10).optional(),
+  vatPercent: z.number().min(0).max(100).nullable().optional(),
+  withholdingPercent: z.number().min(0).max(100).nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+  catalogCategoryId: z.string().nullable().optional(),
+  catalogSubcategoryId: z.string().nullable().optional(),
+  active: z.boolean().optional(),
+};
+
+/** Próximo código livre: o maior código só com algarismos + 1, com 8 algarismos (ex.: 00000958). */
+async function proximoCodigo() {
+  const rows = await prisma.$queryRaw`SELECT MAX(CAST("sku" AS BIGINT)) AS m FROM "Product" WHERE "sku" ~ '^[0-9]{1,15}$'`;
+  const m = Number(rows?.[0]?.m || 0);
+  return String(m + 1).padStart(8, "0");
+}
+
+/** A categoria e a subcategoria têm de existir e a subcategoria tem de ser dessa categoria. */
+async function validarCategorias(body) {
+  if (body.catalogSubcategoryId) {
+    const sub = await prisma.catalogCategory.findUnique({ where: { id: body.catalogSubcategoryId }, select: { parentId: true } });
+    if (!sub) return "A subcategoria não existe.";
+    if (body.catalogCategoryId && sub.parentId !== body.catalogCategoryId) return "A subcategoria não é desta categoria.";
+    if (!body.catalogCategoryId) body.catalogCategoryId = sub.parentId;
+  }
+  if (body.catalogCategoryId) {
+    const cat = await prisma.catalogCategory.findUnique({ where: { id: body.catalogCategoryId }, select: { id: true } });
+    if (!cat) return "A categoria não existe.";
+  }
+  return null;
+}
+
+/** O que a lista e a ficha mostram de cada produto. */
+const productListInclude = {
+  aliases: { select: { id: true, alias: true, normalized: true }, orderBy: { alias: "asc" } },
+  catalogCategory: { select: { id: true, name: true } },
+  catalogSubcategory: { select: { id: true, name: true } },
+  supplierProducts: {
+    select: { price: true, currency: true, updatedAt: true, supplier: { select: { name: true } } },
+    orderBy: { updatedAt: "desc" },
+    take: 1,
+  },
+};
+
+/** Preço de referência: o último preço de fornecedor registado para o produto. */
+function withRef(p) {
+  const sp = p.supplierProducts?.[0];
+  const { supplierProducts, ...rest } = p;
+  return {
+    ...withUppercaseProductName(rest),
+    precoRef: sp ? { valor: Number(sp.price), moeda: sp.currency, fornecedor: sp.supplier?.name || null, data: sp.updatedAt } : null,
+  };
+}
 productRoutes.use(authRequired);
 
 async function findNomenclatureConflict(name, excludeProductId = null) {
@@ -71,10 +130,10 @@ productRoutes.get(
         ...(category && { category }),
         ...productSearchWhere(search),
       },
-      include: { aliases: { select: productAliasSelect, orderBy: { alias: "asc" } } },
+      include: productListInclude,
       orderBy: { name: "asc" },
     });
-    return res.json({ items: items.map(withUppercaseProductName) });
+    return res.json({ items: items.map(withRef) });
   })
 );
 
@@ -94,7 +153,6 @@ productRoutes.get(
   })
 );
 
-const PRODUCT_UNITS = ["UN", "KG", "M", "L", "CX", "PAR", "MT2", "MT3"];
 const ensureToolLocks = new Map();
 
 function normalizeToolName(value) {
@@ -120,6 +178,10 @@ function mapProductUnit(raw) {
   if (t.startsWith("mt2") || t.includes("m2")) return "MT2";
   if (t.startsWith("mt3") || t.includes("m3")) return "MT3";
   if (t.startsWith("par")) return "PAR";
+  if (t === "h" || t.startsWith("hora")) return "H";
+  if (t.startsWith("dia")) return "DIA";
+  if (t.startsWith("mes") || t.startsWith("mês")) return "MES";
+  if (t.startsWith("ton") || t === "t") return "TON";
   if (t === "m" || t.startsWith("metro")) return "M";
   if (PRODUCT_UNITS.includes(t.toUpperCase())) return t.toUpperCase();
   return "UN";
@@ -191,6 +253,18 @@ productRoutes.post(
   })
 );
 
+// GET - Ficha de um produto
+productRoutes.get(
+  "/:id",
+  requirePermission("materiais", "view"),
+  asyncHandler(async (req, res) => {
+    if (["tools"].includes(req.params.id)) return res.status(404).json({ error: "Produto não encontrado." });
+    const p = await prisma.product.findUnique({ where: { id: req.params.id }, include: productListInclude });
+    if (!p) return res.status(404).json({ error: "Produto não encontrado." });
+    return res.json(withRef(p));
+  })
+);
+
 // POST - Criar produto
 productRoutes.post(
   "/",
@@ -201,12 +275,18 @@ productRoutes.post(
       barcode: z.string().trim().optional().nullable().transform(v => v === "" ? null : v),
       name: z.string().min(2),
       description: z.string().optional().nullable(),
-      category: z.enum(["MATERIAL", "TOOL", "EQUIPMENT", "CONSUMABLE"]),
-      unit: z.enum(["UN", "KG", "M", "L", "CX", "PAR", "MT2", "MT3"]),
+      category: z.enum(["MATERIAL", "TOOL", "EQUIPMENT", "CONSUMABLE"]).optional(),
+      unit: z.enum(PRODUCT_UNITS),
       minStock: z.number().default(0),
+      ...fichaSchema,
     }).parse(req.body);
 
     body.name = normalizeProductName(body.name);
+    // Um serviço não entra em stock: fica na categoria de stock «consumível».
+    if (!body.category) body.category = body.kind === "SERVICO" ? "CONSUMABLE" : "MATERIAL";
+    if (!body.sku) body.sku = await proximoCodigo();
+    const errCat = await validarCategorias(body);
+    if (errCat) return res.status(400).json({ error: errCat });
 
     const conflict = await findNomenclatureConflict(body.name);
     if (conflict) {
@@ -246,10 +326,13 @@ productRoutes.patch(
       name: z.string().optional(),
       description: z.string().optional().nullable(),
       category: z.enum(["MATERIAL", "TOOL", "EQUIPMENT", "CONSUMABLE"]).optional(),
-      unit: z.enum(["UN", "KG", "M", "L", "CX", "PAR", "MT2", "MT3"]).optional(),
+      unit: z.enum(PRODUCT_UNITS).optional(),
       minStock: z.number().optional(),
       image: z.string().optional().nullable(),
+      ...fichaSchema,
     }).parse(req.body);
+    const errCat = await validarCategorias(body);
+    if (errCat) return res.status(400).json({ error: errCat });
 
     if (body.name != null) {
       body.name = normalizeProductName(body.name);

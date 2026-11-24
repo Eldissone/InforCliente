@@ -204,6 +204,13 @@ const PAGES = {
     module: "fluxoCaixa.js",
     placeholder: [],
   },
+  "bancos": {
+    kicker: "Financeiro · Registos",
+    title: "Bancos",
+    subtitle: "",
+    module: "bancos.js",
+    placeholder: [],
+  },
   "centros-custo": {
     kicker: "Financeiro · Registos",
     title: "Centros de Custo",

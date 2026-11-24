@@ -247,3 +247,22 @@ body[data-registry="produtos"] {
     width: 100%;
   }
 }
+
+/* ── Ficha RG1 do protótipo (no layout desta página) ── */
+.ps-kick { color: #168a5a; font-size: 0.75rem; font-weight: 700; letter-spacing: .06em; margin-bottom: .15rem; }
+.ps-switch span.is-active { display: inline-flex; align-items: center; min-height: 2rem; padding: 0 0.95rem; border-radius: 999px; background: #212e3e; color: #fff; font-size: 0.82rem; font-weight: 600; }
+.ps-req { color: #c2352b; }
+.ps-gerir { margin-left: .5rem; font-size: .78rem; font-weight: 600; color: #168a5a; text-decoration: none; }
+.ps-gerir:hover { text-decoration: underline; }
+.ps-grid--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ps-grid--1 { grid-template-columns: minmax(0, 1fr); }
+.ps-wide { grid-column: span 2; }
+.ps-grid--1 .ps-wide { grid-column: auto; }
+.ps-field textarea { width: 100%; min-height: 4.5rem; padding: .75rem 1rem; border: 0; border-radius: .95rem; background: #f3f5f8; color: #2a2e36; font: 400 .9rem/1.4 Inter, system-ui, sans-serif; resize: vertical; }
+.ps-seg { display: inline-flex; flex-wrap: wrap; gap: .4rem; }
+.ps-seg button { min-height: 3rem; padding: 0 1.1rem; border: 0; border-radius: .95rem; background: #f3f5f8; color: #5b6472; font: 600 .86rem Inter, system-ui, sans-serif; cursor: pointer; }
+.ps-seg button:hover { background: #e7ebf1; }
+.ps-seg button.is-on { background: #168a5a; color: #fff; }
+.ps-foto { max-width: 160px; max-height: 120px; border-radius: .75rem; margin-bottom: .75rem; object-fit: cover; }
+.ps-actions { display: flex; gap: .75rem; justify-content: flex-end; align-items: center; }
+@media (max-width: 860px) { .ps-grid, .ps-grid--2 { grid-template-columns: minmax(0, 1fr); } .ps-wide { grid-column: auto; } }

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html class="light" lang="pt">
+
+<head>
+  <meta charset="utf-8" />
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <title>Info Gestor — Categorias de Produtos e Serviços</title>
+  <link rel="icon" href="/assets/icon/favicon.ico" type="image/x-icon">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+  <link href="/assets/styles/tailwind-app.css" rel="stylesheet" />
+  <link href="/assets/styles/shared-ui.css" rel="stylesheet" />
+  <link href="/assets/styles/top-nav.css" rel="stylesheet" />
+  <link href="/assets/styles/shell.css" rel="stylesheet" />
+</head>
+
+<body data-shell="figma" class="bg-surface antialiased text-slate-900 min-h-screen">
+  <div id="appHeader"></div>
+  <main class="max-w-[1300px] mx-auto px-4 md:px-8 pt-24 pb-20">
+    <header class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+      <div>
+        <nav class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+          <span>Registos</span><span class="material-symbols-outlined text-xs">chevron_right</span><span class="text-[#168a5a]">RG2 · Categorias</span>
+        </nav>
+        <h1 class="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight leading-none mb-3">Categorias de produtos e serviços</h1>
+        <p class="text-slate-500 font-medium max-w-3xl text-sm">As categorias e subcategorias que se escolhem ao criar um produto ou um serviço. Cada categoria é de produtos ou de serviços.</p>
+      </div>
+      <a href="/produtos" class="h-10 bg-white border border-slate-200 text-slate-700 px-4 rounded-xl font-bold flex items-center gap-2 shadow-sm hover:border-slate-400 text-sm self-start sm:self-auto">
+        <span class="material-symbols-outlined text-lg">inventory_2</span> Produtos e serviços</a>
+    </header>
+    <section class="bg-white rounded-3xl border border-slate-100 shadow-sm p-4 mb-4 flex flex-wrap gap-3 items-center">
+      <input id="catNova" class="h-10 flex-1 min-w-[240px] bg-white border border-slate-200 rounded-2xl px-4 text-sm" placeholder="Nova categoria (ex.: MATERIAIS DE OBRA)" data-perm="materiais:manage">
+      <select id="catTipo" class="h-10 border border-slate-200 bg-white rounded-2xl px-4 text-sm font-bold text-slate-600" data-perm="materiais:manage">
+        <option value="PRODUTO">Produto</option><option value="SERVICO">Serviço</option>
+      </select>
+      <button type="button" id="catAdd" class="h-10 bg-slate-900 text-white px-5 rounded-xl font-bold text-sm" data-perm="materiais:manage">+ Adicionar categoria</button>
+      <div id="catFiltro" class="ml-auto inline-flex gap-1.5"></div>
+    </section>
+    <section class="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left">
+          <thead><tr class="bg-slate-50/50 text-slate-500 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
+            <th class="px-6 py-4" style="width:32%">Categoria</th><th class="px-4 py-4" style="width:110px">Tipo</th><th class="px-4 py-4">Subcategorias</th><th class="px-4 py-4 text-right" style="width:110px">Produtos</th></tr></thead>
+          <tbody id="catBody"><tr><td colspan="4" class="px-8 py-12 text-center text-slate-400 text-sm">A carregar…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <style>
+    .cp-f button { height: 2.25rem; padding: 0 .9rem; border-radius: .9rem; border: 1px solid #e2e8f0; background: #fff; font-size: .78rem; font-weight: 700; color: #475569; }
+    .cp-f button.on { background: #0f172a; border-color: #0f172a; color: #fff; }
+    .cp-sub { display: inline-flex; align-items: center; gap: .25rem; padding: .2rem .55rem; border-radius: 999px; background: #f1f5f9; font-size: .78rem; font-weight: 600; color: #334155; margin: .15rem .2rem .15rem 0; }
+    .cp-sub button { border: 0; background: none; color: #94a3b8; cursor: pointer; font-size: .8rem; padding: 0 .1rem; }
+    .cp-sub button:hover { color: #0f172a; }
+    .cp-new { border: 1px dashed #cbd5e1; border-radius: 999px; padding: .2rem .7rem; font-size: .75rem; font-weight: 700; color: #475569; background: #fff; }
+    .cp-ed { border: 0; background: none; color: #94a3b8; cursor: pointer; margin-left: .35rem; }
+  </style>
+  <script type="module" src="/registos/categorias-produtos/categoriasProdutos.js"></script>
+</body>
+</html>

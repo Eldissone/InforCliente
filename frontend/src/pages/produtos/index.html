@@ -15,6 +15,12 @@
   <link href="/assets/styles/shared-ui.css" rel="stylesheet" />
   <link href="/assets/styles/top-nav.css" rel="stylesheet" />
   <link href="/assets/styles/shell.css" rel="stylesheet" />
+  <style>
+    .pl-tabs { display: inline-flex; gap: .35rem; flex-wrap: wrap; }
+    .pl-tabs button { height: 2.5rem; padding: 0 1rem; border-radius: 1rem; border: 1px solid #e2e8f0; background: #fff; font-size: .82rem; font-weight: 700; color: #475569; }
+    .pl-tabs button.on { background: #0f172a; border-color: #0f172a; color: #fff; }
+    #productsTbody tr[data-row] { cursor: pointer; }
+  </style>
 </head>
 
 <body data-shell="figma" class="bg-surface antialiased text-slate-900 min-h-screen">
@@ -23,72 +29,72 @@
 
   <main class="max-w-[1500px] mx-auto px-4 md:px-8 pt-24 pb-20">
     <!-- Header Section -->
-    <header class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-10">
+    <header class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
       <div>
         <nav class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
-          <span>Catálogo</span>
+          <span>Registos</span>
           <span class="material-symbols-outlined text-xs">chevron_right</span>
-          <span class="text-[#0d3fd1]">Produtos &amp; Serviços</span>
+          <span class="text-[#168a5a]">RG1 · Produtos &amp; Serviços</span>
         </nav>
         <h1 class="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight leading-none mb-3">
-          Gestão de Produtos e Serviços
+          Produtos e Serviços
         </h1>
-        <p class="text-slate-500 font-medium max-w-2xl text-sm">
-          Catálogo geral de materiais, produtos, equipamentos e serviços da organização.
+        <p class="text-slate-500 font-medium max-w-3xl text-sm">
+          Registo único de produtos e serviços da MBT, usado em toda a aplicação (orçamentos, compras e pedidos de pagamento).
+          A categoria e a subcategoria definem-se aqui, ao criar o produto.
         </p>
       </div>
-      <a href="/registos/produtos"
-        class="h-10 bg-slate-900 text-white px-5 rounded-xl font-bold flex items-center gap-2 shadow-xl shadow-slate-900/10 hover:bg-slate-800 transition-all self-start sm:self-auto shrink-0">
-        Novo Produto / Serviço
-        <span class="material-symbols-outlined text-xl">add_circle</span>
-      </a>
     </header>
 
     <!-- Filter Bar -->
-    <div class="mb-8 flex flex-col lg:flex-row gap-4">
-      <div class="flex-1 relative">
+    <div class="mb-4 flex flex-col lg:flex-row gap-3 lg:items-center">
+      <div id="productsKinds" class="pl-tabs" role="group" aria-label="Tipo"></div>
+      <div class="flex-1 relative min-w-[220px]">
         <input id="productsSearch"
           class="w-full h-10 bg-white border border-slate-200 rounded-2xl pl-12 pr-4 text-sm focus:ring-2 focus:ring-[#2afc8d]/20 transition-all shadow-sm"
-          placeholder="Buscar por nome, código SKU ou descrição..." type="text" />
+          placeholder="Procurar código, descrição, categoria…" type="search" />
         <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
       </div>
-
       <div class="flex flex-wrap items-center gap-3">
-        <div class="h-10 min-w-[150px] border border-slate-200 bg-white rounded-2xl px-4 flex items-center shadow-sm">
-          <select id="productsCategory"
-            class="w-full border-none bg-transparent text-sm font-bold text-slate-600 focus:ring-0">
-            <option value="">Todos os Tipos</option>
-            <option value="MATERIAL">Produtos (Materiais)</option>
-            <option value="CONSUMABLE">Serviços</option>
-            <option value="TOOL">Ferramentas</option>
-            <option value="EQUIPMENT">Equipamentos</option>
+        <div class="h-10 min-w-[180px] border border-slate-200 bg-white rounded-2xl px-4 flex items-center shadow-sm">
+          <select id="productsCategory" class="w-full border-none bg-transparent text-sm font-bold text-slate-600 focus:ring-0">
+            <option value="">Todas as categorias</option>
           </select>
         </div>
-
-        <div class="h-10 min-w-[140px] border border-slate-200 bg-white rounded-2xl px-4 flex items-center shadow-sm">
-          <select id="productsUnit"
-            class="w-full border-none bg-transparent text-sm font-bold text-slate-600 focus:ring-0">
-            <option value="">Todas Unidades</option>
-            <option value="UN">Unidade (UN)</option>
-            <option value="KG">Quilograma (KG)</option>
-            <option value="M">Metro (M)</option>
-            <option value="L">Litro (L)</option>
-            <option value="CX">Caixa (CX)</option>
-            <option value="PAR">Par (PAR)</option>
-            <option value="MT2">Metro ² (MT2)</option>
-            <option value="MT3">Metro ³ (MT3)</option>
+        <div class="h-10 min-w-[120px] border border-slate-200 bg-white rounded-2xl px-4 flex items-center shadow-sm">
+          <select id="productsActive" class="w-full border-none bg-transparent text-sm font-bold text-slate-600 focus:ring-0">
+            <option value="1">Ativos</option>
+            <option value="0">Inativos</option>
+            <option value="">Todos</option>
           </select>
         </div>
-
         <div class="h-10 min-w-[140px] border border-slate-200 bg-white rounded-2xl px-4 flex items-center shadow-sm">
-          <select id="productsSort"
-            class="w-full border-none bg-transparent text-sm font-bold text-slate-600 focus:ring-0">
+          <select id="productsSort" class="w-full border-none bg-transparent text-sm font-bold text-slate-600 focus:ring-0">
             <option value="name_asc">Nome (A-Z)</option>
             <option value="name_desc">Nome (Z-A)</option>
-            <option value="sku_asc">Código SKU</option>
+            <option value="sku_asc">Código</option>
           </select>
         </div>
       </div>
+    </div>
+
+    <div class="mb-6 flex flex-wrap items-center gap-3">
+      <p id="productsCount" class="text-xs font-semibold text-slate-500 mr-auto"></p>
+      <label class="h-10 bg-white border border-slate-200 text-slate-700 px-4 rounded-xl font-bold flex items-center gap-2 shadow-sm hover:border-slate-400 cursor-pointer text-sm" data-perm="materiais:manage">
+        <span class="material-symbols-outlined text-lg">upload_file</span> Importar Excel
+        <input id="productsImport" type="file" accept=".xlsx,.xls,.csv" hidden>
+      </label>
+      <a href="/registos/categorias-produtos" class="h-10 bg-white border border-slate-200 text-slate-700 px-4 rounded-xl font-bold flex items-center gap-2 shadow-sm hover:border-slate-400 text-sm">
+        <span class="material-symbols-outlined text-lg">category</span> Categorias
+      </a>
+      <button type="button" id="productsUnits" class="h-10 bg-white border border-slate-200 text-slate-700 px-4 rounded-xl font-bold flex items-center gap-2 shadow-sm hover:border-slate-400 text-sm">
+        <span class="material-symbols-outlined text-lg">straighten</span> Unidades
+      </button>
+      <a href="/registos/produtos" id="productsNew"
+        class="h-10 bg-slate-900 text-white px-5 rounded-xl font-bold flex items-center gap-2 shadow-xl shadow-slate-900/10 hover:bg-slate-800 transition-all text-sm">
+        Novo Produto / Serviço
+        <span class="material-symbols-outlined text-xl">add_circle</span>
+      </a>
     </div>
 
     <!-- Table Container -->
@@ -97,16 +103,22 @@
         <table class="w-full text-left">
           <thead>
             <tr class="bg-slate-50/50 text-slate-500 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
-              <th class="px-8 py-5">Item / Descrição</th>
-              <th class="px-8 py-5 text-center">Tipo</th>
-              <th class="px-8 py-5 text-center">Unidade</th>
-              <th class="px-8 py-5 text-center">Estado</th>
-              <th class="px-8 py-5 text-right">Ações</th>
+              <th class="px-5 py-4">Código</th>
+              <th class="px-5 py-4">Descrição</th>
+              <th class="px-4 py-4 text-center">Tipo</th>
+              <th class="px-4 py-4 text-center">Un.</th>
+              <th class="px-4 py-4">Categoria</th>
+              <th class="px-4 py-4">Subcategoria</th>
+              <th class="px-4 py-4 text-right">IVA</th>
+              <th class="px-4 py-4 text-right">Ret. Fonte</th>
+              <th class="px-4 py-4 text-right">Preço Ref.</th>
+              <th class="px-4 py-4 text-center">Estado</th>
+              <th class="px-5 py-4 text-right">Ações</th>
             </tr>
           </thead>
           <tbody id="productsTbody" class="divide-y divide-slate-50">
             <tr>
-              <td colspan="5" class="px-8 py-12 text-center text-slate-400">
+              <td colspan="11" class="px-8 py-12 text-center text-slate-400">
                 <span class="material-symbols-outlined text-4xl animate-spin">refresh</span>
                 <p class="text-xs font-bold mt-2">A carregar catálogo...</p>
               </td>
@@ -135,7 +147,7 @@
     </section>
   </main>
 
-  <script type="module" src="./produtosLista.js"></script>
+  <script type="module" src="/produtos/produtosLista.js"></script>
 </body>
 
 </html>

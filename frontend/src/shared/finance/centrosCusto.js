@@ -57,12 +57,13 @@ function desenhar() {
     ${
       L.length
         ? `<div class="fx2-tw"><table class="fx2-t">
-      <thead><tr><th>Código</th><th>Designação</th><th>Tipo</th><th>Obra</th><th class="r">Previsto</th><th class="r">Realizado (s/ IVA)</th><th class="r">Pago</th><th class="r">Por Pagar</th><th class="r">Execução</th><th>Estado</th><th></th></tr></thead>
+      <thead><tr><th>Código</th><th>Designação</th><th>Tipo</th><th title="Automático: nasceu de uma obra adjudicada · manual: criado aqui">Origem</th><th>Obra</th><th class="r">Previsto</th><th class="r">Realizado (s/ IVA)</th><th class="r">Pago</th><th class="r">Por Pagar</th><th class="r">Execução</th><th>Estado</th><th></th></tr></thead>
       <tbody>${L.map(
         (l) => `<tr${l.ativo ? "" : ' class="fx2-off"'}>
           <td><b>${esc(l.codigo)}</b></td>
           <td>${esc(l.nome)}</td>
           <td class="fx2-mut">${tipoDe(l)}</td>
+          <td class="fx2-mut">${l.tipo === "GERAL" ? "manual" : "automático"}</td>
           <td class="fx2-mut">${esc(l.obra)}</td>
           <td class="r">${
             l.tipo === "GERAL" && podeEditar()
@@ -107,7 +108,7 @@ function desenhar() {
 
 function subsHtml(l) {
   const S2 = l.subs || [];
-  return `<tr class="rg-subs"><td colspan="11">${
+  return `<tr class="rg-subs"><td colspan="12">${
     S2.length
       ? `<table class="fx2-t rg-subt"><thead><tr><th>Subcusto</th><th class="r">Lançamentos</th><th class="r">Custo (s/ IVA)</th></tr></thead><tbody>${S2.map(
           (x) => `<tr><td>${esc(x.k)}</td><td class="r">${x.n}</td><td class="r"><b>${fmt(x.custo)}</b></td></tr>`

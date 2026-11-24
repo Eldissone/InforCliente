@@ -642,8 +642,19 @@ model Product {
   unit               ProductUnit           @default(UN)
   minStock           Decimal               @default(0) @db.Decimal(16, 4)
   active             Boolean               @default(true)
+  /// RG1 (protótipo): PRODUTO ou SERVICO
+  kind               String                @default("PRODUTO")
+  /// Condição: COMERCIAL (orçamentos e propostas), COMPRA (compras e pedidos de pagamento) e outras
+  conditions         String[]              @default([])
+  vatPercent         Decimal?              @db.Decimal(5, 2)
+  withholdingPercent Decimal?              @db.Decimal(5, 2)
+  notes              String?
+  catalogCategoryId    String?
+  catalogSubcategoryId String?
   createdAt          DateTime              @default(now())
   updatedAt          DateTime              @updatedAt
+  catalogCategory    CatalogCategory?      @relation("ProdutoCategoria", fields: [catalogCategoryId], references: [id], onDelete: SetNull)
+  catalogSubcategory CatalogCategory?      @relation("ProdutoSubcategoria", fields: [catalogSubcategoryId], references: [id], onDelete: SetNull)
   items              Item[]
   movements          StockMovement[]
   stock              WarehouseStock[]
@@ -865,6 +876,10 @@ enum ProductUnit {
   PAR
   MT2
   MT3
+  TON
+  H
+  DIA
+  MES
 }
 
 enum ItemStatus {
@@ -3085,4 +3100,40 @@ model CreditNote {
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   @@index([invoiceId])
+}
+
+/// RG2 Categorias de produtos e serviços (protótipo): cada categoria é de
+/// produtos ou de serviços; as subcategorias têm `parentId`.
+model CatalogCategory {
+  id        String   @id @default(cuid())
+  name      String
+  /// PRODUTO ou SERVICO
+  kind      String   @default("PRODUTO")
+  parentId  String?
+  examples  String?
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  parent           CatalogCategory?  @relation("CategoriaArvore", fields: [parentId], references: [id], onDelete: Cascade)
+  children         CatalogCategory[] @relation("CategoriaArvore")
+  productsCategory Product[]         @relation("ProdutoCategoria")
+  productsSub      Product[]         @relation("ProdutoSubcategoria")
+
+  @@index([parentId])
+  @@index([kind])
+}
+
+/// RG9 Bancos (protótipo): sigla, nome, código do banco no IBAN e os outros
+/// nomes com que aparece nos extratos e documentos.
+model Bank {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  ibanCode  String?
+  aliases   String[] @default([])
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

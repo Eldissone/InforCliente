@@ -49,7 +49,8 @@ export const APP_MENU = [
           },
         ],
       },
-      { label: "Produtos e Serviços", icon: "inventory_2", href: "/registos/produtos", perm: "materiais:view" },
+      { label: "Produtos e Serviços", icon: "inventory_2", href: "/produtos", perm: "materiais:view" },
+      { label: "Categorias de Produtos e Serviços", icon: "category", href: "/registos/categorias-produtos", perm: "materiais:view" },
       { label: "Equipamentos, Maquinarias e Viaturas", icon: "agriculture", href: "/registos/equipamentos", perm: "ferramentas:view" },
       { label: "Pessoal", icon: "badge", href: "/registos/pessoal", perm: "cadastros:view" },
       { label: "Folha de Ponto", icon: "schedule", href: "/registos/folha-ponto", perm: "cadastros:view" },
@@ -283,6 +284,7 @@ export const APP_MENU = [
         autoBadge: true,
         children: [
           { label: "Centros de Custo", icon: "account_tree", href: "/Financeiro/centros-custo", navPerm: "navlinks:nav_financeiro", perm: "financeiro:view" },
+          { label: "Bancos", icon: "account_balance", href: "/Financeiro/bancos", navPerm: "navlinks:nav_financeiro", perm: "financeiro:view" },
           { label: "Tipo de Custo (Produto ou Serviço)", icon: "category", href: "/registos/tipo-custo", perm: "financeiro:view|pedidosExtras:view" },
           { label: "Categorias de Custo", icon: "account_tree", href: "/registos/categorias-custo", perm: "financeiro:view|pedidosExtras:view" },
           { label: "Subcategorias de Custo", icon: "subdirectory_arrow_right", href: "/registos/subcategorias-custo", perm: "financeiro:view|pedidosExtras:view" },

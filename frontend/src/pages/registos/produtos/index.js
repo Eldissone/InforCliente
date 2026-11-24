@@ -1,269 +1,150 @@
-import { apiRequest, apiUpload } from "/services/api.js";
-import { existingListHtml } from "/shared/existingRecords.js";
+import { apiRequest, apiUpload, getAssetUrl } from "/services/api.js";
 import { checkAuth } from "/services/auth.js";
 import { can, guardPageAccess, initPermissionLayer } from "/shared/permissions.js";
 import { wireLogout, wireUsersNav } from "/shared/session.js";
 import { initMobileMenu, toast } from "/shared/ui.js";
 
-const EXTRAS_KEY = "InfoCliente.registo.produtosExtras";
+/**
+ * RG1 Produtos e Serviços › ficha (o FXDRAW.prod do protótipo), no layout
+ * desta página (cartões e grelha):
+ *  - Informação: Código (atribuído ao gravar), Descrição*, Descrição Extra
+ *    (palavras para a pesquisa), Condição* (Comercial / Compra / outra),
+ *    Unidade*, IVA*, Retenção na fonte;
+ *  - Categoria* e Subcategoria (RG2), com «+ Criar nova…» e «Gerir»;
+ *  - Observações; Fotografia (produtos); Estado (ao editar).
+ * O tipo (Produto / Serviço) é o separador do topo. `?id=` abre para editar.
+ */
+
 const PHOTO_MAX_BYTES = 2 * 1024 * 1024;
 const PHOTO_TYPES = ["image/jpeg", "image/png"];
-const UNITS = ["UN", "KG", "M", "L", "CX", "PAR", "MT2", "MT3"];
-
-const UNIT_LABELS = {
-  UN: "Unidade",
-  KG: "Quilograma",
-  M: "Metro",
-  L: "Litro",
-  CX: "Caixa",
-  PAR: "Par",
-  MT2: "Metro quadrado",
-  MT3: "Metro cúbico",
-};
-
-const FALLBACK_CATEGORIAS = [
-  "Materiais de Obra",
-  "Materiais Diversos",
-  "Equipamentos",
-  "Ferramentas e Utensílios",
-  "Serviços de Maquinaria",
-  "Serviços Diversos",
-  "Serviços Internos",
-  "Serviços de Manutenção de Frota",
-  "Serviços de Transporte e Logística",
+const UNITS = [
+  ["UN", "UN — unidade"],
+  ["M", "M — metro"],
+  ["MT2", "M² — metro quadrado"],
+  ["MT3", "M³ — metro cúbico"],
+  ["KG", "KG — quilograma"],
+  ["TON", "TON — tonelada"],
+  ["L", "L — litro"],
+  ["H", "H — hora"],
+  ["DIA", "DIA — dia"],
+  ["MES", "MÊS — mês"],
+  ["CX", "CX — caixa"],
+  ["PAR", "PAR — par"],
+];
+const IVAS = [
+  ["14", "14%"],
+  ["7", "7%"],
+  ["5", "5%"],
+  ["0", "Isento / sem IVA"],
+];
+const CONDICOES = [
+  ["COMERCIAL", "Comercial", "Entra nos orçamentos e propostas"],
+  ["COMPRA", "Compra", "Entra nas compras e pedidos de pagamento"],
 ];
 
-const FALLBACK_SUBCATEGORIAS = [
-  "Material Eléctrico",
-  "Material de Construção",
-  "Inertes",
-  "Ferragens",
-  "Consumíveis de Obra",
-  "Aluguer de Máquinas",
-  "Operação de Máquinas",
-  "Subcontratação",
-];
+const esc = (value) =>
+  String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const apiMessage = (error) => error?.data?.message || error?.data?.error || error?.message || "Não foi possível guardar.";
+const norm = (v) =>
+  String(v ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim();
 
-const PRODUCT_DEFAULTS = {
-  familia: "Material Eléctrico",
-  tipoCusto: "Produto",
-  categoria: "Materiais de Obra",
-  subcategoria: "Material Eléctrico",
-  origem: "XSOFT",
-  sincronizacao: "Power Automate",
-  alternativa: "Manual em ambos - Plano B",
-};
-
-const SERVICE_DEFAULTS = {
-  familia: "Serviços",
-  tipoCusto: "Serviço",
-  categoria: "Serviços de Maquinaria",
-  subcategoria: "Aluguer de Máquinas",
-  origem: "Manual",
-  registoXsoft: "XSOFT",
-  estado: "Rascunho",
-};
-
-function esc(value) {
-  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;",
-  }[char]));
+const params = () => new URLSearchParams(window.location.search);
+function currentKind(produto) {
+  if (produto) return produto.kind === "SERVICO" ? "servico" : "produto";
+  const tipo = norm(params().get("tipo"));
+  return tipo === "servico" ? "servico" : "produto";
 }
+const kindHref = (kind) => (kind === "servico" ? "/registos/produtos?tipo=servico" : "/registos/produtos");
 
-function invalid(message) {
-  const error = new Error(message);
-  error.validation = true;
-  throw error;
+function field(label, control, { req = false, extra = "", wide = false } = {}) {
+  return `<label class="ps-field${wide ? " ps-wide" : ""}"><span>${label}${req ? ' <b class="ps-req">*</b>' : ""}${extra}</span>${control}</label>`;
 }
+const options = (items, selected, placeholder) =>
+  `${placeholder != null ? `<option value="">${esc(placeholder)}</option>` : ""}${items
+    .map(([v, l]) => `<option value="${esc(v)}"${String(selected ?? "") === String(v) ? " selected" : ""}>${esc(l)}</option>`)
+    .join("")}`;
 
-function apiMessage(error) {
-  return error?.data?.message || error?.data?.error || error?.message || "Não foi possível guardar.";
-}
-
-function currentKind() {
-  const tipo = new URLSearchParams(window.location.search).get("tipo") || "";
-  return tipo.toLowerCase() === "servico" || tipo.toLowerCase() === "serviço" ? "servico" : "produto";
-}
-
-function kindHref(kind) {
-  return kind === "servico" ? "/registos/produtos?tipo=servico" : "/registos/produtos";
-}
-
-function readExtras() {
+async function carregarCategorias() {
   try {
-    const parsed = JSON.parse(localStorage.getItem(EXTRAS_KEY) || "{}");
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    const r = await apiRequest("/catalog-categories");
+    return r.items || [];
   } catch {
-    return {};
+    return [];
   }
-}
-
-function writeExtras(map) {
-  localStorage.setItem(EXTRAS_KEY, JSON.stringify(map));
-}
-
-function optionList(items, selected, placeholder, { includeEmpty = true } = {}) {
-  const opts = items.map((item) => {
-    const value = typeof item === "string" ? item : item.value;
-    const label = typeof item === "string" ? item : item.label;
-    return `<option value="${esc(value)}" ${String(selected) === String(value) ? "selected" : ""}>${esc(label)}</option>`;
-  }).join("");
-  if (!includeEmpty) return opts;
-  return `<option value="">${esc(placeholder)}</option>${opts}`;
-}
-
-function field(label, control) {
-  return `<label class="ps-field"><span>${label}</span>${control}</label>`;
-}
-
-function ensureNamedOption(items, value, label) {
-  if (!value) return items;
-  const exists = items.some((item) => String(typeof item === "string" ? item : item.value) === String(value));
-  return exists ? items : [{ value, label: label || value }, ...items];
-}
-
-function pickByName(items, name) {
-  if (!name) return "";
-  const match = items.find((item) => {
-    const label = typeof item === "string" ? item : item.label;
-    return String(label).toLocaleLowerCase("pt") === String(name).toLocaleLowerCase("pt");
-  });
-  if (!match) return "";
-  return typeof match === "string" ? match : match.value;
-}
-
-function unitOptions(kind) {
-  return UNITS.map((unit) => ({
-    value: unit,
-    label: kind === "servico" && unit === "UN" ? "Hora / serviço" : (UNIT_LABELS[unit] || unit),
-  }));
-}
-
-async function loadLookups(kind) {
-  const [categoriesRes, suppliersRes, productsRes] = await Promise.allSettled([
-    apiRequest("/cost-categories?all=true&domain=OBRA"),
-    apiRequest(kind === "servico" ? "/suppliers?type=SERVICO" : "/suppliers?type=MATERIAL"),
-    apiRequest("/products"),
-  ]);
-
-  let categories = [];
-  if (categoriesRes.status === "fulfilled") {
-    categories = categoriesRes.value?.items || [];
-  }
-  if (!categories.length && categoriesRes.status === "rejected") {
-    try {
-      const fallback = await apiRequest("/cost-categories?all=true");
-      categories = fallback.items || [];
-    } catch {
-      categories = [];
-    }
-  }
-
-  const parents = categories.filter((item) => item.parentId == null);
-  const children = categories.filter((item) => item.parentId != null);
-  const categoryOptions = parents.length
-    ? parents.map((item) => ({ value: String(item.id), label: item.name, raw: item }))
-    : FALLBACK_CATEGORIAS.map((name) => ({ value: name, label: name }));
-  const subcategoryOptions = children.length
-    ? children.map((item) => ({
-      value: String(item.id),
-      label: item.name,
-      parentId: String(item.parentId),
-    }))
-    : FALLBACK_SUBCATEGORIAS.map((name) => ({ value: name, label: name, parentId: "" }));
-
-  let suppliers = [];
-  if (suppliersRes.status === "fulfilled") {
-    suppliers = suppliersRes.value?.items || [];
-  }
-  if (!suppliers.length) {
-    try {
-      const all = await apiRequest("/suppliers");
-      suppliers = all.items || [];
-    } catch {
-      suppliers = [];
-    }
-  }
-  const supplierOptions = suppliers.map((item) => ({ value: item.id, label: item.name }));
-
-  const products = productsRes.status === "fulfilled" ? (productsRes.value?.items || []) : [];
-
-  return {
-    categoryOptions,
-    subcategoryOptions,
-    supplierOptions,
-    products,
-    productsError: productsRes.status === "rejected",
-  };
-}
-
-function filterSubs(allSubs, parentId) {
-  if (!parentId) return allSubs;
-  const filtered = allSubs.filter((item) => !item.parentId || item.parentId === String(parentId));
-  return filtered.length ? filtered : allSubs.filter((item) => !item.parentId);
-}
-
-function buildDescription(kind, extras) {
-  const parts = [];
-  if (kind === "servico") parts.push("Serviço");
-  if (extras.familia) parts.push(extras.familia);
-  if (extras.subfamilia) parts.push(extras.subfamilia);
-  if (extras.costCategoryName) parts.push(extras.costCategoryName);
-  if (extras.costSubcategoryName) parts.push(extras.costSubcategoryName);
-  return parts.join(" · ") || (kind === "servico" ? "Serviço" : null);
-}
-
-function labelOf(options, value) {
-  const match = options.find((item) => String(item.value) === String(value));
-  return match?.label || value || "";
 }
 
 export async function renderProdutosForm() {
   const root = document.getElementById("registryRoot");
   if (!root) return;
   await initPermissionLayer();
-
-  const kind = currentKind();
-  const isService = kind === "servico";
-  const defaults = isService ? SERVICE_DEFAULTS : PRODUCT_DEFAULTS;
   const canManage = can("materiais", "manage");
-  const lookups = await loadLookups(kind);
 
-  const categoryOptions = ensureNamedOption(
-    lookups.categoryOptions,
-    pickByName(lookups.categoryOptions, defaults.categoria) || defaults.categoria,
-    defaults.categoria
-  );
-  const selectedCategory = pickByName(categoryOptions, defaults.categoria)
-    || categoryOptions[0]?.value
-    || defaults.categoria;
-  const visibleSubs = filterSubs(lookups.subcategoryOptions, selectedCategory);
-  const subcategoryOptions = ensureNamedOption(
-    visibleSubs,
-    pickByName(visibleSubs, defaults.subcategoria) || defaults.subcategoria,
-    defaults.subcategoria
-  );
-  const selectedSub = pickByName(subcategoryOptions, defaults.subcategoria)
-    || subcategoryOptions[0]?.value
-    || defaults.subcategoria;
+  const id = params().get("id");
+  let produto = null;
+  if (id) {
+    try {
+      produto = await apiRequest(`/products/${encodeURIComponent(id)}`);
+    } catch (e) {
+      toast(`Não foi possível abrir o produto: ${apiMessage(e)}`, { type: "error" });
+    }
+  }
+  const kind = currentKind(produto);
+  const isService = kind === "servico";
+  const KIND = isService ? "SERVICO" : "PRODUTO";
+  let cats = await carregarCategorias();
+  const nomeTipo = isService ? "Serviço" : "Produto";
 
-  const nameList = lookups.products.map((item) => `<option value="${esc(item.name)}"></option>`).join("");
   const title = document.querySelector("title");
-  if (title) title.textContent = isService ? "Info Gestor — Criar Serviço" : "Info Gestor — Criar Produto";
+  if (title) title.textContent = `Info Gestor — ${produto ? `Editar ${nomeTipo}` : `Novo ${nomeTipo}`}`;
+
+  const st = {
+    conds: new Set(produto?.conditions?.length ? produto.conditions : []),
+    cat: produto?.catalogCategoryId || "",
+    sub: produto?.catalogSubcategoryId || "",
+  };
+  const outrasConds = () => [...st.conds].filter((c) => !CONDICOES.some(([k]) => k === c));
+
+  const catsDoTipo = () => cats.filter((c) => c.kind === KIND || c.id === st.cat);
+  const catOpts = () =>
+    `<option value="">— escolher —</option>${canManage ? '<option value="__new">+ Criar nova…</option>' : ""}${catsDoTipo()
+      .map((c) => `<option value="${esc(c.id)}"${c.id === st.cat ? " selected" : ""}>${esc(c.name)}</option>`)
+      .join("")}`;
+  const subOpts = () => {
+    const c = cats.find((x) => x.id === st.cat);
+    const L = c?.subs || [];
+    return `<option value="">— escolher —</option>${c && canManage ? '<option value="__new">+ Criar nova…</option>' : ""}${L.map(
+      (s) => `<option value="${esc(s.id)}"${s.id === st.sub ? " selected" : ""}>${esc(s.name)}</option>`
+    ).join("")}`;
+  };
+  const condHtml = () =>
+    `<span class="ps-seg" id="psConds">${CONDICOES.map(
+      ([k, l, t]) => `<button type="button" class="${st.conds.has(k) ? "is-on" : ""}" data-cond="${k}" title="${esc(t)}">${l}</button>`
+    ).join("")}${outrasConds()
+      .map((k) => `<button type="button" class="is-on" data-cond="${esc(k)}" title="Clique para retirar">${esc(k)}</button>`)
+      .join("")}${canManage ? '<button type="button" data-condnew="1" title="Acrescentar outra condição">+</button>' : ""}</span>`;
+
+  const aliases = (produto?.aliases || []).map((a) => a.alias).join(", ");
+  const iva = produto?.vatPercent != null ? String(Number(produto.vatPercent)) : "";
+  const ret = produto?.withholdingPercent != null ? String(Number(produto.withholdingPercent)) : "";
 
   root.innerHTML = `
     <nav class="ps-switch" aria-label="Tipo de registo">
-      <a href="${kindHref("produto")}" class="${isService ? "" : "is-active"}">Produto</a>
-      <a href="${kindHref("servico")}" class="${isService ? "is-active" : ""}">Serviço</a>
+      ${
+        produto
+          ? `<span class="is-active">${nomeTipo}</span>`
+          : `<a href="${kindHref("produto")}" class="${isService ? "" : "is-active"}">Produto</a>
+             <a href="${kindHref("servico")}" class="${isService ? "is-active" : ""}">Serviço</a>`
+      }
     </nav>
     <header class="ps-header">
       <div>
-        <h1 class="ps-title">${isService ? "Criar Serviço" : "Criar Produto"}</h1>
-        <p class="ps-lead">Dados demonstrativos / campos por preencher · moeda não especificada no overview.</p>
+        <div class="ps-kick">PRODUTO / SERVIÇO</div>
+        <h1 class="ps-title">${produto ? `${esc(produto.name)}` : `Novo ${nomeTipo}`}</h1>
+        <p class="ps-lead">Registo e configuração do ${isService ? "serviço" : "produto"}${produto?.sku ? ` · código ${esc(produto.sku)}` : ""}.</p>
       </div>
       <a href="/produtos" class="ps-top-btn">
         <span class="material-symbols-outlined" aria-hidden="true">format_list_bulleted</span>
@@ -272,126 +153,173 @@ export async function renderProdutosForm() {
     </header>
     <form class="ps-form" id="psForm" novalidate>
       <section class="ps-card">
-        <h2>${isService ? "Identificação do serviço" : "Identificação do produto"}</h2>
+        <h2>Informação do ${nomeTipo}</h2>
         <div class="ps-grid">
-          ${field(isService ? "Serviço" : "Produto", `<input name="name" type="text" required list="ps-names" placeholder="${isService ? "Preencher descrição" : "Seleccionar ou preencher"}">${isService ? "" : `<datalist id="ps-names">${nameList}</datalist>`}`)}
-          ${field("Código", `<input name="sku" type="text" placeholder="${isService ? "Código do serviço" : "Código do catálogo"}">`)}
-          ${field("Família", `<input name="familia" type="text" value="${esc(defaults.familia)}" placeholder="${isService ? "Serviços" : "Material Eléctrico"}">`)}
-          ${field("Subfamília", `<input name="subfamilia" type="text" placeholder="Definir subfamília">`)}
-          ${field("Tipo de custo", `<select name="tipoCusto">${optionList([defaults.tipoCusto], defaults.tipoCusto, defaults.tipoCusto, { includeEmpty: false })}</select>`)}
-          ${field("Unidade", `<select name="unit">${optionList(unitOptions(kind), isService ? "UN" : "", isService ? "Hora / serviço" : "Unidade de medida", { includeEmpty: !isService })}</select>`)}
+          ${field("Código", `<input name="sku" type="text" value="${esc(produto?.sku || "")}" placeholder="(atribuído ao gravar)">`)}
+          ${field(`Descrição do ${nomeTipo}`, `<input name="name" type="text" required value="${esc(produto?.name || "")}" placeholder="designação técnica">`, { req: true })}
+          ${field("Descrição Extra", `<input name="aliases" type="text" value="${esc(aliases)}" placeholder="palavras para a pesquisa, separadas por vírgula">`)}
+          ${field("Condição", condHtml(), { req: true, wide: true })}
+          ${field("Unidade", `<select name="unit">${options(UNITS, produto?.unit || "", "— escolher —")}</select>`, { req: true })}
+          ${field("IVA", `<select name="vat">${options(IVAS, iva, "— escolher —")}</select>`, { req: true })}
+          ${field("Retenção na fonte (%)", `<input name="withholding" type="number" min="0" max="100" step="0.01" value="${esc(ret)}" placeholder="${isService ? "ex.: 6,5" : "—"}">`)}
         </div>
       </section>
       <section class="ps-card">
-        <h2>Classificação e origem</h2>
-        <div class="ps-grid">
-          ${field("Categoria de custo", `<select name="costCategory">${optionList(categoryOptions, selectedCategory, "Seleccionar categoria", { includeEmpty: false })}</select>`)}
-          ${field("Subcategoria de custo", `<select name="costSubcategory">${optionList(subcategoryOptions, selectedSub, "Seleccionar subcategoria", { includeEmpty: false })}</select>`)}
-          ${field(isService ? "Prestador" : "Fornecedor", `<select name="supplierId">${optionList(lookups.supplierOptions, "", "Seleccionar fornecedor")}</select>`)}
-          ${field("Origem", `<select name="origem">${optionList([
-            "XSOFT",
-            "Manual",
-            "Manual em ambos - Plano B",
-          ], defaults.origem, "Seleccionar origem", { includeEmpty: false })}</select>`)}
-          ${isService
-            ? `${field("Registo XSOFT", `<select name="registoXsoft">${optionList(["A efetuar no XSOFT", "Efectuado", "Não aplicável"], defaults.registoXsoft, "Seleccionar", { includeEmpty: false })}</select>`)}
-               ${field("Estado", `<select name="estado">${optionList(["Rascunho", "A efetuar", "Activo"], defaults.estado, "Seleccionar", { includeEmpty: false })}</select>`)}`
-            : `${field("Sincronização", `<select name="sincronizacao">${optionList(["Prevista via Power Automate", "Manual", "Não aplicável"], defaults.sincronizacao, "Seleccionar", { includeEmpty: false })}</select>`)}
-               ${field("Alternativa", `<select name="alternativa">${optionList(["Manual em ambos - Plano B", "Apenas XSOFT", "Apenas INFO GESTOR"], defaults.alternativa, "Seleccionar", { includeEmpty: false })}</select>`)}`}
+        <h2>Categoria</h2>
+        <div class="ps-grid ps-grid--2">
+          ${field("Categoria", `<select name="cat" id="psCat">${catOpts()}</select>`, { req: true, extra: ' <a class="ps-gerir" href="/registos/categorias-produtos">Gerir</a>' })}
+          ${field("Subcategoria", `<select name="sub" id="psSub">${subOpts()}</select>`)}
         </div>
       </section>
-      ${isService ? "" : `<section class="ps-card">
+      <section class="ps-card">
+        <h2>Observações</h2>
+        <div class="ps-grid ps-grid--1">
+          ${field("Observações", `<textarea name="notes" rows="2" placeholder="opcional">${esc(produto?.notes || "")}</textarea>`, { wide: true })}
+        </div>
+      </section>
+      ${
+        isService
+          ? ""
+          : `<section class="ps-card">
         <h2>Fotografia</h2>
+        ${produto?.image ? `<img class="ps-foto" src="${esc(getAssetUrl(produto.image))}" alt="">` : ""}
         <label class="ps-field ps-photo"><span>Anexar JPG, JPEG ou PNG (máximo 2 MB)</span><input name="photo" type="file" accept=".jpg,.jpeg,.png,image/jpeg,image/png"></label>
-      </section>`}
+      </section>`
+      }
+      ${
+        produto
+          ? `<section class="ps-card"><h2>Estado</h2><div class="ps-grid">${field(
+              "Estado",
+              `<select name="active">${options([["1", "Ativo"], ["0", "Inativo — não aparece nas listas de escolha"]], produto.active === false ? "0" : "1", null)}</select>`
+            )}</div></section>`
+          : ""
+      }
       <div class="ps-actions">
-        ${canManage
-          ? `<button class="ps-submit" type="submit" data-perm="materiais:manage">${isService ? "Guardar serviço" : "Guardar produto"}</button>`
-          : `<p class="ps-denied">Sem permissão para guardar no catálogo.</p>`}
+        <a class="ps-top-btn" href="/produtos">Cancelar</a>
+        ${
+          canManage
+            ? `<button class="ps-submit" type="submit" data-perm="materiais:manage">${produto ? "Gravar alterações" : `Gravar ${isService ? "serviço" : "produto"}`}</button>`
+            : `<p class="ps-denied">Sem permissão para guardar no catálogo.</p>`
+        }
       </div>
     </form>`;
 
   const form = root.querySelector("#psForm");
-  const categorySelect = form?.querySelector("[name=costCategory]");
-  const subSelect = form?.querySelector("[name=costSubcategory]");
+  const catSel = form.querySelector("#psCat");
+  const subSel = form.querySelector("#psSub");
 
-  categorySelect?.addEventListener("change", () => {
-    if (!subSelect) return;
-    const next = filterSubs(lookups.subcategoryOptions, categorySelect.value);
-    const current = next.some((item) => item.value === subSelect.value) ? subSelect.value : (next[0]?.value || "");
-    subSelect.innerHTML = optionList(next, current, "Seleccionar subcategoria", { includeEmpty: !next.length });
+  const criarCategoria = async (parentId) => {
+    const nome = window.prompt(parentId ? "Nome da nova subcategoria:" : `Nome da nova categoria de ${isService ? "serviços" : "produtos"}:`);
+    if (!nome || nome.trim().length < 2) return null;
+    try {
+      const c = await apiRequest("/catalog-categories", { method: "POST", body: { name: nome.trim(), kind: KIND, parentId: parentId || null } });
+      cats = await carregarCategorias();
+      toast(`${parentId ? "Subcategoria" : "Categoria"} «${c.name}» criada.`, { type: "success" });
+      return c.id;
+    } catch (e) {
+      toast(apiMessage(e), { type: "error" });
+      return null;
+    }
+  };
+
+  catSel?.addEventListener("change", async () => {
+    if (catSel.value === "__new") {
+      const novo = await criarCategoria(null);
+      st.cat = novo || st.cat;
+    } else st.cat = catSel.value;
+    st.sub = "";
+    catSel.innerHTML = catOpts();
+    subSel.innerHTML = subOpts();
   });
-
-  form?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (!can("materiais", "manage")) {
-      toast("Sem permissão para guardar.", { type: "error" });
+  subSel?.addEventListener("change", async () => {
+    if (subSel.value === "__new") {
+      const novo = await criarCategoria(st.cat);
+      st.sub = novo || "";
+    } else st.sub = subSel.value;
+    subSel.innerHTML = subOpts();
+  });
+  form.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-cond]");
+    if (b) {
+      const k = b.dataset.cond;
+      if (st.conds.has(k)) st.conds.delete(k);
+      else st.conds.add(k);
+      form.querySelector("#psConds").outerHTML = condHtml();
       return;
     }
+    if (e.target.closest("[data-condnew]")) {
+      const n = window.prompt("Nova condição (ex.: STOCK):");
+      if (n && n.trim()) st.conds.add(n.trim().toUpperCase().slice(0, 40));
+      form.querySelector("#psConds").outerHTML = condHtml();
+    }
+  });
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!can("materiais", "manage")) return toast("Sem permissão para guardar.", { type: "error" });
     const button = form.querySelector("[type=submit]");
+    const data = new FormData(form);
+    const name = String(data.get("name") || "").trim();
+    const unit = String(data.get("unit") || "");
+    const vat = String(data.get("vat") || "");
+    const falta = [];
+    if (name.length < 2) falta.push("a descrição");
+    if (!st.conds.size) falta.push("a condição");
+    if (!unit) falta.push("a unidade");
+    if (vat === "") falta.push("o IVA");
+    if (!st.cat) falta.push("a categoria");
+    if (falta.length) return toast(`Falta ${falta.join(", ")}.`, { type: "error" });
+    const photo = data.get("photo");
+    if (photo instanceof File && photo.size) {
+      if (!PHOTO_TYPES.includes(photo.type) && !/\.(jpe?g|png)$/i.test(photo.name || "")) return toast("A fotografia tem de ser JPG, JPEG ou PNG.", { type: "error" });
+      if (photo.size > PHOTO_MAX_BYTES) return toast("A fotografia deve ter no máximo 2 MB.", { type: "error" });
+    }
+    const ret = String(data.get("withholding") || "").replace(",", ".");
+    const body = {
+      name,
+      sku: String(data.get("sku") || "").trim() || null,
+      unit,
+      kind: KIND,
+      conditions: [...st.conds],
+      vatPercent: Number(vat),
+      withholdingPercent: ret === "" ? null : Number(ret),
+      catalogCategoryId: st.cat || null,
+      catalogSubcategoryId: st.sub || null,
+      notes: String(data.get("notes") || "").trim() || null,
+      ...(produto ? { active: data.get("active") !== "0" } : { minStock: 0 }),
+    };
     if (button) button.disabled = true;
     try {
-      const data = new FormData(form);
-      const name = String(data.get("name") || "").trim();
-      if (name.length < 2) invalid(isService ? "Indique a descrição do serviço." : "Indique o nome do produto.");
+      const saved = produto
+        ? await apiRequest(`/products/${encodeURIComponent(produto.id)}`, { method: "PATCH", body })
+        : await apiRequest("/products", { method: "POST", body });
 
-      const unit = UNITS.includes(String(data.get("unit") || "")) ? String(data.get("unit")) : "UN";
-
-      const photo = data.get("photo");
-      if (photo instanceof File && photo.size) {
-        if (!PHOTO_TYPES.includes(photo.type) && !/\.(jpe?g|png)$/i.test(photo.name || "")) {
-          invalid("A fotografia tem de ser JPG, JPEG ou PNG.");
+      // Descrição Extra = os nomes alternativos (aliases) usados na pesquisa.
+      const quero = [...new Set(String(data.get("aliases") || "").split(",").map((x) => x.trim()).filter((x) => x.length >= 2))];
+      const tinha = produto?.aliases || [];
+      const avisos = [];
+      for (const a of tinha) {
+        if (!quero.some((q) => norm(q) === norm(a.alias))) {
+          await apiRequest(`/products/${encodeURIComponent(saved.id)}/aliases/${encodeURIComponent(a.id)}`, { method: "DELETE" }).catch(() => {});
         }
-        if (photo.size > PHOTO_MAX_BYTES) invalid("A fotografia deve ter no máximo 2 MB.");
       }
-
-      const extras = {
-        kind,
-        familia: String(data.get("familia") || "").trim(),
-        subfamilia: String(data.get("subfamilia") || "").trim(),
-        tipoCusto: String(data.get("tipoCusto") || defaults.tipoCusto),
-        costCategoryId: String(data.get("costCategory") || ""),
-        costCategoryName: labelOf(categoryOptions, data.get("costCategory")),
-        costSubcategoryId: String(data.get("costSubcategory") || ""),
-        costSubcategoryName: labelOf(subcategoryOptions, data.get("costSubcategory")) || labelOf(lookups.subcategoryOptions, data.get("costSubcategory")),
-        supplierId: String(data.get("supplierId") || ""),
-        supplierName: labelOf(lookups.supplierOptions, data.get("supplierId")),
-        origem: String(data.get("origem") || ""),
-        sincronizacao: String(data.get("sincronizacao") || ""),
-        alternativa: String(data.get("alternativa") || ""),
-        registoXsoft: String(data.get("registoXsoft") || ""),
-        estado: String(data.get("estado") || ""),
-      };
-
-      const created = await apiRequest("/products", {
-        method: "POST",
-        body: {
-          name,
-          sku: String(data.get("sku") || "").trim() || null,
-          description: buildDescription(kind, extras),
-          category: isService ? "CONSUMABLE" : "MATERIAL",
-          unit,
-          minStock: 0,
-        },
-      });
-
-      if (photo instanceof File && photo.size && created?.id) {
+      for (const q of quero) {
+        if (tinha.some((a) => norm(a.alias) === norm(q))) continue;
         try {
-          await apiUpload(`/products/${created.id}/photo`, { file: photo, fieldName: "photo" });
-        } catch (error) {
-          toast(apiMessage(error) || "Produto guardado, mas a fotografia não foi enviada.", { type: "error" });
+          await apiRequest(`/products/${encodeURIComponent(saved.id)}/aliases`, { method: "POST", body: { alias: q } });
+        } catch (e) {
+          avisos.push(`«${q}»: ${apiMessage(e)}`);
         }
       }
-
-      if (created?.id) {
-        const stored = readExtras();
-        stored[created.id] = extras;
-        writeExtras(stored);
+      if (photo instanceof File && photo.size && saved?.id) {
+        try {
+          await apiUpload(`/products/${saved.id}/photo`, { file: photo, fieldName: "photo" });
+        } catch (e) {
+          avisos.push(`fotografia: ${apiMessage(e)}`);
+        }
       }
-
-      toast(isService ? "Serviço guardado no catálogo." : "Produto guardado no catálogo.", { type: "success" });
-      form.reset();
-      await renderProdutosForm();
+      toast(`${nomeTipo} ${saved.sku ? `${saved.sku} ` : ""}gravado.${avisos.length ? ` Atenção — ${avisos.join("; ")}` : ""}`, { type: avisos.length ? "info" : "success" });
+      window.location.href = "/produtos";
     } catch (error) {
       toast(apiMessage(error), { type: "error" });
       if (button) button.disabled = false;
