@@ -69,6 +69,7 @@
                     <button type="button" data-tipo="GO">Geral / Obra</button><button type="button" data-tipo="FROTA">Frota e Equipamentos</button><button type="button" data-tipo="EMPRESTIMO">Empréstimo</button><button type="button" data-tipo="PESSOAL" class="hidden">Pessoal</button><button type="button" data-tipo="IMPOSTOS" class="hidden">Impostos</button>
                 </span>
                 <label class="rq-dt">Data do pedido <input id="rqDataPedido" type="date" class="rq-in"></label>
+                <span class="rq-dt hidden" id="rqMovInfo"></span>
             </section>
 
             <!-- ═══ Dados da Requisição ═══ -->
@@ -324,8 +325,8 @@
 
             <!-- ═══ Documentos ═══ -->
             <section class="rq-sec" id="ccAttachmentsCard">
-                <h3>Documentos</h3>
-                <p class="rq-muted">Nesta fase anexa-se só a <b>proforma / orçamento</b> do fornecedor (opcional). A fatura e o comprovativo anexam-se depois do pagamento.</p>
+                <h3 id="rqDocsTitulo">Documentos</h3>
+                <p class="rq-muted" id="rqDocsTexto">Nesta fase anexa-se só a <b>proforma / orçamento</b> do fornecedor (opcional). A fatura e o comprovativo anexam-se depois do pagamento.</p>
                 <div id="ccDropzone" class="rq-drop">
                     <button type="button" id="btnCCAddFile" class="rq-btn rq-pri"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">attach_file</span> Anexar documentos</button>
                     <span class="rq-muted">ou arraste os ficheiros para aqui</span>

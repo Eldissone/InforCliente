@@ -4756,6 +4756,8 @@ financeRoutes.post(
               movementDate: z.string(),
               description: z.string().nullable().optional(),
               isMerchandise: z.boolean().optional(),
+              typeAuto: z.boolean().optional(),
+              effectiveDate: z.string().nullable().optional(),
             })
           )
           .optional(),
@@ -4788,6 +4790,8 @@ financeRoutes.post(
             movementDate: new Date(m.movementDate),
             description: m.description || null,
             isMerchandise: Boolean(m.isMerchandise),
+            typeAuto: Boolean(m.typeAuto),
+            effectiveDate: m.effectiveDate ? new Date(m.effectiveDate) : null,
           })),
         },
       },
@@ -4886,15 +4890,23 @@ financeRoutes.delete(
   })
 );
 
-/** T3 Extratos › «Regras de Classificação»: «a descrição contém X» → tipo. */
+/**
+ * T2/T3 › «Regras de Classificação Automática»: «a descrição contém X» (só
+ * saídas, só entradas ou qualquer) → tipo e, opcionalmente, a obra. Sem regras
+ * gravadas valem as de base (as do protótipo que têm tipo na app).
+ */
+const BR = require("../services/finance/bankRules");
 const REGRAS_EXTRATO = "extratos.regras";
-const TIPOS_MOV = ["TRANSFERENCIA_INTERNA", "PF", "REEMBOLSO", "OPERACAO_ANULADA", "RECEBIMENTO_CLIENTE", "LEVANTAMENTO_ATM", "OUTRO"];
+async function lerRegras() {
+  const row = await prisma.companySetting.findUnique({ where: { key: REGRAS_EXTRATO } });
+  return Array.isArray(row?.value) ? { items: row.value, base: false } : { items: BR.REGRAS_BASE, base: true };
+}
 financeRoutes.get(
   "/bank-rules",
   view,
   asyncHandler(async (_req, res) => {
-    const row = await prisma.companySetting.findUnique({ where: { key: REGRAS_EXTRATO } });
-    return res.json({ items: Array.isArray(row?.value) ? row.value : [] });
+    const r = await lerRegras();
+    return res.json({ ...r, regrasBase: BR.REGRAS_BASE });
   })
 );
 financeRoutes.put(
@@ -4903,15 +4915,75 @@ financeRoutes.put(
   asyncHandler(async (req, res) => {
     const { items } = z
       .object({
-        items: z.array(z.object({ texto: z.string().trim().min(2).max(80), tipo: z.enum(TIPOS_MOV) })).max(300),
+        items: z
+          .array(
+            z.object({
+              texto: z.string().trim().min(2).max(80),
+              sinal: z.enum(["", "-", "+"]).default(""),
+              tipo: z.enum(BR.TIPOS),
+              projectId: z.string().nullable().optional(),
+            })
+          )
+          .max(300),
       })
       .parse(req.body);
+    const clean = items.map((r) => ({ texto: r.texto, sinal: r.sinal || "", tipo: r.tipo, projectId: r.projectId || null }));
     await prisma.companySetting.upsert({
       where: { key: REGRAS_EXTRATO },
-      create: { key: REGRAS_EXTRATO, value: items, label: "Extratos — regras de classificação" },
-      update: { value: items },
+      create: { key: REGRAS_EXTRATO, value: clean, label: "Extratos — regras de classificação" },
+      update: { value: clean },
     });
-    return res.json({ items });
+    return res.json({ items: clean, base: false });
+  })
+);
+
+/**
+ * «⟳ Aplicar regras»: classifica os movimentos sem tipo e volta a classificar
+ * os que foram classificados pelas regras. Nunca mexe num tipo escolhido à
+ * mão, nem em movimentos com custo associado, mercadoria ou ligados a faturas.
+ */
+financeRoutes.post(
+  "/bank-rules/apply",
+  edit,
+  asyncHandler(async (req, res) => {
+    const { cardId } = z.object({ cardId: z.string().nullable().optional() }).parse(req.body || {});
+    const { items: regras } = await lerRegras();
+    const movs = await prisma.bankMovement.findMany({
+      where: {
+        ...(cardId ? { cardId } : {}),
+        costAssigned: false,
+        isMerchandise: false,
+        OR: [{ movementType: "OUTRO" }, { typeAuto: true }],
+      },
+      select: {
+        id: true,
+        description: true,
+        direction: true,
+        movementType: true,
+        typeAuto: true,
+        projectId: true,
+        _count: { select: { receipts: true } },
+      },
+    });
+    let classificados = 0;
+    let desfeitos = 0;
+    for (const m of movs) {
+      if (m._count.receipts > 0) continue;
+      const r = BR.regraPara(m.description, m.direction === "SAIDA", regras);
+      if (r && r.tipo !== "OUTRO") {
+        if (m.movementType === r.tipo && m.typeAuto && (!r.projectId || m.projectId)) continue;
+        await prisma.bankMovement.update({
+          where: { id: m.id },
+          data: { movementType: r.tipo, typeAuto: true, ...(r.projectId && !m.projectId ? { projectId: r.projectId } : {}) },
+        });
+        classificados += 1;
+      } else if (m.typeAuto) {
+        // Já nenhuma regra lhe dá tipo: volta a «sem tipo».
+        await prisma.bankMovement.update({ where: { id: m.id }, data: { movementType: "OUTRO", typeAuto: false } });
+        desfeitos += 1;
+      }
+    }
+    return res.json({ analisados: movs.length, classificados, desfeitos });
   })
 );
 
@@ -4919,8 +4991,9 @@ financeRoutes.get(
   "/bank-movements",
   view,
   asyncHandler(async (req, res) => {
-    const { movementType, projectId, costAssigned, direction, cardId } = req.query;
+    const { movementType, projectId, costAssigned, direction, cardId, id } = req.query;
     const where = {};
+    if (id) where.id = String(id);
     if (cardId) where.cardId = String(cardId);
     if (movementType) where.movementType = String(movementType);
     if (direction === "ENTRADA" || direction === "SAIDA") where.direction = direction;
@@ -4941,8 +5014,24 @@ financeRoutes.get(
       take: Math.min(Math.max(Number(req.query.limit) || 500, 1), 20000),
     });
     const ids = items.map((m) => m.id);
-    const [costs, receipts] = await Promise.all([loadMovementCosts(ids), loadMovementReceipts(ids)]);
-    return res.json({ items: items.map((m) => withMovementReceipts(withMovementCosts(m, costs), receipts)) });
+    const pedidoIds = [...new Set(items.map((m) => m.purchaseOrderId).filter(Boolean))];
+    const [costs, receipts, pedidos] = await Promise.all([
+      loadMovementCosts(ids),
+      loadMovementReceipts(ids),
+      pedidoIds.length
+        ? prisma.purchaseOrder.findMany({
+            where: { id: { in: pedidoIds } },
+            select: { id: true, number: true, supplierName: true, status: true, description: true },
+          })
+        : [],
+    ]);
+    const porPedido = new Map(pedidos.map((o) => [o.id, o]));
+    return res.json({
+      items: items.map((m) => ({
+        ...withMovementReceipts(withMovementCosts(m, costs), receipts),
+        pedido: m.purchaseOrderId ? porPedido.get(m.purchaseOrderId) || { id: m.purchaseOrderId } : null,
+      })),
+    });
   })
 );
 
@@ -4971,14 +5060,22 @@ financeRoutes.patch(
         subcategoryId: z.string().nullable().optional(),
         isMerchandise: z.boolean().optional(),
         notes: z.string().nullable().optional(),
+        transferCardId: z.string().nullable().optional(),
       })
       .parse(req.body);
 
     const current = await prisma.bankMovement.findUnique({
       where: { id: req.params.id },
-      select: { id: true, direction: true, costAssigned: true, _count: { select: { receipts: true } } },
+      select: { id: true, cardId: true, direction: true, costAssigned: true, _count: { select: { receipts: true } } },
     });
     if (!current) return res.status(404).json({ error: "MOVEMENT_NOT_FOUND" });
+    if (body.transferCardId) {
+      if (body.transferCardId === current.cardId) {
+        return res.status(400).json({ error: "SAME_CARD", message: "A outra conta da transferência tem de ser diferente desta." });
+      }
+      const outra = await prisma.pettyCashCard.findUnique({ where: { id: body.transferCardId }, select: { id: true } });
+      if (!outra) return res.status(400).json({ error: "CARD_NOT_FOUND" });
+    }
     if (body.movementType && body.movementType !== "RECEBIMENTO_CLIENTE" && current._count.receipts > 0) {
       return res.status(409).json({
         error: "MOVEMENT_HAS_RECEIPTS",
@@ -4997,7 +5094,9 @@ financeRoutes.patch(
     if (body.isMerchandise && current.costAssigned) {
       return res.status(409).json({ error: "MOVEMENT_HAS_COST", message: "Este movimento já tem custo associado." });
     }
-    const movement = await prisma.bankMovement.update({ where: { id: req.params.id }, data: body });
+    // Um tipo escolhido à mão deixa de ser das regras (que já não o mudam).
+    const data = body.movementType ? { ...body, typeAuto: false } : body;
+    const movement = await prisma.bankMovement.update({ where: { id: req.params.id }, data });
     return res.json({ movement });
   })
 );

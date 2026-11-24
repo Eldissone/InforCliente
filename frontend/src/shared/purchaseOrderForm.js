@@ -30,6 +30,8 @@ const ST = {
   criarTerceiro: false,
   produtoAlvo: null,
   lockProject: false,
+  /** «Registar o Pagamento e Conciliar»: o movimento do extrato que este pedido paga. */
+  movimento: null,
 };
 
 let notify = (msg, type = "info") => uiToast(msg, { type });
@@ -442,7 +444,7 @@ export function fillItemRows(items) {
     set(".cc-item-unit", it.unit);
     set(".cc-item-qty", it.quantity != null ? Number(it.quantity) : 1);
     set(".cc-item-price", it.unitPrice != null ? Number(it.unitPrice) : null);
-    if (it.name) row.querySelector(".cc-item-vat").value = rate("vatPercent", legacy.vat) ?? "";
+    if (it.name || it.vatPercent != null) row.querySelector(".cc-item-vat").value = rate("vatPercent", legacy.vat) ?? "";
     set(".cc-item-wh", rate("withholdingPercent", legacy.retention));
     set(".cc-item-disc", rate("discountPercent", legacy.discount));
     set(".cc-item-obs", it.notes, row._det);
@@ -1043,7 +1045,7 @@ async function buildPedidoPayload() {
     return null;
   }
 
-  const typeData = { ...collectTypeData(type), dataPedido: dataPedido() };
+  const typeData = { ...collectTypeData(type), dataPedido: dataPedido(), ...(ST.movimento ? { movimentoId: ST.movimento.id } : {}) };
   const falta = missingTypeData(type, typeData);
   if (falta) {
     notify(falta, "error");
@@ -1083,8 +1085,9 @@ async function buildPedidoPayload() {
     if (projectId) costCenterId = (await loadCostCentersForProject(projectId, val("ccExtraCostCenterId"))) || null;
   }
 
-  // Condições de pagamento.
-  const paymentTerm = type === "EMPRESTIMO" || fm ? "PRONTO" : $("ccPedidoCondicao")?.value || "PRONTO";
+  // Condições de pagamento (vindo do extrato: já pago, na data do movimento).
+  if (ST.movimento) $("ccPedidoDataPretendida").value = String(ST.movimento.movementDate).slice(0, 10);
+  const paymentTerm = type === "EMPRESTIMO" || fm || ST.movimento ? "PRONTO" : $("ccPedidoCondicao")?.value || "PRONTO";
   let dueDate = null;
   let creditDays = null;
   if (type === "EMPRESTIMO") dueDate = typeData.limite;
@@ -1294,6 +1297,46 @@ export async function fillPedidoForm(order, { extra = false } = {}) {
   applyTypeVisibility();
   renderDist();
   return order;
+}
+
+/** O pedido que se está a criar a partir de um movimento do extrato (ou null). */
+export function movimentoDoPedido() {
+  return ST.movimento;
+}
+
+/**
+ * «Registar o Pagamento e Conciliar» (T2): o formulário a partir de uma saída
+ * do extrato — o valor numa linha, a descrição nas observações, Sede a 100 %,
+ * pagamento a fornecedor sem cotação, pronto na data do movimento. Ao
+ * submeter, o pedido fica pago e conciliado com o movimento.
+ */
+export function aplicarMovimento(m) {
+  ST.movimento = m;
+  const data = String(m.movementDate || "").slice(0, 10);
+  const conta = m.card ? [m.card.bank, m.card.label].filter(Boolean).join(" ") : "";
+  $("formNovoPedido")?.classList.add("rq-mov");
+  const info = $("rqMovInfo");
+  if (info) {
+    info.textContent = `Pago a ${data.split("-").reverse().join("/")} · já sai do banco, fica pago e conciliado`;
+    info.classList.remove("hidden");
+  }
+  $("ccPedidoType").value = "SEDE";
+  $("ccPedidoModo").value = "FORN";
+  $("rqCotSel").value = "N";
+  $("ccPedidoCondicao").value = "PRONTO";
+  $("ccPedidoDataPretendida").value = data;
+  $("rqDataPedido").value = data;
+  $("ccPedidoJust").value = `Criado a partir do movimento bancário de ${data.split("-").reverse().join("/")}${conta ? ` (${conta})` : ""}: ${m.description || ""}`.trim();
+  fillItemRows([{ name: "", quantity: 1, unitPrice: Number(m.amount) || 0, vatPercent: 0 }]);
+  ST.dist = [{ cc: "SEDE", pct: 100, val: "" }];
+  const t = $("rqDocsTitulo");
+  if (t) t.innerHTML = 'Comprovativo de pagamento <b class="rq-req">*</b>';
+  const txt = $("rqDocsTexto");
+  if (txt) txt.textContent = "Anexe o comprovativo do pagamento (obrigatório). A fatura também pode ir aqui.";
+  const sb = document.querySelector("#btnSubmitNovoPedido .pf-btn-label");
+  if (sb) sb.textContent = "Registar o pagamento e conciliar";
+  applyTypeVisibility();
+  renderDist();
 }
 
 /** Liga os eventos do formulário. Chamar uma única vez por página. */

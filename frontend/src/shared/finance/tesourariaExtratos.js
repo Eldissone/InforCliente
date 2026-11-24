@@ -3,7 +3,7 @@ import { toast } from "../ui.js";
 import { can } from "../permissions.js";
 import { escapeFinanceHtml as esc } from "../financePage.js";
 import { MOVEMENT_TYPE } from "./movementsShared.js";
-import { conciliado } from "./conciliacao.js";
+import { conciliado, prepararPares } from "./conciliacao.js";
 import { abrirRegras, abrirTipos } from "./extratoRegras.js";
 import {
   CAMPOS,
@@ -14,7 +14,7 @@ import {
   contaDoFicheiro,
   saldoAnterior,
   saldoFinal,
-  tipoPelasRegras,
+  regraPara,
   chaveMov,
 } from "./extratoImportCore.js";
 
@@ -106,13 +106,13 @@ function caixaImportar() {
       <div class="t3-grid">${CAMPOS.map(([k, l]) => `<label class="t3-f"><span>${esc(l)}</span>${opt(k)}</label>`).join("")}
         <label class="t3-f"><span>Linha de cabeçalho</span><input class="finance-input" type="number" min="0" data-impmap="hi" value="${I.hi + 1}"></label></div>
     </details>
-    <div class="fx2-tw"><table class="fx2-t"><thead><tr><th>Data</th><th>Descrição</th><th class="r">Valor</th><th>Tipo</th><th>Doc.</th></tr></thead><tbody>
+    <div class="fx2-tw"><table class="fx2-t"><thead><tr><th>Data</th><th>Data efetiva</th><th>Descrição</th><th class="r">Valor</th><th>Tipo</th><th>Doc.</th></tr></thead><tbody>
       ${rows
         .slice(0, 8)
-        .map((m) => `<tr><td>${fmtD(m.data)}</td><td>${esc(m.desc)}</td><td class="r${m.valor < 0 ? " fcal-out" : ""}">${fmt(m.valor)}</td><td>${esc(MOVEMENT_TYPE[tipoDe(m)]?.label || "")}</td><td>${esc(m.docn || m.ref || "")}</td></tr>`)
+        .map((m) => `<tr><td>${fmtD(m.data)}</td><td class="fx2-mut">${fmtD(m.dataEf || m.data)}</td><td>${esc(m.desc)}</td><td class="r${m.valor < 0 ? " fcal-out" : ""}">${fmt(m.valor)}</td><td>${esc(MOVEMENT_TYPE[tipoDe(m)]?.label || "")}</td><td>${esc(m.docn || m.ref || "")}</td></tr>`)
         .join("")}
-      ${rows.length > 8 ? `<tr><td colspan="5" class="fx2-mut">… mais ${rows.length - 8} linhas</td></tr>` : ""}
-      ${rows.length ? "" : `<tr><td colspan="5" class="fx2-mut">Nenhuma linha com data e valor. Confira as colunas acima.</td></tr>`}
+      ${rows.length > 8 ? `<tr><td colspan="6" class="fx2-mut">… mais ${rows.length - 8} linhas</td></tr>` : ""}
+      ${rows.length ? "" : `<tr><td colspan="6" class="fx2-mut">Nenhuma linha com data e valor. Confira as colunas acima.</td></tr>`}
     </tbody></table></div>
     <div class="t3-acts">
       <button type="button" class="finance-btn finance-btn--primary" data-t3="impgo"${novos > 0 && edita() ? "" : " disabled"}>Importar ${Math.max(0, novos)} movimento(s)</button>
@@ -201,7 +201,7 @@ function desenhar() {
 // ── Importação ──────────────────────────────────────────────
 
 function tipoDe(m) {
-  return tipoPelasRegras(m.desc, S.regras) || (m.valor > 0 ? "OUTRO" : "OUTRO");
+  return regraPara(m.desc, m.valor < 0, S.regras)?.tipo || "OUTRO";
 }
 
 function recalcular() {
@@ -263,14 +263,20 @@ async function importar(btn) {
         periodEnd: datas[datas.length - 1],
         openingBalance: I.usarSI && I.saldoAnt ? I.saldoAnt.valor : null,
         closingBalance: I.saldoFim,
-        movements: novos.map((m) => ({
-          movementDate: m.data,
-          description: m.desc || null,
-          direction: m.valor < 0 ? "SAIDA" : "ENTRADA",
-          amount: Math.abs(m.valor),
-          docNumber: m.docn || m.ref || null,
-          movementType: tipoPelasRegras(m.desc, S.regras) || "OUTRO",
-        })),
+        movements: novos.map((m) => {
+          const r = regraPara(m.desc, m.valor < 0, S.regras);
+          return {
+            movementDate: m.data,
+            effectiveDate: m.dataEf && m.dataEf !== m.data ? m.dataEf : null,
+            description: m.desc || null,
+            direction: m.valor < 0 ? "SAIDA" : "ENTRADA",
+            amount: Math.abs(m.valor),
+            docNumber: m.docn || m.ref || null,
+            movementType: r?.tipo || "OUTRO",
+            typeAuto: Boolean(r && r.tipo !== "OUTRO"),
+            projectId: r?.projectId || null,
+          };
+        }),
       },
     });
     toast(`Importados ${novos.length} movimento(s)${I.rows.length - novos.length ? ` · ${I.rows.length - novos.length} já existiam` : ""}.`, { type: "success" });
@@ -325,6 +331,7 @@ async function carregar() {
     S.cards = cards.items || [];
     S.statements = sts.items || [];
     S.movs = movs.items || [];
+    prepararPares(S.movs);
     S.regras = regras.items || [];
     S.erro = null;
   } catch (err) {
@@ -346,7 +353,7 @@ function ligar() {
       S.imp = null;
       desenhar();
     } else if (a === "impgo") importar(b);
-    else if (a === "regras") abrirRegras({ regras: S.regras, onSaved: (r) => ((S.regras = r), S.imp && desenhar()) });
+    else if (a === "regras") abrirRegras({ regras: S.regras, onSaved: (r) => ((S.regras = r), S.imp && desenhar()), onApplied: carregar });
     else if (a === "tipos") abrirTipos();
     else if (a === "lotemv") moverLote(id);
     else if (a === "lotedel") apagarLote(id);

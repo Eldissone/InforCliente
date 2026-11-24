@@ -2422,6 +2422,14 @@ model BankMovement {
   docType        BankDocType?
   supplierId     String?
   movementType   BankMovementType      @default(OUTRO)
+  /// Tipo dado pelas regras de classificação (as regras podem voltar a mudá-lo; um tipo escolhido à mão não)
+  typeAuto       Boolean               @default(false)
+  /// Data em que o dinheiro saiu ou entrou de facto (a «data valor» do extrato)
+  effectiveDate  DateTime?
+  /// Transferência interna: a outra conta / cartão da MBT (origem, numa entrada; destino, numa saída)
+  transferCardId String?
+  /// Conciliação (T2): o pedido do Centro de Pagamentos que esta saída paga
+  purchaseOrderId String?
   costCategoryId String? // Tipo/Categoria de custo
   subcategoryId  String? // Subcategoria de custo
   direction      BankMovementDirection

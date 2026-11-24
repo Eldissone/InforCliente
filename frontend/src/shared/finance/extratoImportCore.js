@@ -13,6 +13,7 @@
 /** Campos que se podem mapear (o IMPF do protótipo, os que a app guarda). */
 export const CAMPOS = [
   ["data", "Data mov."],
+  ["dataEf", "Data efetiva"],
   ["desc", "Descrição"],
   ["valor", "Valor (com sinal)"],
   ["deb", "Débito"],
@@ -112,6 +113,7 @@ export function tabelaDeTexto(texto) {
 
 const PISTAS = {
   data: [/^data( mov| (do )?movimento| operac| lancamento| valor)?\b/, /^date/, /^dt\b/],
+  dataEf: [/^data (valor|efetiva|disponivel)/, /^value date/],
   desc: [/descri|^historico|^movimento$|^detalhe|^narrat|^operacao$/],
   valor: [/^valor$|^montante|^importancia|^amount/],
   deb: [/^debito|^debit|^saidas?$/],
@@ -167,6 +169,7 @@ export function movimentosDaTabela(tabela, map, hi) {
     const saldo = map.saldo >= 0 ? parseMoney(cel(r, "saldo")) : null;
     out.push({
       data,
+      dataEf: map.dataEf >= 0 ? parseDate(cel(r, "dataEf")) : null,
       desc: String(cel(r, "desc") ?? "").trim(),
       valor: Math.round(valor * 100) / 100,
       saldo,
@@ -221,10 +224,23 @@ export function saldoFinal(movs) {
   return (asc ? ult[ult.length - 1] : ult[0]).saldo;
 }
 
-/** O tipo pelas regras («a descrição contém…»); a 1.ª que casa ganha. */
-export function tipoPelasRegras(desc, regras) {
+/**
+ * A regra que classifica um movimento («a descrição contém…», e o sinal:
+ * "" qualquer, "-" só saídas, "+" só entradas); a 1.ª que casa ganha. É a
+ * mesma leitura do servidor (backend/src/services/finance/bankRules.js).
+ */
+export function regraPara(desc, saida, regras) {
   const d = norm(desc);
-  const r = (regras || []).find((x) => x.texto && d.includes(norm(x.texto)));
+  return (
+    (regras || []).find(
+      (r) => r.texto && d.includes(norm(r.texto)) && (!r.sinal || (r.sinal === "-" ? saida : !saida)) && !(r.tipo === "RECEBIMENTO_CLIENTE" && saida)
+    ) || null
+  );
+}
+
+/** Só o tipo (sem sinal conhecido, vale qualquer). */
+export function tipoPelasRegras(desc, regras, saida = null) {
+  const r = saida === null ? (regras || []).find((x) => x.texto && norm(desc).includes(norm(x.texto))) : regraPara(desc, saida, regras);
   return r ? r.tipo : null;
 }
 

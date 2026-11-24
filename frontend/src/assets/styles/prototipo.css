@@ -867,3 +867,47 @@ button.fx2-k:hover { background: #f8fafc; }
 .t2-gravado { outline: 2px solid var(--pt-brand2) !important; }
 .t2-auto { width: auto !important; }
 .t2-w3 { min-width: 260px; width: auto !important; flex: 1; }
+
+/* ── T2: tabela completa (seleção, data efetiva, centro de custo, transferências) ── */
+.t2-pill.t2-warnp { background: var(--pt-warn-bg); color: var(--pt-warn); font-weight: 600; }
+.t2-auto { font-size: 10px; color: var(--pt-muted); margin-left: 4px; }
+.t2-tipoauto { font-style: italic; color: var(--pt-muted2, #56636f); }
+.t2-selbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; background: #eef4fb; border: .8px solid #b7cdef; border-radius: 8px; padding: 6px 10px; margin-bottom: 8px; font-size: 12.5px; }
+.t2-sel { background: #eef4fb !important; }
+.t2-trfcell { display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
+.t2-trf { width: 170px !important; }
+.t2-sub { font-size: 11px; }
+.t2-t th:first-child, .t2-t td:first-child { width: 28px; padding-right: 0; }
+
+/* ── Regras de Classificação Automática ── */
+.rg-kick { color: var(--pt-brand); font: 600 12px var(--pt-display); letter-spacing: .78px; }
+.rg-t td { padding: 3px 6px; vertical-align: middle; }
+.rg-in { height: 30px !important; font-size: 13px !important; }
+.rg-txt { min-width: 200px; }
+.rg-sel { width: auto !important; min-width: 110px; }
+.rg-obra { min-width: 200px; }
+.rg-del { font-size: 16px; }
+.t2-tipo { width: 128px !important; }
+.t2-nota { min-width: 110px; }
+.t2-desc { min-width: 140px; }
+.t2-trf { width: 150px !important; }
+.t2-t th, .t2-t td { padding-left: 6px !important; padding-right: 6px !important; }
+.rg-obra { min-width: 180px; max-width: 280px; width: 100% !important; }
+.rg-t { table-layout: auto; width: 100%; }
+
+/* ── Conciliar uma saída (o FXDRAW.conc do protótipo) ── */
+.cs-sub { font: 400 12px var(--pt-body); color: var(--pt-muted); margin-top: 2px; }
+.cs-box { border: .8px solid var(--pt-line); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; background: #fff; }
+.cs-box h4 { font: 600 14px var(--pt-display); margin: 0 0 8px; }
+.cs-novo { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; background: #f1faf5; border-color: #a8dcc0; }
+.cs-ok { background: #f1faf5; border-color: #a8dcc0; }
+.cs-ok > p { margin: 6px 0; font-size: 13px; }
+.cs-chk { display: flex; gap: 6px; align-items: center; font-size: 13px; margin: 6px 0; }
+.cs-doc { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; padding: 6px 0; border-top: .8px solid var(--pt-line); }
+.cs-fat { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; background: #fff; border: .8px solid var(--pt-line); border-radius: 8px; padding: 8px 10px; margin: 8px 0; }
+.cs-right { margin-left: auto; }
+.cs-file { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; background: var(--pt-neutral-bg); border-radius: 6px; padding: 2px 6px; }
+.cs-q { min-width: 300px; width: auto !important; }
+.cs-lnk { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; }
+.cs-t td { vertical-align: middle; }
+.cs-prox td { background: #f1faf5; }

@@ -148,3 +148,7 @@ textarea.rq-in { height: auto; min-height: 44px; resize: vertical; }
 .rq-page .rq-head .pf-back { text-transform: none; letter-spacing: normal; font-weight: 400; color: inherit; gap: 0; }
 .rq-obsbtn { white-space: nowrap; }
 .rq-dist td, .rq-parc td { vertical-align: middle; }
+
+/* «Registar o Pagamento e Conciliar» (vindo da Conciliação Bancária) */
+.rq-mov #rqPagRow, .rq-mov #rqCond, .rq-mov label.rq-dt { display: none !important; }
+.rq-mov #rqMovInfo { display: inline-flex !important; color: var(--pt-muted, #667085); }

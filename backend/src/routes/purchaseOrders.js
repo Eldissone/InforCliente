@@ -237,6 +237,227 @@ function mapOrder(o) {
   };
 }
 
+// ═══ Conciliação bancária (T2): ligar uma saída do extrato a um pedido ═══════
+//
+// Como no protótipo: a saída concilia-se com o pedido do Centro de Pagamentos
+// que pagou. Se o pedido ainda não estava pago, regista-se o pagamento (o valor
+// do movimento), com o comprovativo e, se houver, a fatura. Um pedido pode ser
+// pago por vários movimentos.
+
+const ESTADOS_CONCILIAVEIS = ["APROVADO", "EM_PAGAMENTO", "CONCLUIDO"];
+
+/** Quanto do pedido já está conciliado com movimentos do banco. */
+async function conciliadoDoPedido(orderIds) {
+  if (!orderIds.length) return new Map();
+  const rows = await prisma.bankMovement.groupBy({
+    by: ["purchaseOrderId"],
+    where: { purchaseOrderId: { in: orderIds } },
+    _sum: { amount: true },
+    _count: true,
+  });
+  return new Map(rows.map((r) => [r.purchaseOrderId, { valor: Number(r._sum.amount || 0), n: r._count }]));
+}
+
+/** GET /purchase-orders/bank-candidates?movementId=&q=&todos=1 — pedidos para conciliar com a saída. */
+purchaseRouter.get(
+  "/bank-candidates",
+  requirePurchaseView,
+  asyncHandler(async (req, res) => {
+    const mov = await prisma.bankMovement.findUnique({ where: { id: String(req.query.movementId || "") } });
+    if (!mov) return res.status(404).json({ error: "MOVEMENT_NOT_FOUND" });
+    const todos = req.query.todos === "1";
+    const q = String(req.query.q || "").trim();
+    const orders = await prisma.purchaseOrder.findMany({
+      where: {
+        deletedAt: null,
+        status: { in: ESTADOS_CONCILIAVEIS },
+        ...(todos ? {} : { paymentMode: "FORN", requestType: { in: ["SEDE", "OBRA", "FROTA"] } }),
+        ...(q
+          ? {
+              OR: [
+                { number: { contains: q, mode: "insensitive" } },
+                { supplierName: { contains: q, mode: "insensitive" } },
+                { description: { contains: q, mode: "insensitive" } },
+                { items: { some: { name: { contains: q, mode: "insensitive" } } } },
+              ],
+            }
+          : {}),
+      },
+      include: { items: true, paymentPlan: { include: { installments: true } }, supplier: { select: { name: true } } },
+      orderBy: { createdAt: "desc" },
+      take: 300,
+    });
+    const conc = await conciliadoDoPedido(orders.map((o) => o.id));
+    const valor = Number(mov.amount);
+    const qNum = q.replace(/\D/g, "");
+    const items = orders
+      .map((o) => {
+        const total = PT.orderTotals(o).total;
+        const ja = conc.get(o.id)?.valor || 0;
+        const pago = PT.paidAmount(o);
+        return {
+          id: o.id,
+          number: o.number,
+          dueDate: o.dueDate,
+          terceiro: o.supplierName || o.supplier?.name || PT.beneficiary?.(o) || null,
+          descricao: (o.items[0]?.name || o.description || "").slice(0, 80),
+          requestType: o.requestType,
+          paymentMode: o.paymentMode,
+          status: o.status,
+          total,
+          pago,
+          conciliado: ja,
+          falta: Math.max(0, total - ja),
+          estado: pago >= total - 0.5 ? "Pago" : pago > 0 ? "Pago em parte" : "Em aberto",
+          proximo: Math.abs(total - ja - valor) <= 0.5,
+          dias: o.dueDate ? Math.abs(new Date(o.dueDate) - new Date(mov.movementDate)) / 86400000 : 999,
+        };
+      })
+      // Já conciliado por inteiro sai da lista (a não ser que se procure por ele).
+      .filter((o) => (o.falta > 0.5 || q) && (!qNum || qNum.length < 3 || o.number.includes(qNum) || String(Math.round(o.total * 100)).includes(qNum) || !/^\d+$/.test(q)))
+      .sort((a, b) => Number(b.proximo) - Number(a.proximo) || a.dias - b.dias)
+      .slice(0, 30);
+    return res.json({ items });
+  })
+);
+
+/**
+ * POST /purchase-orders/:id/bank-link (multipart)
+ *   movementId, registarPagamento ("1"), comprovativo[] (ficheiros), fatura
+ * Liga a saída ao pedido; se se pedir, regista o pagamento do valor do
+ * movimento. Um pedido criado a partir deste movimento («Registar o Pagamento
+ * e Conciliar») fica pago mesmo antes de aprovado: o dinheiro já saiu do banco.
+ */
+purchaseRouter.post(
+  "/:id/bank-link",
+  requirePurchasePay,
+  fileUpload.fields([
+    { name: "comprovativo", maxCount: 10 },
+    { name: "fatura", maxCount: 5 },
+  ]),
+  asyncHandler(async (req, res) => {
+    const movementId = String(req.body?.movementId || "");
+    const registar = req.body?.registarPagamento === "1" || req.body?.registarPagamento === "true";
+    const [order, mov] = await Promise.all([
+      prisma.purchaseOrder.findUnique({
+        where: { id: req.params.id },
+        include: { items: true, requisition: true, paymentPlan: { include: { installments: true } } },
+      }),
+      prisma.bankMovement.findUnique({ where: { id: movementId } }),
+    ]);
+    if (!order || order.deletedAt) return res.status(404).json({ error: "NOT_FOUND" });
+    if (!mov) return res.status(404).json({ error: "MOVEMENT_NOT_FOUND" });
+    if (mov.direction !== "SAIDA") return res.status(400).json({ error: "SO_SAIDAS", message: "Só uma saída do banco paga um pedido." });
+    if (mov.purchaseOrderId && mov.purchaseOrderId !== order.id) {
+      return res.status(409).json({ error: "JA_CONCILIADO", message: "Este movimento já está conciliado com outro pedido." });
+    }
+    if (mov.costAssigned) {
+      return res.status(409).json({ error: "MOVEMENT_HAS_COST", message: "Este movimento já tem custo associado: desfaça-o antes de o ligar a um pedido." });
+    }
+    const doMovimento = order.typeData && order.typeData.movimentoId === mov.id;
+    if (!ESTADOS_CONCILIAVEIS.includes(order.status) && !doMovimento) {
+      return res.status(409).json({ error: "PEDIDO_NAO_APROVADO", message: "O pedido ainda não está aprovado." });
+    }
+    const comps = req.files?.comprovativo || [];
+    const fats = req.files?.fatura || [];
+
+    const valor = Math.round(Number(mov.amount) * 100) / 100;
+    const total = PT.orderTotals(order).total || valor;
+    const now = new Date();
+    const dataPag = mov.effectiveDate || mov.movementDate || now;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.bankMovement.update({ where: { id: mov.id }, data: { purchaseOrderId: order.id } });
+      if (!registar) return;
+      const plan = order.paymentPlan;
+      if (!plan) {
+        const resto = Math.round((total - valor) * 100) / 100;
+        await tx.purchasePaymentPlan.create({
+          data: {
+            purchaseOrderId: order.id,
+            totalValue: Math.max(total, valor),
+            currency: order.currency || "AOA",
+            status: resto > 0.5 ? "PARCIAL" : "PAGO",
+            notes: "Pago pelo banco (conciliação)",
+            installments: {
+              create: [
+                { number: 1, amount: valor, currency: order.currency || "AOA", dueDate: dataPag, paidAt: dataPag, status: "PAGO", notes: `Movimento bancário ${mov.id}` },
+                ...(resto > 0.5 ? [{ number: 2, amount: resto, currency: order.currency || "AOA", dueDate: order.dueDate || now, status: "PENDENTE" }] : []),
+              ],
+            },
+          },
+        });
+      } else {
+        const abertas = plan.installments.filter((i) => i.status !== "PAGO").sort((a, b) => a.number - b.number);
+        const igual = abertas.find((i) => Math.abs(Number(i.amount) - valor) <= 0.5);
+        const restoAberto = abertas.reduce((s2, i) => s2 + Number(i.amount), 0);
+        if (igual) {
+          await tx.purchasePaymentInstallment.update({ where: { id: igual.id }, data: { status: "PAGO", paidAt: dataPag, notes: `Movimento bancário ${mov.id}` } });
+        } else if (valor >= restoAberto - 0.5) {
+          await tx.purchasePaymentInstallment.updateMany({ where: { id: { in: abertas.map((i) => i.id) } }, data: { status: "PAGO", paidAt: dataPag } });
+        } else if (abertas.length) {
+          // Pagamento parcial: a primeira prestação em aberto fica com o resto.
+          const p0 = abertas[0];
+          const n = Math.max(...plan.installments.map((i) => i.number)) + 1;
+          await tx.purchasePaymentInstallment.create({
+            data: { paymentPlanId: plan.id, number: n, amount: valor, currency: order.currency || "AOA", dueDate: dataPag, paidAt: dataPag, status: "PAGO", notes: `Movimento bancário ${mov.id}` },
+          });
+          await tx.purchasePaymentInstallment.update({ where: { id: p0.id }, data: { amount: Math.max(0, Math.round((Number(p0.amount) - valor) * 100) / 100) } });
+        }
+        const depois = await tx.purchasePaymentInstallment.findMany({ where: { paymentPlanId: plan.id } });
+        const tudo = depois.every((i) => i.status === "PAGO" || Number(i.amount) <= 0.005);
+        await tx.purchasePaymentPlan.update({ where: { id: plan.id }, data: { status: tudo ? "PAGO" : "PARCIAL" } });
+      }
+      const pagoAgora = await tx.purchasePaymentInstallment.aggregate({
+        where: { paymentPlan: { purchaseOrderId: order.id }, status: "PAGO" },
+        _sum: { amount: true },
+      });
+      const pagoTudo = Number(pagoAgora._sum.amount || 0) >= total - 0.5;
+      const novo = pagoTudo ? "CONCLUIDO" : "EM_PAGAMENTO";
+      await tx.purchaseOrder.update({
+        where: { id: order.id },
+        data: {
+          status: novo,
+          history: {
+            create: {
+              action: pagoTudo ? "CONCLUIDO" : "PAGAMENTO_PARCIAL",
+              fromStatus: order.status,
+              toStatus: novo,
+              userId: req.user?.sub || null,
+              userName: req.user?.name || null,
+              notes: `Pago pelo banco: ${valor} (movimento de ${new Date(mov.movementDate).toISOString().slice(0, 10)}${doMovimento ? ", pedido criado a partir do extrato" : ""})`,
+            },
+          },
+        },
+      });
+    });
+
+    if (comps.length || fats.length) {
+      let requisitionId = order.requisition?.id;
+      if (!requisitionId) requisitionId = (await prisma.purchaseRequisition.create({ data: { purchaseOrderId: order.id } })).id;
+      for (const f of comps) await savePurchaseDoc(order.id, requisitionId, f, "comprovativo", req.user);
+      for (const f of fats) await savePurchaseDoc(order.id, requisitionId, f, "fatura", req.user);
+    }
+    await logAction(req, { action: "PURCHASE_BANK_LINK", purchaseOrderId: order.id, details: { movementId: mov.id, registar, valor } });
+    const updated = await prisma.purchaseOrder.findUnique({ where: { id: order.id }, include: PURCHASE_ORDER_INCLUDE });
+    return res.json(mapOrder(updated));
+  })
+);
+
+/** DELETE /purchase-orders/:id/bank-link/:movementId — desfaz a conciliação (o pagamento registado fica). */
+purchaseRouter.delete(
+  "/:id/bank-link/:movementId",
+  requirePurchasePay,
+  asyncHandler(async (req, res) => {
+    const mov = await prisma.bankMovement.findUnique({ where: { id: req.params.movementId }, select: { id: true, purchaseOrderId: true } });
+    if (!mov || mov.purchaseOrderId !== req.params.id) return res.status(404).json({ error: "NOT_LINKED" });
+    await prisma.bankMovement.update({ where: { id: mov.id }, data: { purchaseOrderId: null } });
+    await logAction(req, { action: "PURCHASE_BANK_UNLINK", purchaseOrderId: req.params.id, details: { movementId: mov.id } });
+    return res.json({ ok: true });
+  })
+);
+
+
 // ─── GET /purchase-orders — Listar ────────────────────────────────────────────
 purchaseRouter.get(
   "/",

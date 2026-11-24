@@ -15,7 +15,10 @@ import {
     fillPedidoForm,
     savePedido,
     uploadPedidoAttachment,
+    aplicarMovimento,
+    movimentoDoPedido,
 } from "/shared/purchaseOrderForm.js";
+import { apiUpload } from "/services/api.js";
 
 const MAX_ATTACHMENT_MB = 20;
 
@@ -208,11 +211,34 @@ async function onSubmit(e) {
         document.getElementById("ccPedidoEditId")?.value ||
         document.getElementById("ccPedidoExtraId")?.value
     );
+    const mov = movimentoDoPedido();
+    if (mov && !pendingFiles.length) {
+        showToast("Anexe o comprovativo do pagamento.", "error");
+        return;
+    }
     setSubmitLabel("A salvar...", { busy: true });
 
     try {
         const result = await savePedido();
         if (!result) return;
+
+        // «Registar o Pagamento e Conciliar»: o pedido fica pago e ligado ao movimento.
+        if (mov && result.saved?.id) {
+            const fd = new FormData();
+            fd.append("movementId", mov.id);
+            fd.append("registarPagamento", "1");
+            pendingFiles.splice(0).forEach((f) => fd.append("comprovativo", f));
+            try {
+                await apiUpload(`/purchase-orders/${encodeURIComponent(result.saved.id)}/bank-link`, fd);
+                showToast(`Requisição ${result.saved.number} registada, paga e conciliada com o movimento.`, "success");
+            } catch (err) {
+                showToast(`A requisição ${result.saved.number} foi criada, mas não foi possível conciliar: ${apiError(err)}. Concilie-a na Conciliação Bancária.`, "error");
+                setTimeout(() => { window.location.href = returnToUrl(); }, 2500);
+                return;
+            }
+            window.location.href = returnToUrl();
+            return;
+        }
 
         const { saved, requiresQuote } = result;
         const extraId = document.getElementById("ccPedidoExtraId")?.value;
@@ -259,6 +285,20 @@ async function startNewPedido() {
         await ensureReferenceDataLoaded();
     } catch { /* dados de referência são melhor-esforço */ }
     await applyPedidoPresets(readCreatePresets());
+
+    // Vindo da Conciliação Bancária › «Registar o Pagamento e Conciliar».
+    const movId = new URLSearchParams(window.location.search).get("movimento");
+    if (movId) {
+        try {
+            const r = await apiRequest(`/finance/bank-movements?id=${encodeURIComponent(movId)}`);
+            const m = (r.items || [])[0];
+            if (!m) throw new Error("movimento não encontrado");
+            if (m.direction !== "SAIDA" || m.purchaseOrderId) throw new Error("este movimento não é uma saída por conciliar");
+            aplicarMovimento(m);
+        } catch (err) {
+            showToast(`Não foi possível abrir o movimento: ${apiError(err)}`, "error");
+        }
+    }
 }
 
 function readCreatePresets() {
