@@ -7,7 +7,7 @@
 
 import { apiRequest } from "/services/api.js";
 import { toast, escapeHtml } from "/shared/ui.js";
-import { initComercialPage, canEdit } from "/shared/comercial/page.js";
+import { initComercialPage, canEdit, canDelete } from "/shared/comercial/page.js";
 import { abrirImportacao, wireImportacao } from "/shared/comercial/importarExcel.js";
 
 const el = (id) => document.getElementById(id);
@@ -25,7 +25,7 @@ const STATUS_LABELS = {
 
 const MARGIN_PILL = { good: "is-good", warn: "is-warn", bad: "is-bad" };
 
-const S = { items: [], counts: {}, status: "", q: "", readonly: false, nov: null };
+const S = { items: [], counts: {}, status: "", q: "", readonly: false, canDelete: false, nov: null };
 
 const fmt = (v, d = 0) =>
   v === null || v === undefined || Number.isNaN(Number(v))
@@ -48,13 +48,7 @@ async function load() {
 function render() {
   el("cmHeadActions").innerHTML = `
     <input id="oqSearch" class="cell-list" style="min-width:260px" type="search"
-           placeholder="Procurar por número, obra, cliente ou responsável…" value="${esc(S.q)}" aria-label="Procurar orçamentos">
-    ${
-      S.readonly
-        ? ""
-        : `<button class="cm-chip" type="button" id="oqImport" data-cm-write="1" title="A IA lê a folha e mostra as linhas para rever"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">auto_awesome</span> Importar Excel</button>
-           <button class="cm-chip is-on" type="button" id="oqNew" data-cm-write="1">+ Novo orçamento</button>`
-    }`;
+           placeholder="Procurar por número, obra, cliente ou responsável…" value="${esc(S.q)}" aria-label="Procurar orçamentos">`;
 
   const total = Object.values(S.counts).reduce((a, b) => a + b, 0);
   const chip = (k, l) =>
@@ -63,12 +57,22 @@ function render() {
     </button>`;
 
   el("cmContent").innerHTML = `
-    <div class="cm-chips">
-      ${chip("", "Todos")}
-      ${Object.entries(STATUS_LABELS)
-        .filter(([k]) => k !== "CANCELADO" || S.counts.CANCELADO)
-        .map(([k, l]) => chip(k, l))
-        .join("")}
+    <div class="cm-filter-row">
+      <div class="cm-chips">
+        ${chip("", "Todos")}
+        ${Object.entries(STATUS_LABELS)
+          .filter(([k]) => k !== "CANCELADO" || S.counts.CANCELADO)
+          .map(([k, l]) => chip(k, l))
+          .join("")}
+      </div>
+      ${
+        S.readonly
+          ? ""
+          : `<div class="cm-filter-actions">
+               <button class="cm-chip" type="button" id="oqImport" data-cm-write="1" title="A IA lê a folha e mostra as linhas para rever"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">auto_awesome</span> Importar Excel</button>
+               <button class="cm-chip is-on" type="button" id="oqNew" data-cm-write="1">+ Novo orçamento</button>
+             </div>`
+      }
     </div>
     <div class="cm-table-wrap">
       <table class="cm-table">
@@ -91,6 +95,7 @@ function render() {
 
 function rowHtml(b) {
   const pill = MARGIN_PILL[b.marginState] || "";
+  const canDelRow = S.canDelete && b.status !== "ADJUDICADO" && !b.awardedProjectId;
   return `<tr>
     <td><a href="/comercial/orcamento?id=${esc(b.id)}"><b>${esc(b.number)}</b></a>${
       b.params?.prontoCot ? ` <span class="cm-pill is-good" title="Quantidades prontas para cotação: as Compras já podem pedir preços">pronto p/ cotação</span>` : ""
@@ -105,7 +110,18 @@ function rowHtml(b) {
     <td><span class="cm-pill${b.status === "ADJUDICADO" ? " is-good" : b.status === "PERDIDO" || b.status === "CANCELADO" ? " is-bad" : ""}">${esc(STATUS_LABELS[b.status] || b.status)}</span></td>
     <td>${esc(b.responsibleName)}</td>
     <td>${fmtDate(b.date)}</td>
-    <td><a class="cm-chip" href="/comercial/orcamento?id=${esc(b.id)}">Abrir</a></td>
+    <td style="white-space:nowrap">
+      <div style="display:inline-flex;align-items:center;gap:.375rem">
+        <a class="cm-chip" href="/comercial/orcamento?id=${esc(b.id)}">Abrir</a>
+        ${
+          canDelRow
+            ? `<button type="button" class="cm-chip is-danger" data-del-budget="${esc(b.id)}" data-del-number="${esc(b.number)}" title="Eliminar orçamento" aria-label="Eliminar orçamento ${esc(b.number)}">
+                 <span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">delete</span>
+               </button>`
+            : ""
+        }
+      </div>
+    </td>
   </tr>`;
 }
 
@@ -375,6 +391,23 @@ async function createNew(btn) {
   }
 }
 
+async function deleteBudget(id, number, btn) {
+  if (!window.confirm(`Tem a certeza que pretende eliminar o orçamento ${number || ""}? Esta ação não pode ser desfeita.`)) {
+    return;
+  }
+  if (btn) btn.disabled = true;
+  try {
+    await apiRequest(`/budgets/${encodeURIComponent(id)}`, { method: "DELETE" });
+    toast(`Orçamento ${number || ""} eliminado com sucesso.`, { type: "success" });
+    await load();
+    render();
+  } catch (err) {
+    if (btn) btn.disabled = false;
+    const errs = err?.payload?.errors;
+    toast(errs?.length ? errs.join(" ") : err?.message || "Não foi possível eliminar o orçamento.", { type: "error" });
+  }
+}
+
 // ───────────────────────── eventos ─────────────────────────
 
 function wire() {
@@ -399,8 +432,11 @@ function wire() {
     if (e.target?.dataset?.nv || e.target?.dataset?.nc) readNew(e);
   });
   document.addEventListener("click", async (e) => {
-    const t = e.target.closest("[data-status],[data-nvx],#oqNew,#oqImport");
+    const t = e.target.closest("[data-status],[data-nvx],[data-del-budget],#oqNew,#oqImport");
     if (!t) return;
+    if (t.dataset.delBudget) {
+      return deleteBudget(t.dataset.delBudget, t.dataset.delNumber, t);
+    }
     if (t.id === "oqImport") {
       abrirImportacao({
         onCriado: async () => {
@@ -432,6 +468,7 @@ initComercialPage({
   perm: "tab_orcamentos",
   onReady: async () => {
     S.readonly = !canEdit();
+    S.canDelete = canDelete();
     el("cmContent").innerHTML = `<p class="cm-lead">A carregar orçamentos…</p>`;
     try {
       await load();

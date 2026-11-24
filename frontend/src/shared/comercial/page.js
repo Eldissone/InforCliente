@@ -102,6 +102,11 @@ export function canEdit() {
   return can(COMERCIAL_MODULE, "edit") || can(COMERCIAL_MODULE, "create");
 }
 
+/** O utilizador pode eliminar orçamentos no módulo Comercial? */
+export function canDelete() {
+  return can(COMERCIAL_MODULE, "delete") || canEdit();
+}
+
 /** O utilizador pode aprovar (despacho, proposta)? */
 export function canApprove() {
   return can(COMERCIAL_MODULE, "approve");

@@ -1573,8 +1573,8 @@ budgetRoutes.delete(
         errors: ["Um orçamento adjudicado não se apaga: deu origem a uma obra."],
       });
     }
-    await prisma.budget.update({ where: { id }, data: { status: "CANCELADO" } });
-    res.json({ ok: true, cancelled: true });
+    await prisma.budget.delete({ where: { id } });
+    res.json({ ok: true, deleted: true });
   })
 );
 

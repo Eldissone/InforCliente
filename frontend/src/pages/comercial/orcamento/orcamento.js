@@ -12,7 +12,7 @@
 
 import { apiRequest, apiUpload } from "/services/api.js";
 import { toast, escapeHtml } from "/shared/ui.js";
-import { initComercialPage, canEdit } from "/shared/comercial/page.js";
+import { initComercialPage, canEdit, canDelete } from "/shared/comercial/page.js";
 import { calcBudget, CATS, SHEET_KEYS } from "/shared/comercial/budgetCalc.js";
 import { abrirComposicao, wireComposicao } from "/shared/comercial/comporCustos.js";
 import { abrirPrecosHistorico, wirePrecosHistorico } from "/shared/comercial/precosHistorico.js";
@@ -34,6 +34,7 @@ const S = {
   dirty: false,
   saving: false,
   readonly: false,
+  canDelete: false,
   baremes: null,
   terms: null,
   termsDirty: false,
@@ -197,6 +198,13 @@ function renderHead() {
              <button class="cm-chip${S.dirty ? " is-on" : ""}" type="button" id="bSave" ${S.saving ? "disabled" : ""}>
                ${S.saving ? "A guardar…" : "Guardar"}
              </button>`
+      }
+      ${
+        S.canDelete && !b.locked && b.status !== "ADJUDICADO" && !b.awardedProjectId
+          ? `<button class="cm-chip is-danger" type="button" id="bDelete" title="Eliminar orçamento">
+               <span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">delete</span> Eliminar
+             </button>`
+          : ""
       }
     </div>`;
 }
@@ -1696,8 +1704,9 @@ function wire() {
   });
 
   document.addEventListener("click", async (e) => {
-    const t = e.target.closest("[data-view],[data-addrow],[data-delrow],[data-cfx],[data-milx],#bSave,#bApply,#tSave,#bImportQt,#bComporQt,#bPrecosHist,#bPedirCot,#bMapaCli");
+    const t = e.target.closest("[data-view],[data-addrow],[data-delrow],[data-cfx],[data-milx],#bSave,#bDelete,#bApply,#tSave,#bImportQt,#bComporQt,#bPrecosHist,#bPedirCot,#bMapaCli");
     if (!t) return;
+    if (t.id === "bDelete") return deleteCurrentBudget(t);
     if (t.id === "bPedirCot") return pedirCotacao();
     if (t.id === "bMapaCli") return importarMapaCliente();
     if (t.id === "tSave") return saveTerms();
@@ -1793,6 +1802,24 @@ function wire() {
   });
 }
 
+async function deleteCurrentBudget(btn) {
+  const num = S.head?.number || "";
+  if (!window.confirm(`Tem a certeza que pretende eliminar o orçamento ${num}? Esta ação não pode ser desfeita.`)) {
+    return;
+  }
+  if (btn) btn.disabled = true;
+  try {
+    await apiRequest(`/budgets/${encodeURIComponent(S.id)}`, { method: "DELETE" });
+    S.dirty = false;
+    S.termsDirty = false;
+    window.location.href = "/comercial/orcamentos";
+  } catch (err) {
+    if (btn) btn.disabled = false;
+    const errs = err?.payload?.errors;
+    toast(errs?.length ? errs.join(" ") : err?.message || "Não foi possível eliminar o orçamento.", { type: "error" });
+  }
+}
+
 async function applyBaremes() {
   if (S.dirty && !window.confirm("Tem alterações por guardar. Trazer os baremes padrão grava uma nova versão; as alterações por guardar perdem-se. Continuar?")) {
     return;
@@ -1816,6 +1843,7 @@ initComercialPage({
   perm: "tab_orcamentos",
   onReady: async () => {
     S.readonly = !canEdit();
+    S.canDelete = canDelete();
     if (!S.id) {
       el("cmContent").innerHTML = `<div class="cm-note is-bad">Falta o orçamento no endereço. <a href="/comercial/orcamentos">Voltar à lista</a>.</div>`;
       return;

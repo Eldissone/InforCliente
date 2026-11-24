@@ -86,6 +86,38 @@
   gap: 0.5rem;
 }
 
+/* Barra de filtros + ações na lista de orçamentos */
+.cm-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.cm-filter-row .cm-chips {
+  margin-bottom: 0;
+}
+
+.cm-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.cm-chip.is-danger {
+  color: var(--cm-bad-fg) !important;
+  border-color: #f0bdb7 !important;
+}
+
+.cm-chip.is-danger:hover {
+  background: var(--cm-bad-bg) !important;
+  border-color: var(--cm-bad-fg) !important;
+}
+
 /* ─── Painel / secção ────────────────────────────────────────────────────── */
 .cm-panel {
   background: #fff;

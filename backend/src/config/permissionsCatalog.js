@@ -504,7 +504,7 @@ function defaultAllowedFor(role, module, action) {
       ferramentas: { view: "true", create: "false", edit: "false", delete: "false", manage: "false", export: "true" },
       financeiro: { view: "view", edit: "false", export: "true", approve: "false", confirm_invoice: "false", certify_expense: "false", full_access: "false" },
       comercial: {
-        view: "true", create: "false", edit: "false", delete: "false",
+        view: "true", create: "false", edit: "false", delete: "true",
         approve: "true", adjudicar: "false", export: "true",
         tab_orcamentos: "true", tab_despacho: "true", tab_propostas: "view",
         tab_baremes: "view", tab_parametros: "view", tab_funcionarios: "view",
@@ -544,7 +544,7 @@ function defaultAllowedFor(role, module, action) {
       ferramentas: { view: "true", create: "false", edit: "false", delete: "false", manage: "false", export: "true" },
       financeiro: { view: "true", edit: "true", export: "true", approve: "false", confirm_invoice: "false", certify_expense: "true", full_access: "false" },
       comercial: {
-        view: "true", create: "true", edit: "true", delete: "false",
+        view: "true", create: "true", edit: "true", delete: "true",
         approve: "false", adjudicar: "false", export: "true",
         tab_orcamentos: "true", tab_despacho: "true", tab_propostas: "true",
         tab_baremes: "true", tab_parametros: "true", tab_funcionarios: "true",
