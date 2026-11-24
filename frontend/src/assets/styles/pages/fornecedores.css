@@ -346,3 +346,19 @@ body[data-registry="fornecedores"] {
     width: 100%;
   }
 }
+
+/* ── RG3 Novo Terceiro (protótipo) ── */
+.tc-kick { color: #168a5a; font-size: .75rem; font-weight: 700; letter-spacing: .06em; margin-bottom: .15rem; }
+.tc-req { color: #c2352b; }
+.tc-muted { color: #8b93a1; font-size: .78rem; font-weight: 500; }
+.tc-sub { font-size: .9rem; font-weight: 700; color: #2a2e36; margin: 1rem 0 .6rem; }
+.tc-chips { display: flex; flex-wrap: wrap; gap: .5rem; }
+.tc-chip { display: inline-flex; align-items: center; gap: .45rem; min-height: 3rem; padding: 0 1rem; border-radius: .95rem; background: #f3f5f8; font-size: .86rem; font-weight: 600; color: #2a2e36; cursor: pointer; }
+.tc-chip input { width: 1rem; height: 1rem; accent-color: #168a5a; }
+.tc-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .9rem 1.1rem; align-items: end; padding: .9rem 0; border-bottom: 1px dashed #e6eaf0; }
+.tc-row .tc-w2 { grid-column: span 2; }
+.tc-del { justify-self: start; border: 0; background: none; color: #8b93a1; font-size: .8rem; font-weight: 600; cursor: pointer; padding: .4rem 0; }
+.tc-del:hover { color: #c2352b; }
+#tcContas + .forn-add-bank, #tcContatos + .forn-add-bank { margin-top: .9rem; }
+@media (max-width: 860px) { .tc-row { grid-template-columns: minmax(0, 1fr); } .tc-row .tc-w2 { grid-column: auto; } }
+.tc-chip input[type="checkbox"] { appearance: auto; -webkit-appearance: checkbox; width: 1.05rem !important; height: 1.05rem !important; min-height: 0 !important; padding: 0 !important; margin: 0; border: 0; background: none !important; box-shadow: none !important; }

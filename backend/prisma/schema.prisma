@@ -1590,6 +1590,18 @@ model Supplier {
   vatRegime          String?  // Regime de IVA (AGT)
   agtStatus          String?  // Estado no portal do contribuinte (AGT)
   agtType            String?  // Tipo de contribuinte (AGT)
+  /// RG3 Terceiros (protótipo): uma só ficha para cliente, fornecedor, empresa do grupo e sócio
+  code               String?
+  /// CLIENTE, FORNECEDOR, GRUPO, SOCIO
+  roles              String[] @default(["FORNECEDOR"])
+  country            String?  @default("Angola")
+  region             String?
+  /// [{ nome, cargo, telefone, email }]
+  contacts           Json     @default("[]")
+  /// Condições fiscais / financeiras: { cliente: {...}, fornecedor: {...} }
+  profile            Json     @default("{}")
+  /// O registo de cliente que corresponde a este terceiro (quando é cliente)
+  clientId           String?
   active             Boolean  @default(true)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -1664,7 +1676,10 @@ model SupplierBankAccount {
   id         String   @id @default(cuid())
   supplierId String
   bankName   String
-  iban       String
+  /// IBAN e/ou n.º de conta (pelo menos um)
+  iban       String?
+  accountNumber String?
+  description   String?
   isPrimary  Boolean  @default(false)
   createdAt  DateTime @default(now())
 

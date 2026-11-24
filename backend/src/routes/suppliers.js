@@ -137,6 +137,154 @@ function resolveBankAccounts(body) {
   return [];
 }
 
+// --- RG3 TERCEIROS (protótipo): uma só ficha para cliente / fornecedor / empresa do grupo / sócio ---
+
+const ROLES = ["CLIENTE", "FORNECEDOR", "GRUPO", "SOCIO"];
+
+/** Próximo código livre T0001, T0002… */
+async function proximoCodigoTerceiro() {
+  const rows = await prisma.$queryRaw`SELECT MAX(CAST(SUBSTRING("code" FROM 2) AS INT)) AS m FROM "Supplier" WHERE "code" ~ '^T[0-9]+$'`;
+  return `T${String(Number(rows?.[0]?.m || 0) + 1).padStart(4, "0")}`;
+}
+
+const contaSchema = z
+  .object({
+    iban: z.string().trim().max(40).optional().nullable(),
+    accountNumber: z.string().trim().max(40).optional().nullable(),
+    bankName: z.string().trim().max(80).optional().nullable(),
+    description: z.string().trim().max(160).optional().nullable(),
+  })
+  .refine((c) => (c.iban || "").replace(/\s/g, "") || (c.accountNumber || "").trim(), { message: "Cada conta precisa do IBAN ou do n.º de conta" });
+
+const contatoSchema = z.object({
+  nome: z.string().trim().max(120).optional().nullable(),
+  cargo: z.string().trim().max(80).optional().nullable(),
+  telefone: z.string().trim().max(40).optional().nullable(),
+  email: z.string().trim().max(120).optional().nullable(),
+});
+
+const terceiroSchema = z.object({
+  code: z.string().trim().max(20).optional().nullable(),
+  name: z.string().trim().min(2).max(200),
+  nif: z.string().trim().min(5).max(20),
+  roles: z.array(z.enum(ROLES)).min(1, "Escolha o tipo de terceiro"),
+  country: z.string().trim().min(2).max(60),
+  region: z.string().trim().min(2).max(80),
+  address: z.string().trim().max(300).optional().nullable(),
+  setorCliente: z.string().trim().max(80).optional().nullable(),
+  setorFornecedor: z.string().trim().max(80).optional().nullable(),
+  cliente: z
+    .object({
+      cond: z.string().min(1, "Condição de pagamento do cliente"),
+      regimeIva: z.string().optional().nullable(),
+      seguroConstrucao: z.boolean().optional(),
+      seguroGarantia: z.boolean().optional(),
+      moeda: z.string().optional().nullable(),
+      desconto: z.boolean().nullable().optional(),
+    })
+    .optional()
+    .nullable(),
+  fornecedor: z
+    .object({
+      limiteCredito: z.number().min(0).nullable().optional(),
+      cond: z.string().min(1, "Condição de pagamento do fornecedor"),
+      regimeIva: z.string().optional().nullable(),
+      retencao: z.boolean({ required_error: "Diga se há retenção na fonte" }),
+      moeda: z.string().optional().nullable(),
+      desconto: z.boolean().nullable().optional(),
+    })
+    .optional()
+    .nullable(),
+  contas: z.array(contaSchema).max(20).optional(),
+  contatos: z.array(contatoSchema).max(30).optional(),
+});
+
+/** Regime de IVA → % (o que o resto da app lê em `vatPercent`). */
+const ivaDoRegime = (r) => (/geral/i.test(r || "") ? 14 : /simplificado/i.test(r || "") ? 7 : /exclus|isento|sujeito/i.test(r || "") ? 0 : null);
+
+supplierRoutes.get(
+  "/terceiro/next-code",
+  requirePermission("fornecedores", "view"),
+  asyncHandler(async (_req, res) => res.json({ code: await proximoCodigoTerceiro() }))
+);
+
+/** POST /suppliers/terceiro — cria a ficha (e o cliente, se for cliente). */
+supplierRoutes.post(
+  "/terceiro",
+  requirePermission("fornecedores", "manage"),
+  asyncHandler(async (req, res) => {
+    const body = terceiroSchema.parse(req.body);
+    const roles = [...new Set(body.roles)];
+    if (roles.includes("CLIENTE") && !body.cliente) return res.status(400).json({ error: "Preencha as condições como cliente." });
+    if (roles.includes("FORNECEDOR") && !body.fornecedor) return res.status(400).json({ error: "Preencha as condições como fornecedor." });
+    const nif = normalizeNif(body.nif);
+    const existing = await findSupplierByNif(nif);
+    if (existing) return res.status(409).json(duplicateNifResponse(existing));
+    const code = body.code && body.code.trim() ? body.code.trim().toUpperCase() : await proximoCodigoTerceiro();
+    if (await prisma.supplier.findFirst({ where: { code }, select: { id: true } })) {
+      return res.status(409).json({ error: `O código ${code} já está em uso.` });
+    }
+    const contas = (body.contas || []).map((c, i) => ({
+      iban: c.iban ? c.iban.replace(/\s+/g, "").toUpperCase() : null,
+      accountNumber: c.accountNumber || null,
+      bankName: c.bankName || "—",
+      description: c.description || null,
+      isPrimary: i === 0,
+    }));
+    const contatos = (body.contatos || []).filter((c) => c.nome || c.telefone || c.email);
+    const f = body.fornecedor || null;
+    const cl = body.cliente || null;
+    const principal = contatos[0] || {};
+
+    const result = await prisma.$transaction(async (tx) => {
+      // Cliente: liga-se ao cliente com o mesmo nome, ou cria-se (sem acesso ao portal).
+      let clientId = null;
+      if (roles.includes("CLIENTE")) {
+        const igual = await tx.client.findFirst({ where: { name: { equals: body.name, mode: "insensitive" } }, select: { id: true } });
+        if (igual) clientId = igual.id;
+        else {
+          let cc = code;
+          if (await tx.client.findUnique({ where: { code: cc }, select: { id: true } })) cc = `${code}-C`;
+          const novo = await tx.client.create({
+            data: { code: cc, name: body.name, region: body.region, industry: body.setorCliente || null, ltvTotal: 0, churnRisk: 0, ltvPotential: 0 },
+          });
+          clientId = novo.id;
+        }
+      }
+      const sup = await tx.supplier.create({
+        data: {
+          name: body.name,
+          nif,
+          code,
+          roles,
+          country: body.country,
+          region: body.region,
+          address: body.address || null,
+          contact: principal.nome || null,
+          phone: principal.telefone || null,
+          email: principal.email && /@/.test(principal.email) ? principal.email : null,
+          paymentTerm: f?.cond || cl?.cond || null,
+          vatRegime: f?.regimeIva || cl?.regimeIva || null,
+          vatPercent: ivaDoRegime(f?.regimeIva || cl?.regimeIva),
+          withholdingPercent: f ? (f.retencao ? 6.5 : 0) : null,
+          type: /transport/i.test(body.setorFornecedor || "") ? "TRANSPORTADOR" : /subempreit|presta|servi/i.test(body.setorFornecedor || "") ? "SERVICO" : "MATERIAL",
+          category: body.setorFornecedor || null,
+          contacts: contatos,
+          profile: { cliente: cl, fornecedor: f },
+          clientId,
+          iban: contas.find((c) => c.iban)?.iban || null,
+        },
+      });
+      if (contas.length) {
+        await tx.supplierBankAccount.createMany({ data: contas.map((c) => ({ supplierId: sup.id, ...c })) });
+      }
+      return sup;
+    });
+    const full = await prisma.supplier.findUnique({ where: { id: result.id }, include: supplierInclude });
+    return res.status(201).json(full);
+  })
+);
+
 // --- CRUD FORNECEDORES ---
 
 supplierRoutes.get(

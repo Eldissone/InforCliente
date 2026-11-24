@@ -38,6 +38,7 @@ export const APP_MENU = [
         icon: "groups",
         autoBadge: true,
         children: [
+          { label: "Novo Terceiro", icon: "person_add", href: "/registos/terceiros", perm: "fornecedores:view" },
           { label: "Setores", icon: "account_tree", href: "/registos/terceiros/setores", perm: "cadastros:view" },
           {
             label: "Clientes",
