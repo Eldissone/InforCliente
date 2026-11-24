@@ -22,38 +22,16 @@ export function getSafeNextPath() {
 
 /**
  * Destino após login (assíncrono — inclui permissões efectivas).
- * Role financeiro → Perfil Financeiro; utilizadores só-financeiros (override) também.
+ * Redireciona para a primeira rota em que o utilizador tem permissão de navegação e de módulo.
  */
 export async function resolvePostLoginPath(user) {
   const role = (user?.role || "").toLowerCase();
-  
+
   // O cliente tem um dashboard isolado
   if (role === "cliente") return "/Dashboard/clientDashboard";
-  
-  // Especial: o Técnico tem um entrypoint específico fora do navbar
-  if (role === "tecnico") return "/Projectos/tecnicoPlanos";
 
-  const { loadUserPermissions, can } = await import("./permissions.js");
-  await loadUserPermissions({ force: true });
+  const { loadUserPermissions, resolveFirstAccessiblePath } = await import("./permissions.js");
+  const map = await loadUserPermissions({ force: true });
 
-  const priorityRoutes = [
-    { action: "nav_dashboard", path: "/Dashboard" },
-    { action: "nav_clientes", path: "/Clientes/clienteLista" },
-    { action: "nav_obras", path: "/Projectos/ProjectGeral" },
-    { action: "nav_logistica", path: "/Stock" },
-    { action: "nav_planeamento", path: "/Projectos/ProjectGeral" },
-    { action: "nav_financeiro", path: "/Financeiro/overview" },
-    { action: "nav_cotacao", path: "/Projectos/Cotacao" },
-    { action: "nav_comercial", path: "/comercial/orcamentos" },
-    { action: "nav_centros_gerais", path: "/Financeiro/centro-pagamentos" },
-    { action: "nav_users", path: "/Users" },
-  ];
-
-  for (const route of priorityRoutes) {
-    if (can("navlinks", route.action)) {
-      return route.path;
-    }
-  }
-
-  return "/Dashboard";
+  return resolveFirstAccessiblePath(map, role).replace(/\/index\.html$/, "").replace(/\.html$/, "");
 }

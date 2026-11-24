@@ -573,7 +573,7 @@ function loadSessionGreeting() {
 
 async function init() {
   // Verificar permissão dinâmica — qualquer perfil com acesso ao dashboard pode entrar
-  const ok = await guardPageAccess("navlinks", "nav_dashboard");
+  const ok = await guardPageAccess("dashboard:view|navlinks:nav_dashboard");
   if (!ok) return;
 
   initMobileMenu();

@@ -867,7 +867,7 @@ async function openCreate() {
 }
 
 async function init() {
-  const ok = await guardPageAccess("navlinks", "nav_obras");
+  const ok = await guardPageAccess("obras", "view");
   if (!ok) return;
 
   initMobileMenu();

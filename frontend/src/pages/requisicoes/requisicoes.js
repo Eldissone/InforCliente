@@ -799,7 +799,7 @@ function wire() {
 // ───────────────────────── arranque ─────────────────────────
 
 (async () => {
-  const ok = await guardPageAccess("obras", "view");
+  const ok = await guardPageAccess("obras:view|stock:view");
   if (!ok) return;
 
   initMobileMenu();

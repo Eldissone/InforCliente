@@ -8,8 +8,9 @@ import { initBackupPanel, loadBackupPanel } from "./backups.js";
 import { loadAiPanel } from "./aiSettings.js";
 import { ROLE_DEFS, roleDef, roleOptionsHtml, isProjectScopedRole } from "./roles.js";
 import { openDrawer, clearFieldErrors, setFieldError } from "./drawer.js";
+import { guardPageAccess, initPermissionLayer } from "../../shared/permissions.js";
 
-checkAuth({ allowedRoles: ["admin"] });
+checkAuth();
 
 function el(id) { return document.getElementById(id); }
 function esc(v) {
@@ -2443,6 +2444,9 @@ function applyHelpDeepLink() {
 
 // ─── Init ─────────────────────────────────────────────────────
 async function init() {
+  const ok = await guardPageAccess("sistema:view|permissoes:view|permissoes:manage_permissions|configuracoes:view");
+  if (!ok) return;
+  await initPermissionLayer();
   initMobileMenu();
   wireLogout();
   wireUsersNav();

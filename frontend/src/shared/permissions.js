@@ -8,6 +8,7 @@ const CACHE_TTL_MS = 5 * 60 * 1000;
 
 let memoryMap = null;
 let memoryTabFallbacks = null;
+let pendingLoadPromise = null;
 
 export function getCachedPermissionMap() {
   if (memoryMap) return memoryMap;
@@ -16,7 +17,8 @@ export function getCachedPermissionMap() {
     if (!raw) return null;
     const ts = Number(localStorage.getItem(PERMS_TS_KEY) || 0);
     if (Date.now() - ts > CACHE_TTL_MS) return null;
-    return JSON.parse(raw);
+    memoryMap = JSON.parse(raw);
+    return memoryMap;
   } catch {
     return null;
   }
@@ -31,6 +33,7 @@ export function setCachedPermissionMap(map) {
 export function clearPermissionCache() {
   memoryMap = null;
   memoryTabFallbacks = null;
+  pendingLoadPromise = null;
   localStorage.removeItem(PERMS_KEY);
   localStorage.removeItem(PERMS_TS_KEY);
   localStorage.removeItem(TAB_FB_KEY);
@@ -58,16 +61,22 @@ export async function loadUserPermissions({ force = false } = {}) {
   if (!force) {
     const cached = getCachedPermissionMap();
     if (cached) return cached;
+    if (pendingLoadPromise) return pendingLoadPromise;
   }
-  try {
-    const data = await apiRequest("/permissions/me");
-    const map = data.map || {};
-    setCachedPermissionMap(map);
-    setTabFallbacks(data.tabFallbacks || {});
-    return map;
-  } catch {
-    return {};
-  }
+  pendingLoadPromise = (async () => {
+    try {
+      const data = await apiRequest("/permissions/me");
+      const map = data.map || {};
+      setCachedPermissionMap(map);
+      setTabFallbacks(data.tabFallbacks || {});
+      return map;
+    } catch {
+      return getCachedPermissionMap() || {};
+    } finally {
+      pendingLoadPromise = null;
+    }
+  })();
+  return pendingLoadPromise;
 }
 
 function evaluateAllowedValue(val, method = "GET") {
@@ -77,9 +86,22 @@ function evaluateAllowedValue(val, method = "GET") {
   return false;
 }
 
-export function canPermission(map, module, action, { method = "GET" } = {}) {
+export function canPermission(map, module, action = "view", { method = "GET" } = {}) {
   const role = (getSessionUser()?.role || "").toLowerCase();
   if (role === "admin") return true;
+  if (!map || typeof map !== "object") return false;
+
+  // Suporta especificação composta "mod1:act1|mod2:act2" passada no 2.º argumento
+  if (typeof module === "string" && (module.includes("|") || (module.includes(":") && action === "view"))) {
+    return canPermSpec(map, module, { method });
+  }
+
+  if (module === "navlinks" && action === "nav_registos") {
+    if (Object.prototype.hasOwnProperty.call(map, "navlinks:nav_registos")) {
+      return evaluateAllowedValue(map["navlinks:nav_registos"], method);
+    }
+    return role !== "cliente";
+  }
 
   const full = map[`${module}:full_access`];
   if (full === "true" || full === true) return true;
@@ -101,7 +123,7 @@ export function canPermission(map, module, action, { method = "GET" } = {}) {
   if (evaluateAllowedValue(val, method)) return true;
 
   const manage = map[`${module}:manage`];
-  if ((manage === "true" || manage === true) && ["create", "edit", "delete", "approve", "manage"].includes(action)) return true;
+  if ((manage === "true" || manage === true) && ["create", "edit", "delete", "approve", "manage", "view", "read"].includes(action)) return true;
 
   if (action === "read") {
     const view = map[`${module}:view`];
@@ -127,6 +149,53 @@ function parsePermSpec(spec) {
   return { module, action };
 }
 
+/**
+ * Avalia uma expressão de permissão simples ("obras:view"), alternativa ("stock:view|logistica:view")
+ * ou cumulativa ("navlinks:nav_financeiro&financeiro:view").
+ */
+export function canPermSpec(map, spec, opts = {}) {
+  const raw = String(spec || "").trim();
+  if (!raw) return true;
+  const role = (getSessionUser()?.role || "").toLowerCase();
+  if (role === "admin") return true;
+
+  // Or-clauses separated by "|"
+  const orParts = raw.split("|").map((s) => s.trim()).filter(Boolean);
+  if (!orParts.length) return true;
+
+  return orParts.some((orPart) => {
+    const andParts = orPart.split("&").map((s) => s.trim()).filter(Boolean);
+    return andParts.every((atom) => {
+      const { module, action } = parsePermSpec(atom);
+      if (!module) return true;
+      return canPermission(map, module, action, opts);
+    });
+  });
+}
+
+/**
+ * Determina se um item ou grupo do menu (APP_MENU) pode ser acedido pelo utilizador atual.
+ * Respeita tanto a permissão do menu/área (`navPerm`) como a permissão funcional do módulo (`perm`).
+ */
+export function canAccessMenuEntry(entry, map = getCachedPermissionMap()) {
+  const user = getSessionUser();
+  const role = (user?.role || "").toLowerCase();
+  if (!role || role === "cliente") return false;
+  if (role === "admin") return true;
+  if (!entry) return false;
+
+  // Se o mapa ainda não foi carregado, evita exibir itens restritos indevidamente
+  if (!map || !Object.keys(map).length) return false;
+
+  if (entry.navPerm && !canPermSpec(map, entry.navPerm)) {
+    return false;
+  }
+  if (entry.perm && !canPermSpec(map, entry.perm)) {
+    return false;
+  }
+  return true;
+}
+
 function setElementPermissionDenied(el, denied) {
   if (denied) {
     el.classList.add("hidden");
@@ -146,28 +215,26 @@ function setElementPermissionDenied(el, denied) {
 export function isElementPermissionAllowed(el, map) {
   const spec = el.getAttribute("data-perm");
   if (!spec) return true;
-  const { module, action } = parsePermSpec(spec);
-  if (!module) return true;
-  return canPermission(map, module, action);
+  return canPermSpec(map, spec);
 }
 
-/** Bloqueia menus/elementos com data-perm="modulo:acao" */
+/** Bloqueia menus/elementos com data-perm="modulo:acao" ou "mod1:act1|mod2:act2" */
 export function applyPermissionVisibility(map) {
   document.querySelectorAll("[data-perm]").forEach((el) => {
     const spec = el.getAttribute("data-perm") || "";
-    const { module, action } = parsePermSpec(spec);
-    if (!module) return;
-    setElementPermissionDenied(el, !canPermission(map, module, action));
+    if (!spec.trim()) return;
+    setElementPermissionDenied(el, !canPermSpec(map, spec));
   });
 
   document.querySelectorAll("[data-nav-perm]").forEach((el) => {
-    const spec = String(el.getAttribute("data-nav-perm") || "");
-    const [module, action = "view"] = spec.split(":").map((s) => s.trim());
-    if (!module) return;
-    if (!canPermission(map, module, action)) {
+    const spec = String(el.getAttribute("data-nav-perm") || "").trim();
+    if (!spec) return;
+    if (!canPermSpec(map, spec)) {
       el.classList.add("hidden");
-      if (el.tagName === "A") {
+      if (el.tagName === "A" && !el.dataset.navDeniedBound) {
+        el.dataset.navDeniedBound = "1";
         el.addEventListener("click", (e) => {
+          if (!el.classList.contains("hidden")) return;
           e.preventDefault();
           window.location.href = "/Dashboard/index.html?msg=access_denied";
         });
@@ -187,9 +254,9 @@ export function applyTabPermissions(map) {
     "[data-tab-trigger][data-perm], [data-tab][data-perm], [data-stock-subtab][data-perm]"
   );
   triggers.forEach((el) => {
-    const { module, action } = parsePermSpec(el.getAttribute("data-perm"));
-    if (!module) return;
-    setElementPermissionDenied(el, !canPermission(map, module, action));
+    const spec = el.getAttribute("data-perm") || "";
+    if (!spec.trim()) return;
+    setElementPermissionDenied(el, !canPermSpec(map, spec));
   });
 
   document.querySelectorAll("[data-tab-trigger]").forEach((trigger) => {
@@ -256,6 +323,46 @@ export function activateFirstVisibleStockTab() {
   return tabs[0].dataset.tab;
 }
 
+/** Lista ordenada de rotas candidatas para redirecionamento quando o acesso é negado ou pós-login */
+export const ACCESSIBLE_FALLBACK_ROUTES = [
+  { spec: "navlinks:nav_dashboard&dashboard:view", path: "/Dashboard/index.html" },
+  { spec: "navlinks:nav_obras&obras:view", path: "/Projectos/ProjectGeral.html" },
+  { spec: "navlinks:nav_clientes&clientes:view", path: "/Clientes/clienteLista.html" },
+  { spec: "navlinks:nav_logistica&stock:view", path: "/Stock/index.html" },
+  { spec: "navlinks:nav_logistica&logistica:view", path: "/Stock/index.html" },
+  { spec: "navlinks:nav_financeiro&financeiro:view", path: "/Financeiro/overview" },
+  { spec: "navlinks:nav_comercial&comercial:tab_orcamentos", path: "/comercial/orcamentos" },
+  { spec: "navlinks:nav_comercial&comercial:view", path: "/comercial/orcamentos" },
+  { spec: "navlinks:nav_cotacao&obras:view", path: "/Projectos/Cotacao/index.html" },
+  { spec: "navlinks:nav_centros_gerais&pedidosExtras:view", path: "/Financeiro/centro-pagamentos" },
+  { spec: "navlinks:nav_registos&cadastros:view", path: "/registos/contactos" },
+  { spec: "navlinks:nav_registos&materiais:view", path: "/registos/produtos" },
+  { spec: "navlinks:nav_registos&ferramentas:view", path: "/registos/equipamentos" },
+  { spec: "navlinks:nav_users&sistema:view", path: "/Users/index.html" },
+  { spec: "navlinks:nav_users&permissoes:view", path: "/Users/index.html" },
+  { spec: "navlinks:nav_users&permissoes:manage_permissions", path: "/Users/index.html" },
+  { spec: "dashboard:view", path: "/Dashboard/index.html" },
+  { spec: "obras:view", path: "/Projectos/ProjectGeral.html" },
+  { spec: "clientes:view", path: "/Clientes/clienteLista.html" },
+  { spec: "stock:view|logistica:view", path: "/Stock/index.html" },
+  { spec: "financeiro:view", path: "/Financeiro/overview" },
+  { spec: "comercial:tab_orcamentos|comercial:view", path: "/comercial/orcamentos" },
+  { spec: "cadastros:view", path: "/registos/contactos" },
+  { spec: "sistema:view|permissoes:view|permissoes:manage_permissions", path: "/Users/index.html" },
+];
+
+export function resolveFirstAccessiblePath(map, role = (getSessionUser()?.role || "").toLowerCase()) {
+  if (role === "cliente") return "/Dashboard/clientDashboard.html";
+  if (role === "tecnico" && canPermSpec(map, "obras:view")) return "/Projectos/tecnicoPlanos.html";
+
+  for (const route of ACCESSIBLE_FALLBACK_ROUTES) {
+    if (canPermSpec(map, route.spec)) {
+      return route.path;
+    }
+  }
+  return role === "tecnico" ? "/Projectos/tecnicoPlanos.html" : "/Dashboard/index.html";
+}
+
 /** Guarda de rota por página (chamar no início de cada página protegida) */
 export async function guardPageAccess(module, action = "view") {
   const user = getSessionUser();
@@ -267,37 +374,9 @@ export async function guardPageAccess(module, action = "view") {
 
   const here = window.location.pathname;
   const role = (user.role || "").toLowerCase();
+  const target = resolveFirstAccessiblePath(map, role);
 
-  // Percorre a lista de rotas por prioridade para encontrar a primeira acessível
-  const priorityRoutes = [
-    { key: "navlinks:nav_dashboard", path: "/Dashboard/index.html" },
-    { key: "navlinks:nav_clientes", path: "/Clientes/clienteLista.html" },
-    { key: "navlinks:nav_obras", path: "/Projectos/ProjectGeral.html" },
-    { key: "navlinks:nav_logistica", path: "/Stock/index.html" },
-    { key: "navlinks:nav_planeamento", path: "/Projectos/ProjectGeral.html" },
-    { key: "navlinks:nav_financeiro", path: "/Financeiro/overview" },
-    { key: "navlinks:nav_cotacao", path: "/Projectos/Cotacao/index.html" },
-    { key: "navlinks:nav_comercial", path: "/comercial/orcamentos" },
-    { key: "navlinks:nav_centros_gerais", path: "/Financeiro/centro-pagamentos" },
-    { key: "navlinks:nav_users", path: "/Users/index.html" },
-  ];
-
-  let target = "/Dashboard/index.html";
-  if (role === "cliente") {
-    target = "/Dashboard/clientDashboard.html";
-  } else if (role === "tecnico") {
-    target = "/Projectos/tecnicoPlanos.html";
-  } else {
-    for (const route of priorityRoutes) {
-      const val = map[route.key];
-      if (val === "true" || val === true) {
-        target = route.path;
-        break;
-      }
-    }
-  }
-
-  if (!here.includes(target)) {
+  if (!here.includes(target.replace(/\.html$/, ""))) {
     window.location.href = `${target}?msg=access_denied`;
   }
   return false;

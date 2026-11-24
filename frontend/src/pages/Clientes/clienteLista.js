@@ -330,7 +330,7 @@ async function openEdit(id) {
 }
 
 async function init() {
-  const ok = await guardPageAccess("navlinks", "nav_clientes");
+  const ok = await guardPageAccess("clientes", "view");
   if (!ok) return;
 
   initMobileMenu();

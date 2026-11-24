@@ -1,40 +1,69 @@
+import { getSessionUser } from "../services/auth.js";
+import { canAccessMenuEntry, canPermSpec, getCachedPermissionMap } from "./permissions.js";
+
 const LOGISTICS_SELECTOR = "[data-nav-logistics], [data-nav-logistica]";
 
-/** Ordem do menu principal. Itens `pending` ainda não têm ecrã próprio. */
-const APP_MENU = [
-  { type: "link", label: "Dashboard", icon: "home", selector: "[data-nav-dashboard]", href: "/Dashboard" },
+export const FOOTER_GESTAO_ENTRY = {
+  type: "link",
+  label: "Gestão",
+  icon: "settings",
+  selector: "[data-nav-users]",
+  href: "/Users",
+  navPerm: "navlinks:nav_users",
+  perm: "sistema:view|permissoes:view|permissoes:manage_permissions|configuracoes:view",
+};
+
+/** Ordem do menu principal. Cada grupo e item declara `navPerm` e/ou `perm` para montagem dinâmica conforme perfil/utilizador. */
+export const APP_MENU = [
+  {
+    type: "link",
+    label: "Dashboard",
+    icon: "home",
+    selector: "[data-nav-dashboard]",
+    href: "/Dashboard",
+    navPerm: "navlinks:nav_dashboard",
+    perm: "dashboard:view",
+  },
   {
     type: "group",
     label: "Registos",
     icon: "folder_open",
-    badge: "11",
+    navPerm: "navlinks:nav_registos",
+    autoBadge: true,
     children: [
-      { label: "Contactos", icon: "contacts", href: "/registos/contactos" },
-      { label: "Obras", icon: "apartment", href: "/registos/obras" },
+      { label: "Contactos", icon: "contacts", href: "/registos/contactos", perm: "cadastros:view" },
+      { label: "Obras", icon: "apartment", href: "/registos/obras", perm: "obras:create" },
       {
         label: "Terceiros",
         icon: "groups",
-        badge: "2",
+        autoBadge: true,
         children: [
-          { label: "Setores", icon: "account_tree", href: "/registos/terceiros/setores" },
-          { label: "Clientes", icon: "business", selector: "[data-nav-clientes]", href: "/Clientes/clienteLista" },
+          { label: "Setores", icon: "account_tree", href: "/registos/terceiros/setores", perm: "cadastros:view" },
+          {
+            label: "Clientes",
+            icon: "business",
+            selector: "[data-nav-clientes]",
+            href: "/Clientes/clienteLista",
+            navPerm: "navlinks:nav_clientes",
+            perm: "clientes:view",
+          },
         ],
       },
-      { label: "Produtos e Serviços", icon: "inventory_2", href: "/registos/produtos" },
-      { label: "Equipamentos, Maquinarias e Viaturas", icon: "agriculture", href: "/registos/equipamentos" },
-      { label: "Pessoal", icon: "badge", href: "/registos/pessoal" },
-      { label: "Folha de Ponto", icon: "schedule", href: "/registos/folha-ponto" },
-     
-      { label: "Tipo de Custo (Produto ou Serviço)", icon: "category", href: "/registos/tipo-custo" },
-      { label: "Categorias de Custo", icon: "account_tree", href: "/registos/categorias-custo" },
-      { label: "Subcategorias de Custo", icon: "subdirectory_arrow_right", href: "/registos/subcategorias-custo" },
-      { label: "Movimentos Financeiros", icon: "payments", href: "/registos/movimentos" },
+      { label: "Produtos e Serviços", icon: "inventory_2", href: "/registos/produtos", perm: "materiais:view" },
+      { label: "Equipamentos, Maquinarias e Viaturas", icon: "agriculture", href: "/registos/equipamentos", perm: "ferramentas:view" },
+      { label: "Pessoal", icon: "badge", href: "/registos/pessoal", perm: "cadastros:view" },
+      { label: "Folha de Ponto", icon: "schedule", href: "/registos/folha-ponto", perm: "cadastros:view" },
+      { label: "Tipo de Custo (Produto ou Serviço)", icon: "category", href: "/registos/tipo-custo", perm: "pedidosExtras:view|financeiro:view" },
+      { label: "Categorias de Custo", icon: "account_tree", href: "/registos/categorias-custo", perm: "pedidosExtras:view|financeiro:view" },
+      { label: "Subcategorias de Custo", icon: "subdirectory_arrow_right", href: "/registos/subcategorias-custo", perm: "pedidosExtras:view|financeiro:view" },
+      { label: "Movimentos Financeiros", icon: "payments", href: "/registos/movimentos", perm: "fundoManeio:view|financeiro:view" },
     ],
   },
   {
     type: "group",
     label: "Comercial",
     icon: "request_quote",
+    navPerm: "navlinks:nav_comercial",
     children: [
       {
         label: "Orçamentos",
@@ -61,50 +90,83 @@ const APP_MENU = [
     type: "group",
     label: "Obras",
     icon: "construction",
+    navPerm: "navlinks:nav_obras",
     children: [
-      { label: "Listagem", icon: "list", selector: "[data-nav-obras]", href: "/Projectos/ProjectGeral" },
+      { label: "Listagem", icon: "list", selector: "[data-nav-obras]", href: "/Projectos/ProjectGeral", perm: "obras:view" },
     ],
   },
   {
     type: "group",
     label: "Compras e Stock",
     icon: "local_shipping",
-    /*
-     * Arrumado como a área Compras e Stock do protótipo (prototipo.html,
-     * NAV_COMP): Compras, Encomendas e Stock, com o código de cada ecrã.
-     * Onde a app já tinha o ecrã, a entrada leva lá (cotações, fornecedores,
-     * requisições, entregas, ferramentas, armazéns); os que faltavam estão
-     * em /compras/*. Os ecrãs que só a app tem ficam no fim, sem código.
-     */
+    navPerm: "navlinks:nav_logistica|navlinks:nav_cotacao|navlinks:nav_centros_gerais",
     children: [
       {
         label: "Compras",
         icon: "shopping_cart",
         children: [
-          { label: "Pedidos de Cotação", icon: "request_quote", selector: "[data-nav-cotacao]", href: "/Projectos/Cotacao" },
-          { label: "Mapas Comparativos", icon: "compare", href: "/compras/mapas-comparativos" },
-          { label: "Base de Preços", icon: "sell", href: "/compras/base-precos" },
-          { label: "Fornecedores", icon: "local_shipping", href: "/fornecedores" },
+          {
+            label: "Pedidos de Cotação",
+            icon: "request_quote",
+            selector: "[data-nav-cotacao]",
+            href: "/Projectos/Cotacao",
+            navPerm: "navlinks:nav_cotacao",
+            perm: "obras:view|stock:view|logistica:view",
+          },
+          {
+            label: "Mapas Comparativos",
+            icon: "compare",
+            href: "/compras/mapas-comparativos",
+            navPerm: "navlinks:nav_logistica|navlinks:nav_cotacao",
+            perm: "stock:view|logistica:view|financeiro:view",
+          },
+          {
+            label: "Base de Preços",
+            icon: "sell",
+            href: "/compras/base-precos",
+            navPerm: "navlinks:nav_logistica|navlinks:nav_cotacao",
+            perm: "stock:view|logistica:view|financeiro:view",
+          },
+          {
+            label: "Fornecedores",
+            icon: "local_shipping",
+            href: "/fornecedores",
+            navPerm: "navlinks:nav_logistica|navlinks:nav_cotacao|navlinks:nav_financeiro",
+            perm: "fornecedores:view|stock:view|financeiro:view",
+          },
         ],
       },
       {
         label: "Encomendas",
         icon: "assignment",
+        navPerm: "navlinks:nav_logistica|navlinks:nav_cotacao",
         children: [
-          { label: "Compromissos Pendentes", icon: "pending_actions", href: "/compras/compromissos" },
+          {
+            label: "Compromissos Pendentes",
+            icon: "pending_actions",
+            href: "/compras/compromissos",
+            perm: "stock:view|logistica:view|financeiro:view",
+          },
         ],
       },
       {
         label: "Stock",
         icon: "warehouse",
+        navPerm: "navlinks:nav_logistica",
         children: [
-          { label: "Requisições Internas", icon: "assignment_add", href: "/requisicoes", perm: "obras:view" },
-          { label: "Entregas por Confirmar", icon: "fact_check", href: "/Stock?tab=deliveries" },
+          { label: "Requisições Internas", icon: "assignment_add", href: "/requisicoes", perm: "obras:view|stock:view" },
+          { label: "Entregas por Confirmar", icon: "fact_check", href: "/Stock?tab=deliveries", perm: "logistica:tab_deliveries|logistica:view" },
           { label: "Stock por Armazém", icon: "inventory", href: "/compras/stock-armazem", perm: "stock:view" },
           { label: "Movimentos de Armazém", icon: "history", href: "/compras/movimentos-armazem", perm: "stock:view" },
-          { label: "Ferramentas e Equipamentos", icon: "handyman", href: "/equipamentos" },
-          { label: "Armazéns", icon: "warehouse", href: "/registos/armazens" },
-          { label: "Pedidos de Logística", icon: "inventory_2", selector: LOGISTICS_SELECTOR, href: "/Stock" },
+          { label: "Ferramentas e Equipamentos", icon: "handyman", href: "/equipamentos", perm: "ferramentas:view|ferramentas:tab_tools" },
+          { label: "Armazéns", icon: "warehouse", href: "/registos/armazens", perm: "stock:tab_warehouses|stock:view" },
+          {
+            label: "Pedidos de Logística",
+            icon: "inventory_2",
+            selector: LOGISTICS_SELECTOR,
+            href: "/Stock",
+            perm: "stock:view|logistica:view|obras:tab_stock_requests",
+          },
         ],
       },
     ],
@@ -113,18 +175,12 @@ const APP_MENU = [
     type: "group",
     label: "Financeiro",
     icon: "account_balance",
-    /*
-     * Arrumado como a área Financeira do protótipo (prototipo.html, NAV_FIN):
-     * os mesmos grupos, pela mesma ordem, e o código do ecrã do protótipo na
-     * etiqueta quando o ecrã da app faz o mesmo. Os ecrãs que só a app tem
-     * ficam no grupo a que pertencem, sem código. Os grupos do protótipo que a
-     * app ainda não tem (Impostos, Financiamentos, Importações, Documentação…)
-     * não aparecem: um menu com entradas mortas engana mais do que ajuda.
-     */
+    navPerm: "navlinks:nav_financeiro|navlinks:nav_centros_gerais",
     children: [
       {
         label: "Painel",
         icon: "insights",
+        navPerm: "navlinks:nav_financeiro",
         children: [
           { label: "Painel Financeiro", icon: "insights", href: "/Financeiro/overview", perm: "financeiro:view" },
           { label: "Calendário Financeiro", icon: "calendar_month", href: "/Financeiro/calendario?ver=tudo", perm: "financeiro:view" },
@@ -136,17 +192,30 @@ const APP_MENU = [
         label: "Contas a Pagar",
         icon: "north_east",
         children: [
-          { label: "Centro de Pagamentos", icon: "account_balance", href: "/Financeiro/centro-pagamentos", perm: "financeiro:view" },
-          { label: "Calendário de Pagamentos", icon: "event", href: "/Financeiro/calendario?ver=pagar", perm: "financeiro:view" },
-          { label: "Despesas sem Comprovativo", icon: "receipt", href: "/Financeiro/despesas-sem-comprovativo", perm: "financeiro:view" },
-          { label: "Mapa de Obrigações", icon: "table_chart", href: "/Financeiro/mapa-obrigacoes", perm: "financeiro:view" },
-          { label: "Conta Corrente de Fornecedores", icon: "account_box", href: "/compras/conta-corrente-fornecedores" },
-          { label: "Pagamentos a Fornecedor", icon: "north_east", href: "/Financeiro/tesouraria/pagamentos", perm: "financeiro:view" },
+          {
+            label: "Centro de Pagamentos",
+            icon: "account_balance",
+            href: "/Financeiro/centro-pagamentos",
+            navPerm: "navlinks:nav_financeiro|navlinks:nav_centros_gerais",
+            perm: "financeiro:view|pedidosExtras:view",
+          },
+          { label: "Calendário de Pagamentos", icon: "event", href: "/Financeiro/calendario?ver=pagar", navPerm: "navlinks:nav_financeiro", perm: "financeiro:view" },
+          { label: "Despesas sem Comprovativo", icon: "receipt", href: "/Financeiro/despesas-sem-comprovativo", navPerm: "navlinks:nav_financeiro", perm: "financeiro:view" },
+          { label: "Mapa de Obrigações", icon: "table_chart", href: "/Financeiro/mapa-obrigacoes", navPerm: "navlinks:nav_financeiro", perm: "financeiro:view" },
+          {
+            label: "Conta Corrente de Fornecedores",
+            icon: "account_box",
+            href: "/compras/conta-corrente-fornecedores",
+            navPerm: "navlinks:nav_financeiro|navlinks:nav_logistica",
+            perm: "financeiro:view|fornecedores:view|stock:view",
+          },
+          { label: "Pagamentos a Fornecedor", icon: "north_east", href: "/Financeiro/tesouraria/pagamentos", navPerm: "navlinks:nav_financeiro", perm: "financeiro:view" },
         ],
       },
       {
         label: "Contas a Receber",
         icon: "south_west",
+        navPerm: "navlinks:nav_financeiro",
         children: [
           { label: "Centro de Recebimentos", icon: "post_add", href: "/Financeiro/faturacao/registar", perm: "financeiro:view" },
           { label: "Calendário de Recebimentos", icon: "event_available", href: "/Financeiro/calendario?ver=receber", perm: "financeiro:view" },
@@ -157,6 +226,7 @@ const APP_MENU = [
       {
         label: "Impostos",
         icon: "gavel",
+        navPerm: "navlinks:nav_financeiro",
         children: [
           { label: "Impostos", icon: "receipt_long", href: "/Financeiro/impostos", perm: "financeiro:view" },
           { label: "Planos de Pagamento (PPP)", icon: "event_repeat", href: "/Financeiro/impostos-planos", perm: "financeiro:view" },
@@ -167,6 +237,7 @@ const APP_MENU = [
       {
         label: "Financiamentos",
         icon: "account_balance",
+        navPerm: "navlinks:nav_financeiro",
         children: [
           { label: "Financiamentos Bancários", icon: "account_balance", href: "/Financeiro/financiamentos", perm: "financeiro:view" },
           { label: "Empréstimos Obtidos e Concedidos", icon: "swap_horiz", href: "/Financeiro/emprestimos", perm: "financeiro:view" },
@@ -177,20 +248,22 @@ const APP_MENU = [
       {
         label: "Tesouraria",
         icon: "account_balance_wallet",
+        navPerm: "navlinks:nav_financeiro",
         children: [
           { label: "Contas e Saldos", icon: "account_balance", href: "/Financeiro/contas-saldos", perm: "financeiro:view" },
           { label: "Conciliação Bancária", icon: "rule", href: "/Financeiro/conciliacao", perm: "financeiro:view" },
           { label: "Extratos Bancários", icon: "receipt_long", href: "/Financeiro/tesouraria/extratos", perm: "financeiro:view" },
           { label: "Previsão de Tesouraria", icon: "waterfall_chart", href: "/Financeiro/previsao-tesouraria", perm: "financeiro:view" },
           { label: "Mapa de Fluxo de Caixa", icon: "stacked_line_chart", href: "/Financeiro/fluxo-caixa", perm: "financeiro:view" },
-          { label: "Contas e Cartões", icon: "credit_card", href: "/Financeiro/contas-cartoes", perm: "financeiro:view" },
-          { label: "Alocação de Cartões", icon: "badge", href: "/Financeiro/alocacao-cartoes", perm: "financeiro:view" },
-          { label: "Fundo de Maneio", icon: "savings", href: "/Financeiro/fundo-maneio", perm: "financeiro:view" },
+          { label: "Contas e Cartões", icon: "credit_card", href: "/Financeiro/contas-cartoes", perm: "financeiro:view|fundoManeio:view" },
+          { label: "Alocação de Cartões", icon: "badge", href: "/Financeiro/alocacao-cartoes", perm: "financeiro:view|fundoManeio:view" },
+          { label: "Fundo de Maneio", icon: "savings", href: "/Financeiro/fundo-maneio", perm: "financeiro:view|fundoManeio:view" },
         ],
       },
       {
         label: "Análise de Custos",
         icon: "payments",
+        navPerm: "navlinks:nav_financeiro",
         children: [
           { label: "Custos da Empresa", icon: "task_alt", href: "/Financeiro/custos/realizados", perm: "financeiro:view" },
         ],
@@ -198,6 +271,7 @@ const APP_MENU = [
       {
         label: "Controlo de Obras",
         icon: "engineering",
+        navPerm: "navlinks:nav_financeiro",
         children: [
           { label: "Resumo das Obras", icon: "dashboard", href: "/Financeiro/obras-resumo", perm: "financeiro:view" },
           { label: "Custos por Obra", icon: "price_check", href: "/Financeiro/obras-custos", perm: "financeiro:view" },
@@ -209,6 +283,7 @@ const APP_MENU = [
       {
         label: "Registos",
         icon: "folder_open",
+        navPerm: "navlinks:nav_financeiro",
         children: [
           { label: "Centros de Custo", icon: "account_tree", href: "/Financeiro/centros-custo", perm: "financeiro:view" },
         ],
@@ -216,6 +291,52 @@ const APP_MENU = [
     ],
   },
 ];
+
+/**
+ * Conta o total de links folha numa árvore de entradas já filtrada.
+ */
+function countLeafLinks(entries) {
+  let total = 0;
+  for (const entry of entries || []) {
+    if (Array.isArray(entry.children)) {
+      total += countLeafLinks(entry.children);
+    } else {
+      total += 1;
+    }
+  }
+  return total;
+}
+
+/**
+ * Filtra recursivamente a árvore `APP_MENU` com base no mapa de permissões do utilizador.
+ * Remove links não autorizados, omite grupos/subgrupos sem filhos visíveis e calcula
+ * dinamicamente os badges de contagem.
+ */
+export function filterMenuEntriesByPermissions(entries = APP_MENU, map = getCachedPermissionMap()) {
+  const user = getSessionUser();
+  const role = (user?.role || "").toLowerCase();
+  if (!role || role === "cliente") return [];
+
+  // Se não for admin e ainda não houver mapa carregado, não monta links não confirmados
+  const hasMap = role === "admin" || (map && Object.keys(map).length > 0);
+  if (!hasMap) return [];
+
+  const out = [];
+  for (const entry of entries || []) {
+    if (!canAccessMenuEntry(entry, map)) continue;
+
+    if (Array.isArray(entry.children)) {
+      const children = filterMenuEntriesByPermissions(entry.children, map);
+      if (!children.length) continue;
+      const leafCount = countLeafLinks(children);
+      const badge = entry.autoBadge || entry.badge ? String(leafCount) : "";
+      out.push({ ...entry, children, badge });
+    } else {
+      out.push({ ...entry });
+    }
+  }
+  return out;
+}
 
 function getUserInitials(user) {
   if (user?.name) {
@@ -252,7 +373,6 @@ function getLink(source, definition) {
 
 function createMenuLink(definition, source, variant) {
   const origin = definition.selector ? getLink(source, definition) : null;
-  const wasHidden = Boolean(origin?.classList.contains("hidden"));
   const link = origin ? origin.cloneNode(false) : document.createElement("a");
   link.removeAttribute("id");
   if (!origin) link.href = definition.href || "#";
@@ -267,10 +387,10 @@ function createMenuLink(definition, source, variant) {
   } else if (!origin) {
     link.className = "flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all";
   } else {
-    link.className = "";
+    link.className = "flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all";
   }
-  if (definition.perm) link.setAttribute("data-nav-perm", definition.perm);
-  if (wasHidden) link.classList.add("hidden");
+  const combinedPerm = [definition.navPerm, definition.perm].filter(Boolean).join("&");
+  if (combinedPerm) link.setAttribute("data-nav-perm", combinedPerm);
   if (definition.pending) {
     link.classList.add("is-pending");
     link.href = "#";
@@ -430,7 +550,12 @@ function syncGroupVisibility(sidebar = document.getElementById("appPrimarySideba
   roots.forEach((root) => {
     root.querySelectorAll(".app-sidebar-group, .app-sidebar-subgroup, .app-sidebar-section, .app-nav-mobile-group").forEach((section) => {
       const links = [...section.querySelectorAll("a")];
-      if (links.length) section.classList.toggle("hidden", !links.some((link) => !link.classList.contains("hidden")));
+      const visibleLinks = links.filter((link) => !link.classList.contains("hidden"));
+      if (links.length) section.classList.toggle("hidden", visibleLinks.length === 0);
+      const badgeEl = section.querySelector(":scope > summary .app-sidebar-badge");
+      if (badgeEl) {
+        badgeEl.textContent = String(visibleLinks.length);
+      }
     });
   });
 }
@@ -498,11 +623,12 @@ function createMobileGroup(label, links) {
   return group;
 }
 
-function appendMenu(parent, source, variant) {
-  buildMenuNodes(APP_MENU, source, variant, false).forEach((node) => parent.appendChild(node));
+function appendMenu(parent, source, variant, map = getCachedPermissionMap()) {
+  const filtered = filterMenuEntriesByPermissions(APP_MENU, map);
+  buildMenuNodes(filtered, source, variant, false).forEach((node) => parent.appendChild(node));
 }
 
-function rebuildMobileMenu(nav, source) {
+function rebuildMobileMenu(nav, source, map = getCachedPermissionMap()) {
   const menu = nav.querySelector("#navMenu");
   if (!menu) return;
   const logout = menu.querySelector("[data-logout]");
@@ -510,14 +636,103 @@ function rebuildMobileMenu(nav, source) {
     if (child !== logout) child.remove();
   });
   const fragment = document.createDocumentFragment();
-  appendMenu(fragment, source, "mobile");
-  fragment.appendChild(createMenuLink(
-    { label: "Gestão", icon: "settings", selector: "[data-nav-users]", href: "/Users" },
-    source,
-    "mobile"
-  ));
+  appendMenu(fragment, source, "mobile", map);
+  if (canAccessMenuEntry(FOOTER_GESTAO_ENTRY, map)) {
+    fragment.appendChild(createMenuLink(FOOTER_GESTAO_ENTRY, source, "mobile"));
+  }
   if (logout) menu.insertBefore(fragment, logout);
   else menu.appendChild(fragment);
+}
+
+function populateSidebarMenuNodes(sidebar, source, map = getCachedPermissionMap()) {
+  const scrollArea = sidebar?.querySelector(".app-sidebar-scroll");
+  if (!scrollArea) return;
+
+  // Preservar quais grupos estavam abertos pelo utilizador
+  const openGroups = new Set(
+    [...scrollArea.querySelectorAll("details[open] > summary .app-sidebar-label, details[open] > summary .app-sidebar-subgroup-label")]
+      .map((el) => el.textContent?.trim())
+      .filter(Boolean)
+  );
+
+  scrollArea.innerHTML = "";
+  const primary = document.createElement("div");
+  primary.className = "app-sidebar-links";
+  scrollArea.appendChild(primary);
+
+  const filtered = filterMenuEntriesByPermissions(APP_MENU, map);
+  buildMenuNodes(filtered, source, "sidebar", false).forEach((node) => {
+    if (node.classList.contains("app-sidebar-link")) primary.appendChild(node);
+    else scrollArea.appendChild(node);
+  });
+
+  if (openGroups.size > 0) {
+    scrollArea.querySelectorAll("details").forEach((details) => {
+      const lbl = details.querySelector(":scope > summary .app-sidebar-label, :scope > summary .app-sidebar-subgroup-label")?.textContent?.trim();
+      if (lbl && openGroups.has(lbl)) details.open = true;
+    });
+  }
+
+  // Atualizar rodapé (botão Gestão)
+  const footer = sidebar.querySelector(".app-sidebar-footer");
+  if (footer) {
+    const existingUsers = footer.querySelector("[data-nav-users]");
+    const canGestao = canAccessMenuEntry(FOOTER_GESTAO_ENTRY, map);
+    if (canGestao && !existingUsers) {
+      const users = createMenuLink(FOOTER_GESTAO_ENTRY, source, "sidebar");
+      footer.insertBefore(users, footer.firstChild);
+    } else if (!canGestao && existingUsers) {
+      existingUsers.remove();
+    } else if (canGestao && existingUsers) {
+      existingUsers.classList.remove("hidden");
+    }
+  }
+}
+
+/**
+ * Reconstrói dinamicamente o menu lateral, o menu mobile e a barra superior
+ * de acordo com o mapa de permissões efetivas do utilizador.
+ */
+export function refreshNavigationForPermissions(map = getCachedPermissionMap()) {
+  if (document.documentElement.classList.contains("is-embed") || document.body?.classList.contains("is-embed")) return;
+  const nav = getTopNav();
+  const source = getDesktopNavLinksContainer();
+  if (!nav || document.body.dataset.appNav === "off") return;
+
+  // 1. Atualizar links da barra superior (source)
+  const topSpecs = [
+    { sel: "[data-nav-dashboard]", spec: "navlinks:nav_dashboard&dashboard:view" },
+    { sel: "[data-nav-clientes]", spec: "navlinks:nav_clientes&clientes:view" },
+    { sel: "[data-nav-obras]", spec: "navlinks:nav_obras&obras:view" },
+    { sel: "[data-nav-logistica], [data-nav-logistics]", spec: "navlinks:nav_logistica&(stock:view|logistica:view|obras:tab_stock_requests)" },
+    { sel: "[data-nav-planeamento]", spec: "navlinks:nav_planeamento&obras:view" },
+    { sel: "[data-nav-cotacao]", spec: "navlinks:nav_cotacao&(obras:view|stock:view|logistica:view)" },
+    { sel: "[data-nav-comercial]", spec: "navlinks:nav_comercial&(comercial:tab_orcamentos|comercial:view)" },
+    { sel: "[data-nav-financeiro]", spec: "navlinks:nav_financeiro&financeiro:view" },
+    { sel: "[data-nav-centros]", spec: "navlinks:nav_centros_gerais&(pedidosExtras:view|financeiro:view)" },
+    { sel: "[data-nav-users]", spec: "navlinks:nav_users&(sistema:view|permissoes:view|permissoes:manage_permissions|configuracoes:view)" },
+  ];
+
+  const role = (getSessionUser()?.role || "").toLowerCase();
+  topSpecs.forEach(({ sel, spec }) => {
+    const allowed = role === "admin" ? true : role === "cliente" ? false : canPermSpec(map, spec);
+    nav.querySelectorAll(sel).forEach((el) => {
+      if (isBrandLink(nav, el)) return;
+      el.classList.toggle("hidden", !allowed);
+    });
+  });
+
+  // 2. Reconstruir menu mobile apenas com itens permitidos
+  rebuildMobileMenu(nav, source, map);
+
+  // 3. Reconstruir sidebar principal apenas com itens/grupos permitidos
+  const sidebar = document.getElementById("appPrimarySidebar");
+  if (sidebar) {
+    populateSidebarMenuNodes(sidebar, source, map);
+  }
+
+  setActiveState(sidebar);
+  syncGroupVisibility(sidebar);
 }
 
 function wireSidebarInteractions(sidebar) {
@@ -660,15 +875,9 @@ export function transformDesktopNavToDropdowns() {
   sidebar.className = "app-primary-sidebar";
   sidebar.setAttribute("aria-label", "Menu principal");
 
-  // Retrieve user session info for the profile card (inspired by ideia.mp4)
-  let user = null;
-  try {
-    const rawUser = localStorage.getItem("gestor_user") || localStorage.getItem("user");
-    if (rawUser) user = JSON.parse(rawUser);
-  } catch {}
-  const userName = user?.name || user?.email?.split("@")[0] || "Administrador";
-  const userRole = (user?.role || "Gestor").toUpperCase();
-  const initials = getUserInitials(user);
+  // Retrieve user session info
+  const user = getSessionUser();
+  const map = getCachedPermissionMap();
 
   // 1. Top Header: Navigation title/icon + Pin Button
   const header = document.createElement("div");
@@ -697,23 +906,16 @@ export function transformDesktopNavToDropdowns() {
   // 3. Scroll Area for links & groups
   const scrollArea = document.createElement("div");
   scrollArea.className = "app-sidebar-scroll";
-
-  const primary = document.createElement("div");
-  primary.className = "app-sidebar-links";
-  scrollArea.appendChild(primary);
-
-  buildMenuNodes(APP_MENU, source, "sidebar", false).forEach((node) => {
-    if (node.classList.contains("app-sidebar-link")) primary.appendChild(node);
-    else scrollArea.appendChild(node);
-  });
   sidebar.appendChild(scrollArea);
 
   // 4. Footer: Gestão & Sair (com o mesmo estilo e alinhamento)
   const footer = document.createElement("div");
   footer.className = "app-sidebar-footer";
 
-  const users = createMenuLink({ label: "Gestão", icon: "settings", selector: "[data-nav-users]", href: "/Users" }, source, "sidebar");
-  footer.appendChild(users);
+  if (canAccessMenuEntry(FOOTER_GESTAO_ENTRY, map) || (user?.role || "").toLowerCase() === "admin") {
+    const users = createMenuLink(FOOTER_GESTAO_ENTRY, source, "sidebar");
+    footer.appendChild(users);
+  }
 
   const logoutBtn = document.createElement("button");
   logoutBtn.type = "button";
@@ -729,6 +931,8 @@ export function transformDesktopNavToDropdowns() {
   `;
   footer.appendChild(logoutBtn);
   sidebar.appendChild(footer);
+
+  populateSidebarMenuNodes(sidebar, source, map);
 
   document.body.appendChild(sidebar);
   document.body.classList.add("app-sidebar-layout", "app-sidebar-collapsed");

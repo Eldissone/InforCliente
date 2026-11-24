@@ -1,7 +1,7 @@
 import { apiRequest, apiUpload, getAssetUrl } from "/services/api.js";
 import { existingListHtml } from "/shared/existingRecords.js";
 import { checkAuth } from "/services/auth.js";
-import { can, initPermissionLayer } from "/shared/permissions.js";
+import { can, guardPageAccess, initPermissionLayer } from "/shared/permissions.js";
 import { wireLogout, wireUsersNav } from "/shared/session.js";
 import { bindNifLookup, normalizeNif, setNifLookupStatus } from "/shared/supplierNifLookup.js";
 import { initMobileMenu, openModal, toast } from "/shared/ui.js";
@@ -2334,12 +2334,34 @@ export function openObraEstadoDialog(project, onSaved) {
   });
 }
 
+const REGISTRY_GUARD_SPECS = {
+  contactos: "cadastros:view",
+  obras: "obras:create",
+  setores: "cadastros:view",
+  fornecedores: "fornecedores:view|stock:view|financeiro:view",
+  clientes: "clientes:view",
+  produtos: "materiais:view",
+  equipamentos: "ferramentas:view",
+  pessoal: "cadastros:view",
+  "folha-ponto": "cadastros:view",
+  "tipo-custo": "pedidosExtras:view|financeiro:view",
+  categorias: "pedidosExtras:view|financeiro:view",
+  subcategorias: "pedidosExtras:view|financeiro:view",
+  cartoes: "fundoManeio:view|financeiro:view",
+  movimentos: "fundoManeio:view|financeiro:view",
+};
+
 const kind = document.body?.dataset.registry;
 if (kind && RENDERERS[kind]) {
-  checkAuth();
-  initPermissionLayer();
-  wireUsersNav();
-  wireLogout();
-  initMobileMenu();
-  renderKind(kind);
+  (async () => {
+    checkAuth();
+    const guardSpec = REGISTRY_GUARD_SPECS[kind] || "cadastros:view";
+    const ok = await guardPageAccess(guardSpec);
+    if (!ok) return;
+    await initPermissionLayer();
+    wireUsersNav();
+    wireLogout();
+    initMobileMenu();
+    renderKind(kind);
+  })();
 }

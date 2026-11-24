@@ -162,7 +162,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     wireLogout();
     initMobileMenu();
     wireProductImagePreview();
-    await guardPageAccess("stock", "view");
+    const stockGuardSpec =
+        pageView === "warehouses"
+            ? "stock:tab_warehouses|stock:view"
+            : "stock:view|logistica:view|obras:tab_stock_requests|logistica:tab_deliveries";
+    const ok = await guardPageAccess(stockGuardSpec);
+    if (!ok) return;
     await initPermissionLayer();
     await initExtraRequestModal({ showToast: toast });
     wireExtraRequestButton("btnNewExtra", () => ({ type: "GERAL" }));

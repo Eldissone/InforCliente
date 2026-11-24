@@ -1,7 +1,7 @@
 import { apiRequest, apiUpload } from "/services/api.js";
 import { existingListHtml } from "/shared/existingRecords.js";
 import { checkAuth } from "/services/auth.js";
-import { can, initPermissionLayer } from "/shared/permissions.js";
+import { can, guardPageAccess, initPermissionLayer } from "/shared/permissions.js";
 import { wireLogout, wireUsersNav } from "/shared/session.js";
 import { initMobileMenu, toast } from "/shared/ui.js";
 
@@ -402,6 +402,8 @@ export async function renderProdutosForm() {
 async function boot() {
   if (!document.body || document.body.dataset.registry !== "produtos") return;
   if (!checkAuth()) return;
+  const ok = await guardPageAccess("materiais", "view");
+  if (!ok) return;
   await initPermissionLayer();
   wireUsersNav();
   wireLogout();

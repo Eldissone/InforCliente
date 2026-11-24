@@ -163,7 +163,7 @@ function wireProjectLinks() {
 
 async function init() {
   // Detalhe do cliente requer acesso ao módulo de clientes
-  const ok = await guardPageAccess("navlinks", "nav_clientes");
+  const ok = await guardPageAccess("clientes", "view");
   if (!ok) return;
 
   initMobileMenu();

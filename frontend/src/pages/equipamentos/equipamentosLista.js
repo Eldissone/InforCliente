@@ -1,7 +1,7 @@
 import { apiRequest, getAssetUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
 import { openModal, toast, escapeHtml } from "../../shared/ui.js";
-import { initPermissionLayer } from "../../shared/permissions.js";
+import { guardPageAccess, initPermissionLayer } from "../../shared/permissions.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
 checkAuth();
@@ -397,6 +397,8 @@ function bindEvents() {
 }
 
 async function init() {
+  const ok = await guardPageAccess("ferramentas:view|ferramentas:tab_tools");
+  if (!ok) return;
   await initPermissionLayer();
   wireLogout();
   wireUsersNav();

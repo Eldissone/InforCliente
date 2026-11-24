@@ -1,5 +1,5 @@
 import { apiRequest } from "/services/api.js";
-import { can, initPermissionLayer } from "/shared/permissions.js";
+import { can, guardPageAccess, initPermissionLayer } from "/shared/permissions.js";
 import { checkAuth } from "/services/auth.js";
 import { wireLogout, wireUsersNav } from "/shared/session.js";
 import { initMobileMenu, toast } from "/shared/ui.js";
@@ -1826,6 +1826,8 @@ function lockCostCatalogTab() {
 
 async function bootCostCatalog() {
   checkAuth();
+  const ok = await guardPageAccess("pedidosExtras:view|financeiro:view");
+  if (!ok) return;
   wireUsersNav();
   wireLogout();
   initMobileMenu();

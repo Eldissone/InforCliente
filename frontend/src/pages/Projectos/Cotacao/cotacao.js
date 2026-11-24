@@ -29,7 +29,7 @@ function isGeralScope() {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-  const ok = await guardPageAccess("obras", "view");
+  const ok = await guardPageAccess("obras:view|stock:view|logistica:view");
   if (!ok) return;
 
   await initPermissionLayer();
