@@ -9,7 +9,7 @@
 import { apiRequest } from "../../services/api.js";
 import { openModal, toast } from "../ui.js";
 import { can } from "../permissions.js";
-import { esc, fmt, fmtPct, codigoNoCabecalho, seg, kpis, vazio, erro } from "./f2Ui.js";
+import { esc, fmt, fmtPct, codigoNoCabecalho, seg, vazio, erro } from "./f2Ui.js";
 
 const root = () => document.getElementById("financeRoot");
 const S = { d: null, tipo: "todos", ativos: "1", q: "", erro: null, abertos: new Set() };
@@ -28,7 +28,7 @@ function desenhar() {
   const el = root();
   if (S.erro) return (el.innerHTML = erro(S.erro));
   if (!S.d) return (el.innerHTML = vazio("A carregar…"));
-  const { linhas, semCentro, totais } = S.d;
+  const { linhas } = S.d;
   const q = norm(S.q).trim();
   const L = linhas.filter(
     (l) =>
@@ -38,17 +38,6 @@ function desenhar() {
   );
 
   el.innerHTML = `
-    ${kpis([
-      { tom: "blue", titulo: "Realizado (s/ IVA)", valor: fmt(totais.realizado), nota: `${totais.ativos} centro(s) ativo(s)` },
-      { tom: "good", titulo: "Pago", valor: fmt(totais.pago) },
-      { tom: totais.porPagar > 0.5 ? "warn" : "good", titulo: "Por Pagar", valor: fmt(totais.porPagar) },
-      ...semCentro.map((x) => ({
-        tom: "bad",
-        titulo: `Sem Centro de Custo (${x.moeda})`,
-        valor: fmt(x.realizado + x.porPagar),
-        nota: `${x.lancamentos} lançamento(s) em ${x.obras} obra(s)`,
-      })),
-    ])}
     <div class="fcal-filtros">
       <input type="search" class="fcal-q" data-rgq placeholder="código, designação, obra…" value="${esc(S.q)}">
       ${seg("rg", "tipo", S.tipo, [["todos", "Todos"], ["OBRA", "Das obras"], ["GERAL", "Gerais (Sede e Frota)"]])}
@@ -102,7 +91,7 @@ function desenhar() {
       Realizado = custo sem IVA (a compra para armazém não é custo; o custo nasce no consumo). Pago = o
       dinheiro que saiu. O previsto só existe nos centros que nasceram de um orçamento adjudicado — é o custo
       previsto da obra; os outros centros da mesma obra não têm previsto próprio.
-      ${totais.noutraMoeda ? `Os totais em cima são só dos centros em kwanzas (${totais.noutraMoeda} noutra moeda).` : ""}
+
     </p>`;
 }
 
