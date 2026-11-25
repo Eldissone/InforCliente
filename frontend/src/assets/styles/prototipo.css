@@ -984,7 +984,8 @@ button.fx2-k:hover { background: #f8fafc; }
 .fcp-dt { display: inline-flex; gap: 5px; align-items: center; flex-wrap: wrap; }
 .fcp-dt input[type="date"] { width: 132px; }
 .fcp-chk { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
-.fcp-qpill { border: 1px solid #cbd5e1; background: #fff; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.fcp-qpill { display: inline-flex; align-items: center; gap: 4px; border: 1px solid #cbd5e1; background: #fff; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.fcp-qpill .material-symbols-outlined { font-size: 15px; line-height: 1; }
 .fcp-qpill.on { background: #e6f6ef; border-color: #1fa36b; color: #14633f; }
 .fcp-mswrap { position: relative; }
 .fcp-msb { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; background: #fff; white-space: nowrap; }

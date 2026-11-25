@@ -468,12 +468,12 @@ function renderFiltros() {
     <label class="fcp-chk"><input type="checkbox" data-cpchk="semCp"${f.semCp ? " checked" : ""}> Pagos sem comprovativo</label>
     ${
       nSched
-        ? `<button type="button" class="fcp-qpill${f.filaExtra === "schedule" ? " on" : ""}" data-cpfila="schedule">📅 Cotações por agendar (${nSched})</button>`
+        ? `<button type="button" class="fcp-qpill${f.filaExtra === "schedule" ? " on" : ""}" data-cpfila="schedule"><span class="material-symbols-outlined">calendar_month</span> Cotações por agendar (${nSched})</button>`
         : ""
     }
     ${
       nAppr
-        ? `<button type="button" class="fcp-qpill${f.filaExtra === "approve" ? " on" : ""}" data-cpfila="approve">✓ Reforços FM por aprovar (${nAppr})</button>`
+        ? `<button type="button" class="fcp-qpill${f.filaExtra === "approve" ? " on" : ""}" data-cpfila="approve"><span class="material-symbols-outlined">task_alt</span> Reforços FM por aprovar (${nAppr})</button>`
         : ""
     }`;
 }
