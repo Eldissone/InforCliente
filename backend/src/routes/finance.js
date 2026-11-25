@@ -2838,42 +2838,392 @@ financeRoutes.get(
 
 // ─── Tesouraria: T5 lista de contas e cartões, T6 alocações, T7 fundo de maneio ───
 
-/** T5 — os cartões e contas (também os inativos), com o saldo e a alocação em uso. */
+function parseValidadeDate(val) {
+  if (!val) return null;
+  const s = String(val).trim();
+  if (/^\d{4}-\d{2}$/.test(s)) return new Date(`${s}-01T00:00:00Z`);
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return new Date(`${s.slice(0, 10)}T00:00:00Z`);
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** T5 — os cartões e contas (também os inativos), com o saldo, movimentos e a alocação em uso. */
 financeRoutes.get(
   "/cards",
   view,
   asyncHandler(async (_req, res) => {
-    const [cards, balances, alocacoes] = await Promise.all([
+    const [cards, balances, alocacoes, movBanco, movFundo] = await Promise.all([
       prisma.pettyCashCard.findMany({
-        include: { fund: { select: { id: true, name: true, currency: true, project: { select: { id: true, code: true, name: true } } } } },
+        include: { fund: { select: { id: true, name: true, currency: true, notes: true, project: { select: { id: true, code: true, name: true } } } } },
         orderBy: [{ bank: "asc" }, { label: "asc" }],
       }),
-      loadBankBalances(),
-      prisma.cardAllocation.findMany({ where: { endDate: null }, include: { project: { select: { id: true, code: true, name: true } } } }),
+      loadBankBalances({ includeInactive: true }),
+      prisma.cardAllocation.findMany({
+        include: { project: { select: { id: true, code: true, name: true } } },
+        orderBy: [{ startDate: "desc" }],
+      }),
+      prisma.bankMovement.findMany({
+        where: { cardId: { not: null } },
+        select: { id: true, cardId: true, movementDate: true, direction: true, movementType: true, costAssigned: true, isMerchandise: true, _count: { select: { receipts: true } } },
+      }),
+      prisma.pettyCashMovement.findMany({
+        where: { cardId: { not: null } },
+        select: { id: true, cardId: true, createdAt: true },
+      }),
     ]);
+
     const saldo = new Map(balances.items.map((b) => [b.card.id, b]));
+    const movStats = new Map();
+    const ensureStat = (id) => {
+      if (!movStats.has(id)) movStats.set(id, { lastDate: null, unreconciled: 0, totalCount: 0 });
+      return movStats.get(id);
+    };
+
+    for (const m of movBanco) {
+      if (!m.cardId) continue;
+      const st = ensureStat(m.cardId);
+      st.totalCount += 1;
+      const dk = m.movementDate ? toDateKeyUtc(m.movementDate) : null;
+      if (dk && (!st.lastDate || dk > st.lastDate)) st.lastDate = dk;
+      const isAnulada = m.movementType === "OPERACAO_ANULADA";
+      const isInterna = m.movementType === "TRANSFERENCIA_INTERNA";
+      if (!isAnulada && !isInterna) {
+        if (m.direction === "SAIDA" && !m.costAssigned && !m.isMerchandise) {
+          st.unreconciled += 1;
+        } else if (m.direction === "ENTRADA" && (m.movementType === "OUTRO" || (m.movementType === "RECEBIMENTO_CLIENTE" && (m._count?.receipts || 0) === 0))) {
+          st.unreconciled += 1;
+        }
+      }
+    }
+    for (const mf of movFundo) {
+      if (!mf.cardId) continue;
+      const st = ensureStat(mf.cardId);
+      st.totalCount += 1;
+      const dk = mf.createdAt ? toDateKeyUtc(mf.createdAt) : null;
+      if (dk && (!st.lastDate || dk > st.lastDate)) st.lastDate = dk;
+    }
+
     return res.json({
+      bancosReg: CARDS.BANCOS_REG,
       items: cards.map((c) => {
         const al = CARDS.alocacaoAtual(alocacoes, c.id);
+        const estragado = CARDS.estragadoDe(alocacoes, c.id);
         const b = saldo.get(c.id);
+        const meta = CARDS.parseCardMeta(c, c.fund);
+        const st = movStats.get(c.id) || { lastDate: null, unreconciled: 0, totalCount: 0 };
+        const balance = b ? b.balance : round2(toNumber(c.currentBalance));
+        const bankSigla = CARDS.bancoSig(c.bank);
         return {
           id: c.id,
           label: c.label,
           bank: c.bank,
-          lastDigits: c.lastDigits,
+          bankSigla,
+          bankName: CARDS.bancoNome(bankSigla),
+          bankLabel: CARDS.bancoLbl(c.bank),
+          lastDigits: c.lastDigits || "",
           type: c.type,
           holderName: c.holderName,
           active: c.active,
           expiresAt: c.expiresAt,
+          validade: meta.validade,
+          accountNumber: meta.accountNumber,
+          iban: meta.iban,
+          initialBalance: round2(toNumber(c.initialBalance)),
+          initialBalanceDate: meta.initialBalanceDate,
+          paymentCardId: meta.paymentCardId,
+          closingDay: meta.closingDay,
+          paymentDay: meta.paymentDay,
+          notes: meta.notes,
+          currency: c.fund?.currency || "AOA",
           limitAmount: c.limitAmount === null ? null : toNumber(c.limitAmount),
           fund: c.fund ? { id: c.fund.id, name: c.fund.name, currency: c.fund.currency } : null,
+          allocation: al
+            ? {
+                id: al.id,
+                responsible: al.responsible,
+                startDate: al.startDate ? toDateKeyUtc(al.startDate) : null,
+                notes: al.notes || null,
+                project: al.project || null,
+              }
+            : null,
+          damagedReturn: estragado,
           project: al?.project || c.fund?.project || null,
           responsible: al?.responsible || c.responsibleName || null,
-          balance: b ? b.balance : round2(toNumber(c.currentBalance)),
+          balance,
+          cashBalance: round2(CARDS.saldoCaixa(c.type, balance)),
           estimated: b ? b.source === "CARTAO" : true,
+          lastMovementDate: st.lastDate,
+          unreconciledCount: st.unreconciled,
+          movementCount: st.totalCount,
         };
       }),
     });
+  })
+);
+
+const cardPayloadSchema = z.object({
+  type: z.enum(["DEBITO", "PREPAGO", "CREDITO"]),
+  label: z.string().trim().min(1),
+  bank: z.string().trim().min(1),
+  accountNumber: z.string().optional().nullable(),
+  iban: z.string().optional().nullable(),
+  validade: z.string().optional().nullable(),
+  expiresAt: z.string().optional().nullable(),
+  lastDigits: z.string().optional().nullable(),
+  currency: z.string().optional().default("AOA"),
+  initialBalance: z.union([z.number(), z.string()]).optional().default(0),
+  initialBalanceDate: z.string().optional().nullable(),
+  active: z.boolean().optional().default(true),
+  limitAmount: z.union([z.number(), z.string()]).optional().nullable(),
+  paymentCardId: z.string().optional().nullable(),
+  closingDay: z.union([z.number(), z.string()]).optional().nullable(),
+  paymentDay: z.union([z.number(), z.string()]).optional().nullable(),
+  holderName: z.string().optional().nullable(),
+  responsibleName: z.string().optional().nullable(),
+  projectId: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+});
+
+/** T5 › + Nova Conta / Cartão. */
+financeRoutes.post(
+  "/cards",
+  edit,
+  asyncHandler(async (req, res) => {
+    const body = cardPayloadSchema.parse(req.body);
+    const label = body.label.trim().toUpperCase();
+    const bank = CARDS.bancoSig(body.bank) || body.bank.trim();
+    const dup = await prisma.pettyCashCard.findFirst({
+      where: { label: { equals: label, mode: "insensitive" } },
+      select: { id: true },
+    });
+    if (dup) {
+      return res.status(409).json({
+        error: "DUPLICATE_CODE",
+        message: `Já existe uma conta com o código ${label}.`,
+        errors: [`Já existe uma conta com o código ${label}.`],
+      });
+    }
+
+    const accountNumber = String(body.accountNumber || "").replace(/\s+/g, "");
+    const iban = String(body.iban || "").replace(/\s+/g, "").toUpperCase();
+    const lastDigits = String(body.lastDigits || "").replace(/\s+/g, "").slice(-4) || null;
+    const validade = String(body.validade || body.expiresAt || "").trim().slice(0, 7);
+    const expiresAt = parseValidadeDate(validade || body.expiresAt);
+    const initialBalanceDate = body.initialBalanceDate ? String(body.initialBalanceDate).slice(0, 10) : "";
+    const issuedAt = initialBalanceDate ? new Date(`${initialBalanceDate}T00:00:00Z`) : null;
+    const iniNum = round2(toNumber(body.initialBalance));
+    const initialBalanceStr = String(iniNum);
+    const isCredito = body.type === "CREDITO";
+    const limitNum = isCredito && body.limitAmount !== null && body.limitAmount !== undefined && body.limitAmount !== "" ? toNumber(body.limitAmount) : null;
+    const metaNotes = CARDS.serializeCardMeta({
+      accountNumber,
+      iban,
+      initialBalanceDate,
+      paymentCardId: isCredito ? body.paymentCardId || "" : "",
+      closingDay: isCredito && body.closingDay ? Number(body.closingDay) || null : null,
+      paymentDay: isCredito && body.paymentDay ? Number(body.paymentDay) || null : null,
+      validade,
+      notes: body.notes || "",
+    });
+    const u = req.user || {};
+
+    const created = await prisma.$transaction(async (tx) => {
+      const fund = await tx.pettyCashFund.create({
+        data: {
+          projectId: body.projectId || null,
+          name: label,
+          currency: String(body.currency || "AOA").toUpperCase(),
+          initialBalance: initialBalanceStr,
+          currentBalance: initialBalanceStr,
+          notes: metaNotes,
+          active: body.active !== false,
+          createdBy: u.name || u.email || u.sub || null,
+        },
+      });
+      return tx.pettyCashCard.create({
+        data: {
+          fundId: fund.id,
+          label,
+          bank,
+          lastDigits,
+          cardNumberMasked: iban || accountNumber || null,
+          holderName: body.holderName || null,
+          type: body.type,
+          issuedAt,
+          expiresAt,
+          limitAmount: limitNum !== null && limitNum > 0 ? String(round2(limitNum)) : null,
+          responsibleName: body.responsibleName || null,
+          initialBalance: initialBalanceStr,
+          currentBalance: initialBalanceStr,
+          active: body.active !== false,
+        },
+      });
+    });
+
+    return res.status(201).json({ item: created });
+  })
+);
+
+/** T5 › Editar Conta / Cartão. */
+financeRoutes.patch(
+  "/cards/:id",
+  edit,
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const body = cardPayloadSchema.partial().parse(req.body);
+    const existing = await prisma.pettyCashCard.findUnique({
+      where: { id },
+      include: { fund: true },
+    });
+    if (!existing) return res.status(404).json({ error: "CARD_NOT_FOUND", message: "Conta ou cartão não encontrado." });
+
+    const label = body.label !== undefined ? body.label.trim().toUpperCase() : existing.label;
+    if (label.toLowerCase() !== existing.label.toLowerCase()) {
+      const dup = await prisma.pettyCashCard.findFirst({
+        where: { id: { not: id }, label: { equals: label, mode: "insensitive" } },
+        select: { id: true },
+      });
+      if (dup) {
+        return res.status(409).json({
+          error: "DUPLICATE_CODE",
+          message: `Já existe uma conta com o código ${label}.`,
+          errors: [`Já existe uma conta com o código ${label}.`],
+        });
+      }
+    }
+
+    const oldMeta = CARDS.parseCardMeta(existing, existing.fund);
+    const type = body.type !== undefined ? body.type : existing.type;
+    const isCredito = type === "CREDITO";
+    const bank = body.bank !== undefined ? CARDS.bancoSig(body.bank) || body.bank.trim() : existing.bank;
+    const accountNumber = body.accountNumber !== undefined ? String(body.accountNumber || "").replace(/\s+/g, "") : oldMeta.accountNumber;
+    const iban = body.iban !== undefined ? String(body.iban || "").replace(/\s+/g, "").toUpperCase() : oldMeta.iban;
+    const lastDigits =
+      body.lastDigits !== undefined ? String(body.lastDigits || "").replace(/\s+/g, "").slice(-4) || null : existing.lastDigits;
+    const validade =
+      body.validade !== undefined || body.expiresAt !== undefined
+        ? String(body.validade ?? body.expiresAt ?? "").trim().slice(0, 7)
+        : oldMeta.validade;
+    const expiresAt =
+      body.validade !== undefined || body.expiresAt !== undefined
+        ? parseValidadeDate(validade || body.expiresAt)
+        : existing.expiresAt;
+    const initialBalanceDate =
+      body.initialBalanceDate !== undefined
+        ? body.initialBalanceDate
+          ? String(body.initialBalanceDate).slice(0, 10)
+          : ""
+        : oldMeta.initialBalanceDate;
+    const issuedAt =
+      body.initialBalanceDate !== undefined
+        ? initialBalanceDate
+          ? new Date(`${initialBalanceDate}T00:00:00Z`)
+          : null
+        : existing.issuedAt;
+
+    const oldIni = toNumber(existing.initialBalance);
+    const newIni = body.initialBalance !== undefined ? round2(toNumber(body.initialBalance)) : oldIni;
+    const deltaIni = round2(newIni - oldIni);
+    const newCurrent = round2(toNumber(existing.currentBalance) + deltaIni);
+
+    const limitNum =
+      !isCredito
+        ? null
+        : body.limitAmount !== undefined
+          ? body.limitAmount !== null && body.limitAmount !== "" && toNumber(body.limitAmount) > 0
+            ? round2(toNumber(body.limitAmount))
+            : null
+          : existing.limitAmount === null
+            ? null
+            : toNumber(existing.limitAmount);
+
+    const metaNotes = CARDS.serializeCardMeta({
+      accountNumber,
+      iban,
+      initialBalanceDate,
+      paymentCardId: isCredito ? (body.paymentCardId !== undefined ? body.paymentCardId || "" : oldMeta.paymentCardId) : "",
+      closingDay: isCredito ? (body.closingDay !== undefined ? Number(body.closingDay) || null : oldMeta.closingDay) : null,
+      paymentDay: isCredito ? (body.paymentDay !== undefined ? Number(body.paymentDay) || null : oldMeta.paymentDay) : null,
+      validade,
+      notes: body.notes !== undefined ? body.notes || "" : oldMeta.notes,
+    });
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const cardUpdated = await tx.pettyCashCard.update({
+        where: { id },
+        data: {
+          label,
+          bank,
+          type,
+          lastDigits,
+          cardNumberMasked: iban || accountNumber || null,
+          issuedAt,
+          expiresAt,
+          limitAmount: limitNum !== null ? String(limitNum) : null,
+          initialBalance: String(newIni),
+          currentBalance: String(newCurrent),
+          ...(body.holderName !== undefined ? { holderName: body.holderName || null } : {}),
+          ...(body.responsibleName !== undefined ? { responsibleName: body.responsibleName || null } : {}),
+          ...(body.active !== undefined ? { active: body.active } : {}),
+        },
+      });
+      await tx.pettyCashFund.update({
+        where: { id: existing.fundId },
+        data: {
+          name: label,
+          notes: metaNotes,
+          ...(body.currency ? { currency: String(body.currency).toUpperCase() } : {}),
+          ...(body.projectId !== undefined ? { projectId: body.projectId || null } : {}),
+          ...(body.initialBalance !== undefined ? { initialBalance: String(newIni), currentBalance: String(newCurrent) } : {}),
+        },
+      });
+      return cardUpdated;
+    });
+
+    return res.json({ item: updated });
+  })
+);
+
+/** T5 › Eliminar Conta / Cartão (só se não tiver movimentos). */
+financeRoutes.delete(
+  "/cards/:id",
+  edit,
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const card = await prisma.pettyCashCard.findUnique({
+      where: { id },
+      include: { fund: { include: { _count: { select: { cards: true, movements: true, extraRequests: true } } } } },
+    });
+    if (!card) return res.status(404).json({ error: "CARD_NOT_FOUND", message: "Conta ou cartão não encontrado." });
+
+    const [bankMovCount, pettyMovCount, stmtCount] = await Promise.all([
+      prisma.bankMovement.count({ where: { cardId: id } }),
+      prisma.pettyCashMovement.count({ where: { cardId: id } }),
+      prisma.bankStatement.count({ where: { cardId: id } }),
+    ]);
+
+    if (bankMovCount > 0 || pettyMovCount > 0 || stmtCount > 0) {
+      return res.status(409).json({
+        error: "CARD_HAS_MOVEMENTS",
+        message: "A conta tem movimentos. Marque-a como inativa.",
+        errors: ["A conta tem movimentos. Marque-a como inativa."],
+      });
+    }
+
+    const fundId = card.fundId;
+    const otherCards = (card.fund?._count?.cards || 1) - 1;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.bankBalance.deleteMany({ where: { cardId: id } });
+      await tx.cardAllocation.deleteMany({ where: { cardId: id } });
+      await tx.pettyCashReinforcementRequest.deleteMany({ where: { cardId: id } });
+      await tx.pettyCashCard.delete({ where: { id } });
+      if (otherCards <= 0 && (card.fund?._count?.movements || 0) === 0 && (card.fund?._count?.extraRequests || 0) === 0) {
+        await tx.pettyCashFund.delete({ where: { id: fundId } });
+      }
+    });
+
+    return res.json({ ok: true });
   })
 );
 
@@ -2893,7 +3243,7 @@ financeRoutes.get(
   })
 );
 
-/** T6 › + Nova Alocação. */
+/** T6 › + Nova Alocação (ao entregar o cartão a outra pessoa, fecha automaticamente a alocação anterior aberta, como no protótipo). */
 financeRoutes.post(
   "/card-allocations",
   edit,
@@ -2905,18 +3255,28 @@ financeRoutes.post(
         obraId: z.string().nullable().optional(),
         inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
         notas: z.string().max(500).nullable().optional(),
+        autoClose: z.boolean().optional().default(true),
       })
       .parse(req.body);
     const abertas = await prisma.cardAllocation.findMany({ where: { cardId: b.cardId, endDate: null } });
-    const v = CARDS.podeAlocar(abertas, b.cardId);
-    if (!v.ok) return res.status(409).json({ error: "CARTAO_ENTREGUE", errors: [v.erro] });
+    if (abertas.length && b.autoClose === false) {
+      const v = CARDS.podeAlocar(abertas, b.cardId);
+      if (!v.ok) return res.status(409).json({ error: "CARTAO_ENTREGUE", errors: [v.erro] });
+    }
+    const startDate = new Date(`${b.inicio}T00:00:00Z`);
     const item = await prisma.$transaction(async (tx) => {
+      if (abertas.length) {
+        await tx.cardAllocation.updateMany({
+          where: { cardId: b.cardId, endDate: null },
+          data: { endDate: startDate, returnState: "BOM" },
+        });
+      }
       const a = await tx.cardAllocation.create({
         data: {
           cardId: b.cardId,
           responsible: b.responsavel,
           projectId: b.obraId || null,
-          startDate: new Date(`${b.inicio}T00:00:00Z`),
+          startDate,
           notes: b.notas || null,
           createdBy: req.user?.name || req.user?.email || null,
         },
@@ -4358,21 +4718,27 @@ financeRoutes.get(
  * Saldo atual de cada cartão / conta bancária:
  *  - com saldo registado (extrato ou acerto manual): o último saldo mais os
  *    movimentos do extrato com data posterior;
- *  - sem saldo registado: o saldo do fundo do cartão (carregamentos e pedidos
- *    extra pagos por ele), marcado como «saldo do cartão».
+ *  - sem saldo registado: o saldo do fundo do cartão (saldo inicial + movimentos
+ *    do fundo) mais os movimentos do extrato posteriores à data do saldo inicial,
+ *    marcado como «saldo do cartão».
  */
-async function loadBankBalances() {
-  const [cards, snapshots] = await Promise.all([
+async function loadBankBalances({ includeInactive = false } = {}) {
+  const [cards, snapshots, bankMoves] = await Promise.all([
     prisma.pettyCashCard.findMany({
-      where: { active: true },
+      where: includeInactive ? {} : { active: true },
       select: {
         id: true,
         label: true,
         bank: true,
         lastDigits: true,
         type: true,
+        active: true,
+        initialBalance: true,
         currentBalance: true,
-        fund: { select: { currency: true, project: { select: { id: true, code: true, name: true } } } },
+        issuedAt: true,
+        expiresAt: true,
+        cardNumberMasked: true,
+        fund: { select: { currency: true, notes: true, project: { select: { id: true, code: true, name: true } } } },
       },
       orderBy: { label: "asc" },
     }),
@@ -4380,35 +4746,57 @@ async function loadBankBalances() {
       include: { statement: { select: { id: true, name: true } } },
       orderBy: [{ balanceDate: "desc" }, { createdAt: "desc" }],
     }),
+    prisma.bankMovement.findMany({
+      where: { cardId: { not: null }, movementType: { not: "OPERACAO_ANULADA" } },
+      select: { cardId: true, direction: true, amount: true, movementDate: true },
+    }),
   ]);
 
   const latest = new Map();
   snapshots.forEach((s) => {
     if (!latest.has(s.cardId)) latest.set(s.cardId, s);
   });
-  const withSnapshot = [...latest.values()];
-  const after = withSnapshot.length
-    ? await prisma.bankMovement.findMany({
-        where: { OR: withSnapshot.map((s) => ({ cardId: s.cardId, movementDate: { gt: s.balanceDate } })) },
-        select: { cardId: true, direction: true, amount: true },
-      })
-    : [];
+
+  const movesByCard = new Map();
+  bankMoves.forEach((m) => {
+    if (!m.cardId) return;
+    if (!movesByCard.has(m.cardId)) movesByCard.set(m.cardId, []);
+    movesByCard.get(m.cardId).push(m);
+  });
 
   const items = cards.map((card) => {
     const snap = latest.get(card.id);
+    const meta = CARDS.parseCardMeta(card, card.fund);
     const base = {
-      card: { id: card.id, label: card.label, bank: card.bank, lastDigits: card.lastDigits, type: card.type },
+      card: { id: card.id, label: card.label, bank: card.bank, lastDigits: card.lastDigits, type: card.type, active: card.active },
       project: card.fund?.project || null,
       currency: card.fund?.currency || "AOA",
     };
+    const cardMoves = movesByCard.get(card.id) || [];
     if (!snap) {
-      return { ...base, balance: round2(card.currentBalance), asOf: null, source: "CARTAO", movementsAfter: 0, snapshot: null };
+      const dataIni = meta.initialBalanceDate || null;
+      const movesAfterIni = dataIni
+        ? cardMoves.filter((m) => toDateKeyUtc(m.movementDate) > dataIni)
+        : cardMoves;
+      const deltaIni = movesAfterIni.reduce((a, m) => a + (m.direction === "ENTRADA" ? 1 : -1) * toNumber(m.amount), 0);
+      const balance = round2(toNumber(card.currentBalance) + deltaIni);
+      return {
+        ...base,
+        balance,
+        cashBalance: round2(CARDS.saldoCaixa(card.type, balance)),
+        asOf: dataIni ? new Date(`${dataIni}T00:00:00Z`) : null,
+        source: "CARTAO",
+        movementsAfter: movesAfterIni.length,
+        snapshot: null,
+      };
     }
-    const moves = after.filter((m) => m.cardId === card.id);
+    const moves = cardMoves.filter((m) => m.movementDate > snap.balanceDate);
     const delta = moves.reduce((a, m) => a + (m.direction === "ENTRADA" ? 1 : -1) * toNumber(m.amount), 0);
+    const balance = round2(toNumber(snap.balance) + delta);
     return {
       ...base,
-      balance: round2(toNumber(snap.balance) + delta),
+      balance,
+      cashBalance: round2(CARDS.saldoCaixa(card.type, balance)),
       asOf: snap.balanceDate,
       source: snap.source,
       movementsAfter: moves.length,
@@ -4427,7 +4815,7 @@ async function loadBankBalances() {
   const dated = items.filter((i) => i.asOf).map((i) => new Date(i.asOf));
   return {
     items,
-    total: round2(items.reduce((a, i) => a + i.balance, 0)),
+    total: round2(items.reduce((a, i) => a + i.cashBalance, 0)),
     // Data do saldo mais antigo em uso: o total só é tão atual quanto ela.
     asOf: dated.length ? new Date(Math.min(...dated)) : null,
     estimated: items.some((i) => i.source === "CARTAO"),

@@ -10,6 +10,7 @@ const {
   CardRequiredError,
   syncFundBalanceFromCards,
 } = require("../services/pettyCashService");
+const CARDS = require("../services/finance/cards");
 const { createLog } = require("../services/logService");
 const { getAccessibleProjectWhere, isClienteRole, assertOwnProjectAccess } = require("../services/scopeService");
 
@@ -720,14 +721,31 @@ pettyCashRoutes.patch(
   })
 );
 
+function parseValidadeDate(val) {
+  if (!val) return null;
+  const s = String(val).trim();
+  if (/^\d{4}-\d{2}$/.test(s)) return new Date(`${s}-01T00:00:00Z`);
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return new Date(`${s.slice(0, 10)}T00:00:00Z`);
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 function mapCardWithFund(card, fund) {
+  const meta = CARDS.parseCardMeta(card, fund);
   return {
     ...mapCard(card),
     fundId: card.fundId,
     currency: fund?.currency || "AOA",
     projectId: fund?.projectId || null,
     project: fund?.project || null,
-    notes: fund?.notes || null,
+    accountNumber: meta.accountNumber,
+    iban: meta.iban,
+    initialBalanceDate: meta.initialBalanceDate,
+    paymentCardId: meta.paymentCardId,
+    closingDay: meta.closingDay,
+    paymentDay: meta.paymentDay,
+    validade: meta.validade,
+    notes: meta.notes || null,
   };
 }
 
@@ -744,7 +762,7 @@ pettyCashRoutes.get(
     if (projectId) await assertOwnProjectAccess(req, projectId);
 
     const fundWhere = applyFundProjectScope(req, {
-      active: true,
+      ...(includeInactive ? {} : { active: true }),
       ...(projectId
         ? { OR: [{ projectId }, { projectId: null }] }
         : scope === "global"
@@ -789,6 +807,13 @@ pettyCashRoutes.post(
         notes: z.string().optional().nullable(),
         lastDigits: z.string().max(4).optional().nullable(),
         cardNumberMasked: z.string().optional().nullable(),
+        accountNumber: z.string().optional().nullable(),
+        iban: z.string().optional().nullable(),
+        validade: z.string().optional().nullable(),
+        initialBalanceDate: z.string().optional().nullable(),
+        paymentCardId: z.string().optional().nullable(),
+        closingDay: z.union([z.number(), z.string()]).optional().nullable(),
+        paymentDay: z.union([z.number(), z.string()]).optional().nullable(),
         bank: z.string().optional().nullable(),
         holderName: z.string().optional().nullable(),
         type: z.enum(["PREPAGO", "DEBITO", "CREDITO"]).optional().default("PREPAGO"),
@@ -797,21 +822,43 @@ pettyCashRoutes.post(
         limitAmount: z.union([z.number(), z.string()]).optional().nullable(),
         responsibleName: z.string().optional().nullable(),
         initialBalance: z.union([z.number(), z.string()]).optional().default(0),
+        active: z.boolean().optional().default(true),
       })
       .parse(req.body);
 
     const u = req.user || {};
+    const label = body.label.trim().toUpperCase();
+    const bank = body.bank ? CARDS.bancoSig(body.bank) || body.bank.trim() : null;
     const initialBalance = String(body.initialBalance || 0);
+    const accountNumber = String(body.accountNumber || "").replace(/\s+/g, "");
+    const iban = String(body.iban || "").replace(/\s+/g, "").toUpperCase();
+    const validade = String(body.validade || body.expiresAt || "").trim().slice(0, 7);
+    const initialBalanceDate = body.initialBalanceDate
+      ? String(body.initialBalanceDate).slice(0, 10)
+      : body.issuedAt
+        ? String(body.issuedAt).slice(0, 10)
+        : "";
+    const metaNotes = CARDS.serializeCardMeta({
+      accountNumber,
+      iban,
+      initialBalanceDate,
+      paymentCardId: body.type === "CREDITO" ? body.paymentCardId || "" : "",
+      closingDay: body.type === "CREDITO" && body.closingDay ? Number(body.closingDay) || null : null,
+      paymentDay: body.type === "CREDITO" && body.paymentDay ? Number(body.paymentDay) || null : null,
+      validade,
+      notes: body.notes || "",
+    });
 
     const result = await prisma.$transaction(async (tx) => {
       const fund = await tx.pettyCashFund.create({
         data: {
           projectId: body.projectId || null,
-          name: body.label,
+          name: label,
           currency: body.currency || "AOA",
-          initialBalance: "0",
+          initialBalance,
           currentBalance: initialBalance,
-          notes: body.notes || null,
+          notes: metaNotes,
+          active: body.active !== false,
           createdBy: u.name || u.email || u.sub || null,
         },
       });
@@ -819,19 +866,20 @@ pettyCashRoutes.post(
       const card = await tx.pettyCashCard.create({
         data: {
           fundId: fund.id,
-          label: body.label,
-          lastDigits: body.lastDigits || null,
-          cardNumberMasked: body.cardNumberMasked || null,
-          bank: body.bank || null,
+          label,
+          lastDigits: body.lastDigits ? String(body.lastDigits).replace(/\s+/g, "").slice(-4) : null,
+          cardNumberMasked: body.cardNumberMasked || iban || accountNumber || null,
+          bank,
           holderName: body.holderName || null,
           type: body.type || "PREPAGO",
-          issuedAt: body.issuedAt ? new Date(body.issuedAt) : null,
-          expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
+          issuedAt: initialBalanceDate ? new Date(`${initialBalanceDate}T00:00:00Z`) : body.issuedAt ? new Date(body.issuedAt) : null,
+          expiresAt: parseValidadeDate(validade || body.expiresAt),
           limitAmount:
             body.limitAmount != null && body.limitAmount !== "" ? String(body.limitAmount) : null,
           responsibleName: body.responsibleName || null,
           initialBalance,
           currentBalance: initialBalance,
+          active: body.active !== false,
         },
       });
 
@@ -918,9 +966,18 @@ pettyCashRoutes.patch(
       .object({
         label: z.string().min(1).optional(),
         projectId: z.string().optional().nullable(),
+        currency: z.string().optional(),
         notes: z.string().optional().nullable(),
         lastDigits: z.string().max(4).optional().nullable(),
         cardNumberMasked: z.string().optional().nullable(),
+        accountNumber: z.string().optional().nullable(),
+        iban: z.string().optional().nullable(),
+        validade: z.string().optional().nullable(),
+        initialBalance: z.union([z.number(), z.string()]).optional(),
+        initialBalanceDate: z.string().optional().nullable(),
+        paymentCardId: z.string().optional().nullable(),
+        closingDay: z.union([z.number(), z.string()]).optional().nullable(),
+        paymentDay: z.union([z.number(), z.string()]).optional().nullable(),
         bank: z.string().optional().nullable(),
         holderName: z.string().optional().nullable(),
         type: z.enum(["PREPAGO", "DEBITO", "CREDITO"]).optional(),
@@ -938,34 +995,72 @@ pettyCashRoutes.patch(
     });
     if (!card) return res.status(404).json({ error: "CARD_NOT_FOUND" });
 
+    const oldMeta = CARDS.parseCardMeta(card, card.fund);
+    const nextType = body.type !== undefined ? body.type : card.type;
+    const isCredito = nextType === "CREDITO";
+    const accountNumber = body.accountNumber !== undefined ? String(body.accountNumber || "").replace(/\s+/g, "") : oldMeta.accountNumber;
+    const iban = body.iban !== undefined ? String(body.iban || "").replace(/\s+/g, "").toUpperCase() : oldMeta.iban;
+    const validade =
+      body.validade !== undefined || body.expiresAt !== undefined
+        ? String(body.validade ?? body.expiresAt ?? "").trim().slice(0, 7)
+        : oldMeta.validade;
+    const initialBalanceDate =
+      body.initialBalanceDate !== undefined
+        ? body.initialBalanceDate
+          ? String(body.initialBalanceDate).slice(0, 10)
+          : ""
+        : body.issuedAt !== undefined
+          ? body.issuedAt
+            ? String(body.issuedAt).slice(0, 10)
+            : ""
+          : oldMeta.initialBalanceDate;
+    const metaNotes = CARDS.serializeCardMeta({
+      accountNumber,
+      iban,
+      initialBalanceDate,
+      paymentCardId: isCredito ? (body.paymentCardId !== undefined ? body.paymentCardId || "" : oldMeta.paymentCardId) : "",
+      closingDay: isCredito ? (body.closingDay !== undefined ? Number(body.closingDay) || null : oldMeta.closingDay) : null,
+      paymentDay: isCredito ? (body.paymentDay !== undefined ? Number(body.paymentDay) || null : oldMeta.paymentDay) : null,
+      validade,
+      notes: body.notes !== undefined ? body.notes || "" : oldMeta.notes,
+    });
+
+    const oldIni = Number(card.initialBalance) || 0;
+    const newIni = body.initialBalance !== undefined ? Number(body.initialBalance) || 0 : oldIni;
+    const deltaIni = newIni - oldIni;
+    const newCurrent = (Number(card.currentBalance) || 0) + deltaIni;
+
     const updated = await prisma.$transaction(async (tx) => {
       const cardUpdated = await tx.pettyCashCard.update({
         where: { id },
         data: {
-          ...(body.label !== undefined ? { label: body.label } : {}),
-          ...(body.lastDigits !== undefined ? { lastDigits: body.lastDigits } : {}),
-          ...(body.cardNumberMasked !== undefined ? { cardNumberMasked: body.cardNumberMasked } : {}),
-          ...(body.bank !== undefined ? { bank: body.bank } : {}),
+          ...(body.label !== undefined ? { label: body.label.trim().toUpperCase() } : {}),
+          ...(body.lastDigits !== undefined ? { lastDigits: body.lastDigits ? String(body.lastDigits).replace(/\s+/g, "").slice(-4) : null } : {}),
+          cardNumberMasked: body.cardNumberMasked !== undefined ? body.cardNumberMasked : iban || accountNumber || card.cardNumberMasked,
+          ...(body.bank !== undefined ? { bank: body.bank ? CARDS.bancoSig(body.bank) || body.bank.trim() : null } : {}),
           ...(body.holderName !== undefined ? { holderName: body.holderName } : {}),
           ...(body.type !== undefined ? { type: body.type } : {}),
-          ...(body.issuedAt !== undefined ? { issuedAt: body.issuedAt ? new Date(body.issuedAt) : null } : {}),
-          ...(body.expiresAt !== undefined ? { expiresAt: body.expiresAt ? new Date(body.expiresAt) : null } : {}),
+          ...(body.initialBalanceDate !== undefined || body.issuedAt !== undefined
+            ? { issuedAt: initialBalanceDate ? new Date(`${initialBalanceDate}T00:00:00Z`) : null }
+            : {}),
+          ...(body.validade !== undefined || body.expiresAt !== undefined
+            ? { expiresAt: parseValidadeDate(validade || body.expiresAt) }
+            : {}),
           ...(body.limitAmount !== undefined
             ? { limitAmount: body.limitAmount != null && body.limitAmount !== "" ? String(body.limitAmount) : null }
             : {}),
           ...(body.responsibleName !== undefined ? { responsibleName: body.responsibleName } : {}),
           ...(body.active !== undefined ? { active: body.active } : {}),
+          ...(body.initialBalance !== undefined ? { initialBalance: String(newIni), currentBalance: String(newCurrent) } : {}),
         },
       });
 
-      const fundPatch = {};
-      if (body.label !== undefined) fundPatch.name = body.label;
+      const fundPatch = { notes: metaNotes };
+      if (body.label !== undefined) fundPatch.name = body.label.trim().toUpperCase();
       if (body.projectId !== undefined) fundPatch.projectId = body.projectId || null;
-      if (body.notes !== undefined) fundPatch.notes = body.notes || null;
-      if (Object.keys(fundPatch).length) {
-        await tx.pettyCashFund.update({ where: { id: card.fundId }, data: fundPatch });
-      }
-      if (body.active !== undefined) {
+      if (body.currency !== undefined && body.currency) fundPatch.currency = String(body.currency).toUpperCase();
+      await tx.pettyCashFund.update({ where: { id: card.fundId }, data: fundPatch });
+      if (body.active !== undefined || body.initialBalance !== undefined) {
         await syncFundBalanceFromCards(tx, card.fundId);
       }
 

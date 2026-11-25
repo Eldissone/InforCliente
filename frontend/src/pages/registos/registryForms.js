@@ -2164,55 +2164,116 @@ async function renderSubcategorias() {
 
 async function renderCartoes() {
   await initPermissionLayer();
-  mount("cartoes", rfFicha({
-    title: "Criar Cartão Bancário",
-    lead: "O cartão fica disponível para várias obras. Não fica preso a uma obra só.",
-    submitLabel: "Guardar cartão",
+  const { BANCOS_REG, IBAN_BANK_MAP, bancoSig } = await import("../../shared/finance/contasCartoes.js");
+  let todasContas = [];
+  try {
+    const res = await apiRequest("/finance/cards");
+    todasContas = res.items || [];
+  } catch {
+    try {
+      const res = await apiRequest("/petty-cash/cards");
+      todasContas = res.items || [];
+    } catch {
+      todasContas = [];
+    }
+  }
+  const cPs = todasContas.filter((c) => c.active !== false && c.type === "DEBITO");
+  const canSave = can("financeiro", "edit") || can("fundoManeio", "create") || can("fundoManeio", "edit");
+
+  const form = mount("cartoes", rfFicha({
+    title: "Nova conta ou cartão",
+    lead: "Com data do saldo inicial, só os movimentos posteriores a essa data contam para o saldo. Os cartões de Fundo de Maneio aparecem nos pedidos pagos por fundo de maneio e na alocação de cartões; os da Conta Principal não.",
+    submitLabel: "Gravar",
+    canSave,
+    denied: "Sem permissão para criar contas ou cartões.",
     topLink: {
       href: "/Financeiro/contas-cartoes",
-      label: "Tesouraria & Cartões",
+      label: "Contas Bancárias / Cartões",
       icon: "credit_card",
     },
-    cards: `${rfCard("Cartão", `<div class="rf-grid">
-      ${rfField("Designação *", textInput("label", { required: true, placeholder: "Cartão operacional" }), "span-2")}
-      ${rfField("Banco", textInput("bank", { placeholder: "Nome do banco" }))}
-      ${rfField("Titular", textInput("holderName", { placeholder: "Nome no cartão" }))}
-      ${rfField("Últimos 4 dígitos", textInput("lastDigits", { placeholder: "1234" }))}
-      ${rfField("Tipo", selectInput("type", [
-        { value: "PREPAGO", label: "Pré-pago" },
-        { value: "DEBITO", label: "Débito" },
-        { value: "CREDITO", label: "Crédito" },
-      ]))}
-      ${rfField("Moeda", selectInput("currency", ["AOA", "USD", "EUR"]))}
-      ${rfField("Responsável", textInput("responsibleName", { placeholder: "Quem usa o cartão" }))}
+    cards: `${rfCard("Nova conta ou cartão", `<div class="rf-grid">
+      ${rfField("Tipo *", selectInput("type", [
+        { value: "DEBITO", label: "Conta Principal" },
+        { value: "PREPAGO", label: "Fundo de Maneio" },
+        { value: "CREDITO", label: "Cartão de Crédito" },
+      ], "— escolher —"))}
+      ${rfField("Código / designação *", textInput("label", { required: true, placeholder: "ex.: BCGA C3 - MBT" }))}
+      ${rfField("Banco *", selectInput("bank", BANCOS_REG.map((b) => ({ value: b.s, label: `${b.s} — ${b.n}` })), "— escolher banco —"))}
+      ${rfField("N.º de conta", textInput("accountNumber", { placeholder: "os espaços são retirados ao gravar" }))}
+      ${rfField("IBAN", textInput("iban", { placeholder: "AO06 0000 0000 0000 0000 0000 0" }), "span-2")}
+      ${rfField("Validade do cartão", `${textInput("validade", { type: "month" })}<span class="rf-hint">se tiver cartão associado</span>`)}
+      ${rfField("Últimos 4 dígitos do cartão", textInput("lastDigits", { placeholder: "ex.: 4821", max: 4 }))}
+      ${rfField("Moeda", `<select name="currency"><option value="AOA" selected>AOA</option><option value="USD">USD</option><option value="EUR">EUR</option></select>`)}
+      ${rfField("Saldo inicial", textInput("initialBalance", { type: "number", step: "any", value: "0" }))}
+      ${rfField("Data do saldo inicial", `${textInput("initialBalanceDate", { type: "date" })}<span class="rf-hint">Deixe em branco se vai importar os movimentos desde o início (com a linha de saldo inicial).</span>`)}
+      ${rfField("Estado", `<select name="active"><option value="1" selected>Ativa</option><option value="0">Inativa</option></select>`)}
     </div>`)}
-    ${rfCard("Saldo e notas", `<div class="rf-grid">
-      ${rfField("Saldo inicial", textInput("initialBalance", { placeholder: "0" }))}
-      ${rfField("Notas", `<textarea name="notes" placeholder="Observações opcionais"></textarea>`, "span-2")}
-    </div>`)}`,
-  }), async (form) => {
-    const data = new FormData(form);
-    const label = String(data.get("label") || "").trim();
-    if (!label) invalid("Indique a designação do cartão.");
-    const digits = String(data.get("lastDigits") || "").replace(/\D/g, "").slice(-4);
-    if (String(data.get("lastDigits") || "").trim() && digits.length !== 4) invalid("Indique os últimos 4 dígitos.");
-    const saldo = parseMoney(data.get("initialBalance") || "0");
-    if (saldo == null || saldo < 0) invalid("Indique um saldo inicial válido.");
-    await apiRequest("/petty-cash/cards", {
-      method: "POST",
-      body: {
-        label,
-        bank: String(data.get("bank") || "").trim() || null,
-        holderName: String(data.get("holderName") || "").trim() || null,
-        lastDigits: digits || null,
-        type: String(data.get("type") || "PREPAGO"),
-        currency: String(data.get("currency") || "AOA"),
-        responsibleName: String(data.get("responsibleName") || "").trim() || null,
-        initialBalance: saldo,
-        notes: String(data.get("notes") || "").trim() || null,
-      },
-    });
+    <div data-cc-card style="display:none">
+      ${rfCard("Cartão de Crédito", `<div class="rf-grid">
+        ${rfField("Limite de crédito (se houver)", textInput("limitAmount", { type: "number", step: "any", placeholder: "0 = sem limite fixo" }))}
+        ${rfField("Conta de onde se paga / carrega", `<select name="paymentCardId"><option value="">— escolher —</option>${cPs.map((x) => `<option value="${esc(x.id)}">${esc(x.label)} (${esc(bancoSig(x.bank))})</option>`).join("")}</select>`)}
+        ${rfField("Dia de fecho do extrato (se houver)", textInput("closingDay", { type: "number", min: 1, max: 31, placeholder: "ex.: 25" }))}
+        ${rfField("Dia de pagamento (se houver)", textInput("paymentDay", { type: "number", min: 1, max: 31, placeholder: "ex.: 10" }))}
+      </div>
+      <p class="rf-hint" style="margin-top:8px">As compras entram pelo extrato do cartão e concilia-se cada uma com o seu pedido. Os carregamentos e os pagamentos são transferências da conta indicada para o cartão. Saldo positivo = dinheiro disponível no cartão; saldo negativo = dívida ao banco.</p>`)}
+    </div>`,
+  }), async (formEl) => {
+    const data = new FormData(formEl);
+    const type = String(data.get("type") || "").trim();
+    const bank = bancoSig(String(data.get("bank") || "").trim());
+    const label = String(data.get("label") || "").trim().toUpperCase();
+    if (!type) invalid("Indique o tipo: Conta Principal, Fundo de Maneio ou Cartão de Crédito.");
+    if (!bank) invalid("Escolha o banco.");
+    if (!label) invalid("Indique o código / designação (ex.: BCGA C3 - MBT).");
+    if (todasContas.some((x) => String(x.label || "").toLowerCase() === label.toLowerCase())) {
+      invalid(`Já existe uma conta com o código ${label}.`);
+    }
+    const isCC = type === "CREDITO";
+    const payload = {
+      type,
+      label,
+      bank,
+      accountNumber: String(data.get("accountNumber") || "").replace(/\s+/g, ""),
+      iban: String(data.get("iban") || "").replace(/\s+/g, "").toUpperCase(),
+      validade: String(data.get("validade") || "").trim(),
+      lastDigits: String(data.get("lastDigits") || "").replace(/\s+/g, "").slice(-4),
+      currency: String(data.get("currency") || "AOA"),
+      initialBalance: Number(data.get("initialBalance")) || 0,
+      initialBalanceDate: String(data.get("initialBalanceDate") || ""),
+      active: String(data.get("active") || "1") !== "0",
+      limitAmount: isCC ? Number(data.get("limitAmount")) || 0 : 0,
+      paymentCardId: isCC ? String(data.get("paymentCardId") || "") : "",
+      closingDay: isCC ? Number(data.get("closingDay")) || null : null,
+      paymentDay: isCC ? Number(data.get("paymentDay")) || null : null,
+    };
+    try {
+      await apiRequest("/finance/cards", { method: "POST", body: payload });
+    } catch (err) {
+      if (err?.status === 403) {
+        await apiRequest("/petty-cash/cards", { method: "POST", body: payload });
+      } else {
+        throw err;
+      }
+    }
+    todasContas.push({ label, bank, type, active: payload.active });
   });
+
+  if (form) {
+    const typeSelect = form.querySelector('[name="type"]');
+    const ccBox = form.querySelector("[data-cc-card]");
+    const ibanInput = form.querySelector('[name="iban"]');
+    const bankSelect = form.querySelector('[name="bank"]');
+    typeSelect?.addEventListener("change", () => {
+      if (ccBox) ccBox.style.display = typeSelect.value === "CREDITO" ? "block" : "none";
+    });
+    ibanInput?.addEventListener("input", () => {
+      const clean = String(ibanInput.value || "").replace(/\s+/g, "").toUpperCase();
+      const m = clean.match(/^AO\d{2}(\d{4})/);
+      if (m && IBAN_BANK_MAP[m[1]] && bankSelect && !bankSelect.value) {
+        bankSelect.value = IBAN_BANK_MAP[m[1]];
+      }
+    });
+  }
 }
 
 async function renderMovimentos() {

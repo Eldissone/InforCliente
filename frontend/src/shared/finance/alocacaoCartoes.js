@@ -140,6 +140,9 @@ function devolver(a) {
 
 export async function render() {
   codigoNoCabecalho("T6");
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("q")) S.q = params.get("q");
+  if (params.get("t")) S.t = params.get("t");
   const acts = document.getElementById("financePageActions");
   if (acts && podeEditar()) {
     acts.innerHTML = `<button type="button" class="finance-btn finance-btn--primary" id="t6Nova">+ Nova Alocação</button>`;

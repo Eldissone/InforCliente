@@ -1,5 +1,9 @@
 /**
- * Tesouraria — T6 Alocação de Cartões e T7 Fundo de Maneio, como no protótipo.
+ * Tesouraria — T5 Contas Bancárias / Cartões, T6 Alocação de Cartões e T7 Fundo de Maneio, como no protótipo.
+ *
+ * T5: contas bancárias e cartões (Conta Principal = DEBITO, Fundo de Maneio = PREPAGO,
+ * Cartão de Crédito = CREDITO), com bancos de Angola, IBAN, n.º de conta, validade,
+ * saldo inicial, data do saldo inicial e dados de cartão de crédito.
  *
  * T6: cada cartão está entregue a alguém (e, se for o caso, a uma obra) de uma
  * data a outra. Só há uma alocação aberta por cartão; ao devolver, regista-se
@@ -17,11 +21,154 @@ const N = (v) => {
 };
 const round2 = (v) => Math.round(N(v) * 100) / 100;
 
+/** Bancos de Angola registados no protótipo (sigla + nome completo). */
+const BANCOS_REG = [
+  { s: "BCGA", n: "Banco Caixa Geral Angola" },
+  { s: "BFA", n: "Banco de Fomento Angola" },
+  { s: "BPC", n: "Banco de Poupança e Crédito" },
+  { s: "BAI", n: "Banco Angolano de Investimentos" },
+  { s: "BIC", n: "Banco BIC" },
+  { s: "BMA", n: "Banco Millennium Atlântico" },
+  { s: "SOL", n: "Banco Sol" },
+  { s: "KEVE", n: "Banco Keve" },
+  { s: "BNI", n: "Banco de Negócios Internacional" },
+  { s: "SBA", n: "Standard Bank Angola" },
+  { s: "BE", n: "Banco Económico" },
+  { s: "YETU", n: "Banco Yetu" },
+  { s: "ACCESS", n: "Access Bank Angola" },
+  { s: "BCA", n: "Banco Comercial Angolano" },
+  { s: "BCI", n: "Banco de Comércio e Indústria" },
+  { s: "VTB", n: "VTB África" },
+  { s: "BVB", n: "Banco Valor" },
+  { s: "BCS", n: "Banco de Crédito do Sul" },
+];
+
+const IBAN_BANK_MAP = {
+  "0004": "BCGA",
+  "0006": "BFA",
+  "0010": "BPC",
+  "0040": "BAI",
+  "0051": "BIC",
+  "0055": "BMA",
+  "0044": "SOL",
+  "0047": "KEVE",
+  "0052": "BNI",
+  "0060": "SBA",
+  "0045": "BE",
+};
+
+function bancoSig(v) {
+  if (!v) return "";
+  const s = String(v).trim();
+  const u = s.toUpperCase();
+  const bySig = BANCOS_REG.find((b) => b.s === u);
+  if (bySig) return bySig.s;
+  const byName = BANCOS_REG.find((b) => b.n.toLowerCase() === s.toLowerCase());
+  if (byName) return byName.s;
+  const dash = s.split(/\s*[—\-]\s*/)[0].trim().toUpperCase();
+  const byPrefix = BANCOS_REG.find((b) => b.s === dash);
+  if (byPrefix) return byPrefix.s;
+  return s;
+}
+
+function bancoNome(sig) {
+  const s = bancoSig(sig);
+  const b = BANCOS_REG.find((x) => x.s === s);
+  return b ? b.n : sig || "";
+}
+
+function bancoLbl(v) {
+  if (!v) return "";
+  const s = bancoSig(v);
+  const b = BANCOS_REG.find((x) => x.s === s);
+  return b ? `${b.s} — ${b.n}` : String(v).trim();
+}
+
+function detectBankFromIban(iban) {
+  const clean = String(iban || "").replace(/\s+/g, "").toUpperCase();
+  const m = clean.match(/^AO\d{2}(\d{4})/);
+  return m && IBAN_BANK_MAP[m[1]] ? IBAN_BANK_MAP[m[1]] : null;
+}
+
 function dayKey(value) {
   if (!value) return null;
   if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
   const d = value instanceof Date ? value : new Date(value);
   return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+}
+
+function monthKey(value) {
+  if (!value) return "";
+  if (typeof value === "string" && /^\d{4}-\d{2}/.test(value)) return value.slice(0, 7);
+  const d = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 7);
+}
+
+/**
+ * Lê metadados adicionais da conta/cartão guardados em `fund.notes` (JSON com `__meta: 1`)
+ * com fallback para os campos nativos do cartão (`issuedAt`, `cardNumberMasked`, `expiresAt`).
+ */
+function parseCardMeta(card = {}, fund = {}) {
+  const rawNotes = fund?.notes || card?.fund?.notes || null;
+  let parsed = null;
+  if (typeof rawNotes === "string" && rawNotes.trim().startsWith("{")) {
+    try {
+      const obj = JSON.parse(rawNotes);
+      if (obj && typeof obj === "object" && (obj.__meta === 1 || "accountNumber" in obj || "iban" in obj || "initialBalanceDate" in obj || "paymentCardId" in obj)) {
+        parsed = obj;
+      }
+    } catch {
+      parsed = null;
+    }
+  }
+  const masked = String(card?.cardNumberMasked || "").trim();
+  const cleanMasked = masked.replace(/\s+/g, "");
+  const fallbackIban = /^AO\d{2}/i.test(cleanMasked) ? cleanMasked.toUpperCase() : "";
+  const fallbackNumero = !fallbackIban && cleanMasked && !cleanMasked.includes("•") && !cleanMasked.includes("*") ? cleanMasked : "";
+
+  const accountNumber = String(parsed?.accountNumber ?? fallbackNumero ?? "").replace(/\s+/g, "");
+  const iban = String(parsed?.iban ?? fallbackIban ?? "").replace(/\s+/g, "").toUpperCase();
+  const initialBalanceDate = parsed?.initialBalanceDate
+    ? String(parsed.initialBalanceDate).slice(0, 10)
+    : dayKey(card?.issuedAt) || "";
+  const paymentCardId = parsed?.paymentCardId ? String(parsed.paymentCardId) : "";
+  const closingDay = parsed?.closingDay ? Number(parsed.closingDay) || null : null;
+  const paymentDay = parsed?.paymentDay ? Number(parsed.paymentDay) || null : null;
+  const notes = parsed ? String(parsed.notes || "") : typeof rawNotes === "string" ? rawNotes : "";
+  const validade = parsed?.validade || monthKey(card?.expiresAt) || "";
+
+  return {
+    accountNumber,
+    iban,
+    initialBalanceDate,
+    paymentCardId,
+    closingDay,
+    paymentDay,
+    notes,
+    validade,
+  };
+}
+
+/** Serializa os metadados adicionais da conta/cartão para guardar em `fund.notes`. */
+function serializeCardMeta(meta = {}) {
+  const clean = {
+    __meta: 1,
+    accountNumber: String(meta.accountNumber || "").replace(/\s+/g, ""),
+    iban: String(meta.iban || "").replace(/\s+/g, "").toUpperCase(),
+    initialBalanceDate: meta.initialBalanceDate ? String(meta.initialBalanceDate).slice(0, 10) : "",
+    paymentCardId: meta.paymentCardId ? String(meta.paymentCardId) : "",
+    closingDay: meta.closingDay ? Number(meta.closingDay) || null : null,
+    paymentDay: meta.paymentDay ? Number(meta.paymentDay) || null : null,
+    validade: meta.validade ? String(meta.validade).slice(0, 7) : "",
+    notes: meta.notes ? String(meta.notes) : "",
+  };
+  return JSON.stringify(clean);
+}
+
+/** Saldo que conta como dinheiro disponível (cartão de crédito negativo é dívida, não caixa). */
+function saldoCaixa(type, balance) {
+  const b = N(balance);
+  return type === "CREDITO" ? Math.max(0, b) : b;
 }
 
 /** A alocação em uso de um cartão (a aberta mais recente). */
@@ -31,6 +178,28 @@ function alocacaoAtual(alocacoes, cardId) {
       .filter((a) => a.cardId === cardId && !a.endDate)
       .sort((a, b) => String(dayKey(b.startDate)).localeCompare(String(dayKey(a.startDate))))[0] || null
   );
+}
+
+/**
+ * Última devolução estragada de um cartão, se não houver nenhuma alocação mais recente
+ * (tal como `estragadoDe(cid)` no protótipo).
+ */
+function estragadoDe(alocacoes, cardId) {
+  const todas = (alocacoes || []).filter((a) => a.cardId === cardId);
+  const estragadas = todas
+    .filter((a) => a.endDate && a.returnState === "ESTRAGADO")
+    .sort((a, b) => String(dayKey(b.endDate)).localeCompare(String(dayKey(a.endDate))));
+  const u = estragadas[0];
+  if (!u) return null;
+  const endKey = dayKey(u.endDate) || "";
+  const maisRecente = todas.some((a) => a.id !== u.id && String(dayKey(a.startDate) || "") >= endKey);
+  if (maisRecente) return null;
+  return {
+    id: u.id,
+    by: u.responsible || null,
+    date: endKey,
+    notes: u.returnNotes || u.notes || null,
+  };
 }
 
 /** Valida uma nova alocação: o cartão não pode já estar entregue. */
@@ -81,4 +250,18 @@ function fundoManeio({ cartoes, movFundo, movBanco, pedidos, alocacoes }) {
   });
 }
 
-module.exports = { alocacaoAtual, podeAlocar, fundoManeio };
+module.exports = {
+  BANCOS_REG,
+  IBAN_BANK_MAP,
+  bancoSig,
+  bancoNome,
+  bancoLbl,
+  detectBankFromIban,
+  parseCardMeta,
+  serializeCardMeta,
+  saldoCaixa,
+  alocacaoAtual,
+  estragadoDe,
+  podeAlocar,
+  fundoManeio,
+};

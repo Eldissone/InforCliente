@@ -145,6 +145,7 @@ function treasurySummary({ contas, movimentos, mes, periodo, moeda = "AOA" }) {
       const mm = doPeriodo(M.filter((m) => meus.has(m.cardId)));
       // Cartão de crédito com saldo negativo é dívida, não dinheiro.
       const divida = C.filter((c) => c.card.type === "CREDITO").reduce((s, c) => s + Math.max(0, -N(c.balance)), 0);
+      const saldoCaixa = (c) => (c.card.type === "CREDITO" ? Math.max(0, N(c.balance)) : N(c.balance));
       return {
         banco,
         contas: C.map((c) => ({
@@ -156,7 +157,7 @@ function treasurySummary({ contas, movimentos, mes, periodo, moeda = "AOA" }) {
           estimado: c.source === "CARTAO",
           desde: c.asOf || null,
         })),
-        saldo: round2(C.reduce((s, c) => s + N(c.balance), 0)),
+        saldo: round2(C.reduce((s, c) => s + saldoCaixa(c), 0)),
         divida: round2(divida),
         en: round2(mm.en),
         sa: round2(mm.sa),
