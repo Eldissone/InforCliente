@@ -59,19 +59,17 @@ export const APP_MENU = [
   },
   {
     type: "group",
-    label: "Orçamentação de Obras",
-    icon: "construction",
-    navPerm: "navlinks:nav_comercial",
-    children: [
-      { label: "Lista de Orçamentos", icon: "list_alt", href: "/orcamentacao/", perm: "comercial:view" },
-    ],
-  },
-  {
-    type: "group",
     label: "Comercial",
     icon: "request_quote",
     navPerm: "navlinks:nav_comercial",
     children: [
+      {
+        label: "Orçamentação de Obras",
+        icon: "construction",
+        children: [
+          { label: "Lista de Orçamentos", icon: "list_alt", href: "/orcamentacao/", perm: "comercial:view" },
+        ],
+      },
       {
         label: "Orçamentos",
         icon: "calculate",
@@ -480,6 +478,10 @@ function locationMatchesHref(href) {
 }
 
 function isTopNavLinkActive(link) {
+  if (link.matches("[data-nav-comercial]")) {
+    const current = window.location.pathname.replace(/\\/g, "/").toLowerCase();
+    if (current.startsWith("/comercial/") || current.startsWith("/orcamentacao")) return true;
+  }
   return isSidebarLinkActive(link);
 }
 
@@ -496,6 +498,8 @@ function isSidebarLinkActive(link) {
   if (locationMatchesHref(link.getAttribute("href"))) return true;
 
   const current = window.location.pathname.replace(/\\/g, "/").toLowerCase();
+  const href = (link.getAttribute("href") || "").replace(/\/+$/, "").toLowerCase();
+  if (href === "/orcamentacao") return current.startsWith("/orcamentacao/");
   if (link.matches("[data-nav-obras]")) {
     return current.includes("/projectos/")
       && !current.includes("/projectos/centrocustos")

@@ -264,6 +264,7 @@ const PERMISSION_GROUPS = [
     label: "Comercial / Orçamentação",
     icon: "request_quote",
     pages: [
+      { id: "comercial.orcamentacao", label: "Orçamentação de Obras", route: "/orcamentacao/" },
       { id: "comercial.orcamentos", label: "Orçamentos (lista)", route: "/comercial/orcamentos" },
       { id: "comercial.orcamento", label: "Orçamento (documento)", route: "/comercial/orcamento" },
       { id: "comercial.despacho", label: "Folha de despacho", route: "/comercial/despacho" },
@@ -444,6 +445,8 @@ const PAGE_ROUTE_GUARDS = [
   { route: "/Financeiro/controlo", module: "financeiro", action: "view" },
   { route: "/Financeiro/centroDeCompras.html", module: "pedidosExtras", action: "view" },
   { route: "/requisicoes", module: "obras", action: "view" },
+  { route: "/orcamentacao", module: "comercial", action: "view" },
+  { route: "/orcamentacao/orcamento", module: "comercial", action: "view" },
   { route: "/comercial/orcamentos", module: "comercial", action: "tab_orcamentos" },
   { route: "/comercial/orcamento", module: "comercial", action: "tab_orcamentos" },
   { route: "/comercial/necessidades", module: "comercial", action: "tab_orcamentos" },
