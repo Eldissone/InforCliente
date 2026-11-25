@@ -911,3 +911,67 @@ button.fx2-k:hover { background: #f8fafc; }
 .cs-lnk { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; }
 .cs-t td { vertical-align: middle; }
 .cs-prox td { background: #f1faf5; }
+
+/* ── Orçamentação de Obras (protótipo v605–v624) ── */
+.orc-num { display: block; color: var(--pt-brand); font: 600 13px var(--pt-display); letter-spacing: .78px; }
+.orc-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+.orc-tabs button { border: .8px solid var(--pt-line); background: #fff; border-radius: 6px; padding: 6px 11px; font: inherit; font-size: 13px; cursor: pointer; }
+.orc-tabs button.on { background: var(--pt-brand); border-color: var(--pt-brand); color: #fff; font-weight: 600; }
+.orc-linha { font-size: 13px; color: var(--pt-muted); margin: 6px 0 10px; }
+.orc-linha b { color: var(--pt-fg); }
+.orc-pill { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11.5px; font-weight: 600; background: var(--pt-neutral-bg); color: var(--pt-muted); }
+.orc-pill--warn { background: var(--pt-warn-bg); color: var(--pt-warn); }
+.orc-pill--good { background: var(--pt-good-bg); color: var(--pt-good); }
+.orc-pill--bad { background: var(--pt-bad-bg); color: var(--pt-bad); }
+.orc-m--bad { color: var(--pt-bad) !important; }
+.orc-m--warn { color: var(--pt-warn) !important; }
+.orc-m--good { color: var(--pt-good) !important; }
+.orc-pend { position: sticky; top: 64px; z-index: 30; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 10px; margin: 0 0 10px; border-radius: 8px; background: #fff4d6; border: 1px solid #e0a030; color: #5a3d00; font-size: 13px; }
+.orc-pend-ult { opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 46vw; }
+.orc-pend--ok { position: static; background: transparent; border-color: transparent; color: var(--pt-muted); padding: 0 2px; margin: 0 0 4px; font-size: 12px; }
+.orc-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; margin-bottom: 10px; }
+.orc-k { background: #fff; border: .8px solid var(--pt-line); border-left: 3px solid var(--pt-line-in); border-radius: 8px; padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; }
+.orc-k span { font-size: 11.5px; color: var(--pt-muted); }
+.orc-k b { font: 600 18px var(--pt-display); }
+.orc-k small { font-size: 11.5px; color: var(--pt-muted); }
+.orc-k--blue { border-left-color: var(--pt-accent); } .orc-k--good { border-left-color: var(--pt-good); } .orc-k--warn { border-left-color: var(--pt-warn); } .orc-k--bad { border-left-color: var(--pt-bad); }
+.orc-kbtn { align-self: flex-start; margin-top: 4px; }
+.orc-2col { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 10px; }
+.orc-h3pad { padding: 10px 12px 0; }
+.orc-pad { padding: 6px 12px 10px; margin: 0; }
+.orc-tot td { font-weight: 700; background: #f7f8fa; }
+.orc-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.orc-chips button { border: .8px solid var(--pt-line); background: #fff; border-radius: 6px; padding: 4px 9px; font: inherit; font-size: 12.5px; cursor: pointer; color: var(--pt-muted2, #56636f); }
+.orc-chips button.on { background: var(--pt-brand2); border-color: var(--pt-brand2); color: #fff; font-weight: 600; }
+.orc-q { min-width: 200px; width: auto !important; }
+.orc-auto { width: auto !important; }
+.orc-lista tbody tr { cursor: pointer; }
+.orc-lista tbody tr:hover td { background: #f4faf7; }
+.orc-aviso { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; border: 1px solid var(--pt-bad); background: #fff6f5; border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; font-size: 13px; }
+.orc-aviso b { color: var(--pt-bad); }
+.orc-tw { overflow-x: auto; }
+.orc-custo td { vertical-align: middle; padding: 3px 5px !important; }
+.orc-custo th { white-space: nowrap; }
+.orc-in { height: 28px !important; padding: 2px 6px !important; font-size: 12.5px !important; }
+.orc-desc { min-width: 230px; }
+.orc-tipo { width: 92px !important; }
+.orc-un { width: 58px !important; }
+.orc-n { width: 72px !important; text-align: right; }
+.orc-pu { width: 100px !important; text-align: right; }
+.orc-q { }
+.orc-custo .orc-q { width: 64px !important; min-width: 0 !important; text-align: right; }
+.orc-w { min-width: 66px; font-size: 11px !important; }
+.orc-w small { color: var(--pt-muted); font-weight: 400; }
+.orc-bad { border-color: var(--pt-bad) !important; background: #fff6f5 !important; }
+.orc-cat td { background: #f2f4f6; font-weight: 600; }
+.orc-tog { border: 0; background: none; font: inherit; font-weight: 700; cursor: pointer; padding: 0; }
+.orc-cat-tot { float: right; font-weight: 700; }
+.orc-ok { color: var(--pt-good); font-weight: 700; }
+.orc-warn { color: var(--pt-warn); }
+.orc-multi { display: flex; flex-wrap: wrap; gap: 6px 12px; padding: 6px 0; font-size: 12.5px; }
+.orc-multi label { display: inline-flex; gap: 4px; align-items: center; }
+.orc-obs { width: 100% !important; min-height: 60px; }
+.orc-perigo { border-color: #f1c2bd; }
+.orc-btn-perigo { color: var(--pt-bad) !important; border-color: var(--pt-bad) !important; }
+.orc-hist td { font-size: 12px; }
+.orc-marco { margin-bottom: 4px; }

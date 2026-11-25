@@ -204,6 +204,22 @@ const PAGES = {
     module: "fluxoCaixa.js",
     placeholder: [],
   },
+  "orc-lista": {
+    kicker: "Orçamentação de Obras",
+    title: "Lista de Orçamentos",
+    subtitle: "",
+    module: "../orcamentacao/lista.js",
+    guards: [["comercial", "view"]],
+    placeholder: [],
+  },
+  "orc-orcamento": {
+    kicker: "Orçamentação de Obras",
+    title: "Orçamento",
+    subtitle: "",
+    module: "../orcamentacao/orcamento.js",
+    guards: [["comercial", "view"]],
+    placeholder: [],
+  },
   "bancos": {
     kicker: "Financeiro · Registos",
     title: "Bancos",

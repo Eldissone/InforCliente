@@ -59,6 +59,15 @@ export const APP_MENU = [
   },
   {
     type: "group",
+    label: "Orçamentação de Obras",
+    icon: "construction",
+    navPerm: "navlinks:nav_comercial",
+    children: [
+      { label: "Lista de Orçamentos", icon: "list_alt", href: "/orcamentacao/", perm: "comercial:view" },
+    ],
+  },
+  {
+    type: "group",
     label: "Comercial",
     icon: "request_quote",
     navPerm: "navlinks:nav_comercial",

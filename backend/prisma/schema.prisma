@@ -3152,3 +3152,41 @@ model Bank {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+/// Orçamentação de Obras (protótipo v605–v624): um orçamento de custo e de
+/// venda antes de a obra existir. Adjudicado, cria a obra (`projectId`).
+model WorkBudget {
+  id           String    @id @default(cuid())
+  /// ORC-26-001
+  code         String    @unique
+  /// Em Orçamentação, Em Análise pelo Cliente, Em Pausa, Adjudicado, Não Adjudicado
+  status       String    @default("Em Orçamentação")
+  name         String
+  clientId     String?
+  clientName   String?
+  /// Ficha: { areaNeg, sigla, tipos[], servicos[], temSub, provincia, local, obs }
+  ficha        Json      @default("{}")
+  currency     String    @default("AOA")
+  /// AOA por 1 unidade da moeda do contrato
+  exchangeRate Decimal?  @db.Decimal(16, 4)
+  /// { metodo: MARGEM|MARKUP, mMin, mObj, reserva }
+  pricing      Json      @default("{}")
+  startDate    DateTime?
+  endDate      DateTime?
+  /// Linhas do orçamento de custo: [{ id, cat, tipo, desc, productId, un, qt, pu, hrs, q: { semana: quantidade } }]
+  cost         Json      @default("[]")
+  /// Venda: { valor, rep: { tipo: valor }, cond: { modo, per, aprov, pag, adPct, ret, retAnos, adData, marcos[] } }
+  sale         Json      @default("{}")
+  /// Adjudicação: { data, igual, valorProposto, valorAdj, notas, contrato, cambio }
+  adjudication Json?
+  projectId    String?
+  /// [{ d, u, t }]
+  history      Json      @default("[]")
+  createdBy    String?
+  deletedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([status])
+  @@index([projectId])
+}
