@@ -45,7 +45,7 @@ function lista() {
   const R = L.filter((c) => FILTROS[S.f](c) && (!q || norm(c.nome).includes(q)));
   const chip = (v, l, n, cl = "") =>
     `<button type="button" class="fx2-chip${cl}${S.f === v ? " on" : ""}" data-cc="f|${v}"><span>${l}</span><b>${n}</b></button>`;
-  const soma = (k) => R.reduce((s, c) => s + (k === "saldo" ? c.saldo : k === "av" ? c.ag.av + c.ag.sd : c.ag[k]), 0);
+  const soma = (k) => R.reduce((s, c) => s + (k === "saldo" ? c.saldo : k === "nc" ? c.nc || 0 : k === "av" ? c.ag.av + c.ag.sd : c.ag[k]), 0);
 
   return `
     ${kpis([
@@ -75,11 +75,12 @@ function lista() {
     ${
       R.length
         ? `<div class="fx2-tw"><table class="fx2-t">
-        <thead><tr><th>Cliente</th><th class="r">Saldo</th><th class="r">A Vencer</th><th class="r">1–30 d</th><th class="r">31–60 d</th><th class="r">61–90 d</th><th class="r">+90 d</th><th>Últ. Recebimento</th></tr></thead>
+        <thead><tr><th>Cliente</th><th class="r">Saldo</th><th class="r">NC</th><th class="r">A Vencer</th><th class="r">1–30 d</th><th class="r">31–60 d</th><th class="r">61–90 d</th><th class="r">+90 d</th><th>Últ. Recebimento</th></tr></thead>
         <tbody>${R.map(
           (c) => `<tr class="fx2-k-row" data-ccx="${esc(chaveDe(c))}">
             <td><b>${esc(c.nome)}</b> <span class="fx2-mut">${c.faturas} fatura(s)</span></td>
             <td class="r"><b>${saldoHtml(c.saldo)}</b></td>
+            <td class="r">${c.nc > 0.005 ? fmt(c.nc) : "—"}</td>
             <td class="r">${fmt(c.ag.av + c.ag.sd)}</td>
             <td class="r">${fmt(c.ag.b1)}</td>
             <td class="r">${fmt(c.ag.b2)}</td>
@@ -88,15 +89,15 @@ function lista() {
             <td>${fmtData(c.ult)}</td>
           </tr>`
         ).join("")}</tbody>
-        <tfoot><tr><td>Total (${R.length})</td><td class="r">${saldoHtml(soma("saldo"))}</td><td class="r">${fmt(soma("av"))}</td><td class="r">${fmt(soma("b1"))}</td><td class="r">${fmt(soma("b2"))}</td><td class="r">${fmt(soma("b3"))}</td><td class="r">${fmt(soma("b4"))}</td><td></td></tr></tfoot>
+        <tfoot><tr><td>Total (${R.length})</td><td class="r">${saldoHtml(soma("saldo"))}</td><td class="r">${fmt(soma("nc"))}</td><td class="r">${fmt(soma("av"))}</td><td class="r">${fmt(soma("b1"))}</td><td class="r">${fmt(soma("b2"))}</td><td class="r">${fmt(soma("b3"))}</td><td class="r">${fmt(soma("b4"))}</td><td></td></tr></tfoot>
       </table></div>`
         : vazio(L.length ? "Nada a mostrar com estes filtros." : `Ainda não há faturas em ${S.moeda}.`)
     }
     <p class="fcal-nota">
-      Saldo = faturas emitidas − recebimentos, pelo valor líquido de cada fatura (o que o cliente tem de
+      Saldo = faturas emitidas − recebimentos − notas de crédito (NC), pelo valor líquido de cada fatura (o que o cliente tem de
       pagar depois da retenção). O que um cliente pagou a mais numa fatura abate as outras dele, a começar
       pela que vence primeiro; o que sobrar é crédito do cliente (a verde). A antiguidade conta-se pelo
-      vencimento. A app ainda não regista notas de crédito.
+      vencimento.
     </p>`;
 }
 
@@ -117,9 +118,10 @@ function extrato() {
   const tD = linhas.reduce((s, l) => s + l.deb, 0);
   const tC = linhas.reduce((s, l) => s + l.cred, 0);
   return `
-    <div class="fx2-barra">
+    <div class="fx2-barra" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <button type="button" class="fcal-todos" data-ccback>← Todos os Clientes</button>
-      <h2 class="fx2-h2">${esc(x.nome)}</h2>
+      <h2 class="fx2-h2" style="margin:0">${esc(x.nome)}</h2>
+      <button type="button" class="finance-btn finance-btn--sm" data-ccpdf style="margin-left:auto">⤓ Extrato PDF</button>
     </div>
     ${kpis([
       { tom: "blue", titulo: "Faturado", valor: fmt(x.fat) },
@@ -240,10 +242,47 @@ function voltar() {
   desenhar();
 }
 
+function exportarExtratoPdf() {
+  if (!S.ext) return;
+  const { conta: x, linhas } = S.ext;
+  const tD = linhas.reduce((s, l) => s + l.deb, 0);
+  const tC = linhas.reduce((s, l) => s + l.cred, 0);
+  const w = window.open("", "_blank");
+  if (!w) return toast("Permita pop-ups para gerar o Extrato PDF.", { type: "info" });
+  w.document.write(`<!doctype html><html lang="pt"><head><meta charset="utf-8"><title>Extrato Cliente · ${esc(x.nome)}</title>
+    <style>
+      body{font:12px/1.45 system-ui,-apple-system,sans-serif;color:#0f172a;margin:24px}
+      h1{font-size:18px;margin:0 0 4px} .mut{color:#64748b}
+      .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}
+      .kpi{border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px} .kpi b{display:block;font-size:15px}
+      table{width:100%;border-collapse:collapse;margin-top:12px}
+      th,td{border-bottom:1px solid #e2e8f0;padding:6px 8px;text-align:left}
+      th.r,td.r{text-align:right} tfoot td{font-weight:700;border-top:2px solid #0f172a}
+    </style></head><body>
+    <h1>Extrato de Conta Corrente — ${esc(x.nome)}</h1>
+    <div class="mut">Moeda: ${esc(S.moeda)} · Emitido em ${fmtData(new Date().toISOString().slice(0, 10))}</div>
+    <div class="kpis">
+      <div class="kpi"><span class="mut">Faturado</span><b>${fmt(x.fat)}</b></div>
+      <div class="kpi"><span class="mut">Recebido</span><b>${fmt(x.rec)}</b></div>
+      <div class="kpi"><span class="mut">Notas de Crédito</span><b>${fmt(x.nc || 0)}</b></div>
+      <div class="kpi"><span class="mut">${x.saldo < -0.5 ? "Crédito do Cliente" : "Saldo a Receber"}</span><b>${fmt(Math.abs(x.saldo))}</b></div>
+    </div>
+    <table><thead><tr><th>Data</th><th>Tipo</th><th>Documento</th><th>Obra</th><th>Vencimento</th><th class="r">Débito</th><th class="r">Crédito</th><th class="r">Saldo</th></tr></thead>
+    <tbody>${linhas
+      .map(
+        (l) => `<tr><td>${fmtData(l.data)}</td><td>${esc(l.tipo)}</td><td>${esc(l.doc)}</td><td>${esc(l.obra || "")}</td><td>${l.venc ? fmtData(l.venc) : ""}</td><td class="r">${l.deb ? fmt(l.deb) : ""}</td><td class="r">${l.cred ? fmt(l.cred) : ""}</td><td class="r">${fmt(l.saldo)}</td></tr>`
+      )
+      .join("")}</tbody>
+    <tfoot><tr><td colspan="5">Totais</td><td class="r">${fmt(tD)}</td><td class="r">${fmt(tC)}</td><td class="r">${fmt(tD - tC)}</td></tr></tfoot></table>
+    <script>window.onload=()=>{window.print();}<\/script></body></html>`);
+  w.document.close();
+}
+
 export async function render() {
   codigoNoCabecalho("R4");
   const el = root();
   el.addEventListener("click", (e) => {
+    if (e.target.closest("[data-ccpdf]")) return exportarExtratoPdf();
     const nc = e.target.closest("[data-ccnc]");
     if (nc) {
       const [id, falta, ...doc] = nc.dataset.ccnc.split("|");

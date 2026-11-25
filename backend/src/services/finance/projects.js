@@ -340,12 +340,14 @@ function areasDeNegocio({ faturas, obras, ano, moeda = "AOA" }) {
     x.custo += N(o.custoPago);
     x.obras += 1;
   }
+  const totalFat = [...G.values()].reduce((s, x) => s + N(x.fat), 0);
   const areas = [...G.values()]
     .map((x) => ({
       area: x.k,
       faturas: x.n,
       obras: x.obras,
       fat: round2(x.fat),
+      pctFaturacao: totalFat > 0 ? (x.fat / totalFat) * 100 : 0,
       rec: round2(x.rec),
       custo: round2(x.custo),
       margem: round2(x.fat - x.custo),

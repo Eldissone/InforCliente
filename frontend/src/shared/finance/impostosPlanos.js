@@ -1,9 +1,6 @@
 /**
- * G2 Planos de Pagamento (PPP) — o `V.fppp` do protótipo.
- *
- * Acordos com a AGT (ou outra entidade) para pagar impostos em prestações.
- * Cada prestação aparece em G1 Impostos na data em que vence, e é aí que se
- * cria o pedido de pagamento — tal como os outros impostos.
+ * G2 Planos de Pagamento (PPP) — alinhado com `V.fppp` do protótipo:
+ * suporta estados Ativo / Em curso, Atrasado, Em execução, Cancelado AGT e Liquidado.
  */
 
 import { apiRequest } from "../../services/api.js";
@@ -12,12 +9,11 @@ import { can } from "../permissions.js";
 import { esc, fmt, fmtData, codigoNoCabecalho, kpis, vazio, erro } from "./f2Ui.js";
 
 const root = () => document.getElementById("financeRoot");
-const S = { d: null, erro: null, aberto: new Set() };
-const TOM = { Liquidado: "good", Atrasado: "bad", "Em curso": "blue" };
+const S = { d: null, erro: null, f: "", aberto: new Set() };
+const TOM = { Liquidado: "good", Atrasado: "bad", "Em curso": "blue", "Em execução": "bad", "Cancelado AGT": "slate" };
 const ESTADO_TOM = { Pago: "good", "Pago parcial": "warn", "Em pagamento": "blue", Atrasado: "bad", "Por pagar": "slate" };
 const podeEditar = () => can("financeiro", "edit");
 
-/** As datas das prestações, como o servidor as gera (mesmo dia dos meses seguintes). */
 function datas(n, d1) {
   if (!(n > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(d1 || "")) return [];
   const [y, m, d] = d1.split("-").map(Number);
@@ -27,18 +23,33 @@ function datas(n, d1) {
   });
 }
 
+function matchFiltro(p, f) {
+  if (!f) return true;
+  if (f === "Ativo") return p.estado === "Em curso" || p.estado === "Atrasado";
+  return p.estado === f;
+}
+
 function desenhar() {
   const el = root();
   if (S.erro) return (el.innerHTML = erro(S.erro));
   if (!S.d) return (el.innerHTML = vazio("A carregar…"));
   const { planos, resumo } = S.d;
+  const L = planos.filter((p) => matchFiltro(p, S.f));
+  const chip = (k, lbl) => `<button type="button" class="fx2-chip${S.f === k ? " on" : ""}" data-g2f="${esc(k)}">${esc(lbl)}</button>`;
+
   el.innerHTML = `
     <p class="fx2-lead">Acordos com a AGT (ou outra entidade) para pagar impostos em prestações. Cada prestação aparece em
       <a href="/Financeiro/impostos">G1 · Impostos</a> na data em que vence, e é aí que se cria o pedido de pagamento — tal como os outros impostos.</p>
     ${kpis([
-      { tom: "neu", titulo: "Planos Ativos", valor: String(resumo.ativos), nota: "&nbsp;" },
+      { tom: "neu", titulo: "Planos Ativos", valor: String(resumo.ativos), nota: `${planos.length} registado(s)` },
       { tom: "warn", titulo: "Em Dívida", valor: fmt(resumo.divida), nota: "AOA" },
       { tom: resumo.atrasadas ? "bad" : "good", titulo: "Prestações Atrasadas", valor: String(resumo.atrasadas), nota: "&nbsp;" },
+      {
+        tom: resumo.emExecucao ? "bad" : "neu",
+        titulo: "Em Execução · Cancelados AGT",
+        valor: `${resumo.emExecucao || 0} · ${resumo.cancelados || 0}`,
+        nota: "situação administrativa",
+      },
       {
         tom: "neu",
         titulo: "Próxima Prestação",
@@ -46,14 +57,20 @@ function desenhar() {
         nota: resumo.proxima ? `${fmt(resumo.proxima.valor)} AOA · ${esc(resumo.proxima.plano)}` : "&nbsp;",
       },
     ])}
+    <div class="fx2-chips" style="margin-bottom:10px">
+      ${chip("", `Todos (${planos.length})`)}
+      ${chip("Ativo", `Ativo (${planos.filter((p) => matchFiltro(p, "Ativo")).length})`)}
+      ${chip("Em execução", `Em execução (${planos.filter((p) => p.estado === "Em execução").length})`)}
+      ${chip("Cancelado AGT", `Cancelado AGT (${planos.filter((p) => p.estado === "Cancelado AGT").length})`)}
+      ${chip("Liquidado", `Liquidado (${planos.filter((p) => p.estado === "Liquidado").length})`)}
+    </div>
     ${
-      planos.length
+      L.length
         ? `<div class="fx2-tw"><table class="fx2-t">
       <thead><tr><th>Plano</th><th>Processo</th><th>Acordo</th><th class="r">Total</th><th class="r">Pago</th><th class="r">Em falta</th><th>Prestações</th><th>Próxima</th><th>Estado</th><th></th></tr></thead>
-      <tbody>${planos
-        .map((p) => {
-          const op = S.aberto.has(p.id);
-          return `<tr class="fx2-k-row" data-g2ab="${esc(p.id)}">
+      <tbody>${L.map((p) => {
+        const op = S.aberto.has(p.id);
+        return `<tr class="fx2-k-row" data-g2ab="${esc(p.id)}">
             <td>${op ? "▾" : "▸"} <b>${esc(p.nome)}</b>${p.imposto ? ` <span class="fx2-mut">${esc(p.imposto)}</span>` : ""}</td>
             <td class="fx2-mut">${esc(p.processo || "—")}</td><td>${p.acordo ? fmtData(p.acordo) : "—"}</td>
             <td class="r">${fmt(p.total)}</td><td class="r">${fmt(p.pago)}</td><td class="r"><b>${fmt(p.falta)}</b></td>
@@ -74,9 +91,8 @@ function desenhar() {
                   <p class="fx2-mut">A nota de liquidação, o RUPE e o pedido de cada prestação tratam-se em <a href="/Financeiro/impostos">G1 · Impostos</a>.</p></td></tr>`
               : ""
           }`;
-        })
-        .join("")}</tbody></table></div>`
-        : vazio("Ainda não há planos de pagamento. Use «+ Novo PPP».")
+      }).join("")}</tbody></table></div>`
+        : vazio(planos.length ? "Nenhum plano com este filtro." : "Ainda não há planos de pagamento. Use «+ Novo PPP».")
     }`;
 }
 
@@ -143,6 +159,7 @@ function novoPlano() {
 }
 
 function editarPlano(p) {
+  const sitAtual = p.situacaoAdmin || "ATIVO";
   openModal({
     title: `Editar ${p.nome}`,
     primaryLabel: "Guardar",
@@ -150,6 +167,13 @@ function editarPlano(p) {
       <div class="finance-field finance-field--full"><label class="finance-label">Nome</label><input id="peN" class="finance-input" value="${esc(p.nome)}"></div>
       <div class="finance-field"><label class="finance-label">N.º do plano (AGT)</label><input id="peP" class="finance-input" value="${esc(p.processo || "")}"></div>
       <div class="finance-field"><label class="finance-label">Imposto em dívida</label><input id="peI" class="finance-input" value="${esc(p.imposto || "")}"></div>
+      <div class="finance-field finance-field--full"><label class="finance-label">Situação do acordo</label>
+        <select id="peS" class="finance-input">
+          <option value="ATIVO"${sitAtual === "ATIVO" ? " selected" : ""}>Ativo (em cumprimento / automático)</option>
+          <option value="EM_EXECUCAO"${sitAtual === "EM_EXECUCAO" ? " selected" : ""}>Em execução fiscal</option>
+          <option value="CANCELADO_AGT"${sitAtual === "CANCELADO_AGT" ? " selected" : ""}>Cancelado pela AGT</option>
+        </select>
+      </div>
       <div class="finance-field finance-field--full"><label class="finance-label">Observações</label><textarea id="peO" class="finance-textarea" rows="2">${esc(p.notas || "")}</textarea></div>
       ${p.np === 0 ? `<div class="finance-field--full"><button type="button" class="finance-btn" id="peDel">Apagar este plano (nenhuma prestação paga)</button></div>` : ""}
     </div>`,
@@ -170,7 +194,7 @@ function editarPlano(p) {
       try {
         await apiRequest(`/finance/tax-plans/${p.id}`, {
           method: "PATCH",
-          body: { nome: $("#peN"), processo: $("#peP") || null, imposto: $("#peI") || null, notas: $("#peO") || null },
+          body: { nome: $("#peN"), processo: $("#peP") || null, imposto: $("#peI") || null, situacao: $("#peS"), notas: $("#peO") || null },
         });
         close();
         carregar();
@@ -189,6 +213,11 @@ export async function render() {
     document.getElementById("g2Novo").onclick = novoPlano;
   }
   root().addEventListener("click", (e) => {
+    const f = e.target.closest("[data-g2f]");
+    if (f) {
+      S.f = f.dataset.g2f;
+      return desenhar();
+    }
     const ed = e.target.closest("[data-g2ed]");
     if (ed) return editarPlano(S.d.planos.find((p) => p.id === ed.dataset.g2ed));
     const ab = e.target.closest("[data-g2ab]");

@@ -108,6 +108,7 @@ function linhasImpostos({ obrigacoes, pedidos, hoje }) {
       pagoNota: o.paidNote || null,
       notas: o.notes || null,
       pedido: ped ? { id: ped.id, numero: ped.number, estado: ped.estado } : null,
+      comprovativo: ped?.comprovativo || null,
       estado: estadoDe(o, ped, hoje),
     };
   });
@@ -132,6 +133,7 @@ function linhasImpostos({ obrigacoes, pedidos, hoje }) {
       pagoNota: null,
       notas: null,
       pedido: { id: p.id, numero: p.number, estado: p.estado },
+      comprovativo: p.comprovativo || null,
       estado: estadoDe({ dueDate: limite }, { estado: p.estado }, hoje),
     });
   }
@@ -177,6 +179,10 @@ function resumoPlano(plano, linhasDoPlano, hoje) {
   const atr = L.filter((l) => l.estado === "Atrasado");
   const prox = L.find((l) => aberto(l)) || null;
   const falta = round2(total - vp);
+  const sitAdmin = plano.situacaoAdmin || null;
+  let estado = falta <= 0.5 ? "Liquidado" : atr.length ? "Atrasado" : "Em curso";
+  if (sitAdmin === "EM_EXECUCAO") estado = "Em execução";
+  else if (sitAdmin === "CANCELADO_AGT") estado = "Cancelado AGT";
   return {
     id: plano.id,
     nome: plano.name,
@@ -185,14 +191,15 @@ function resumoPlano(plano, linhasDoPlano, hoje) {
     imposto: plano.taxType || null,
     acordo: dayKey(plano.startDate),
     notas: plano.notes || null,
+    situacaoAdmin: sitAdmin || "ATIVO",
     total,
     pago: vp,
-    falta,
+    falta: sitAdmin === "CANCELADO_AGT" ? 0 : falta,
     n: L.length,
     np: L.filter(pago).length,
-    atrasadas: atr.length,
-    proxima: prox ? { limite: prox.limite, valor: prox.valor, prestacao: prox.plano?.prestacao } : null,
-    estado: falta <= 0.5 ? "Liquidado" : atr.length ? "Atrasado" : "Em curso",
+    atrasadas: sitAdmin === "CANCELADO_AGT" ? 0 : atr.length,
+    proxima: sitAdmin === "CANCELADO_AGT" ? null : prox ? { limite: prox.limite, valor: prox.valor, prestacao: prox.plano?.prestacao } : null,
+    estado,
     prestacoes: L,
   };
 }
@@ -252,6 +259,8 @@ function ivaRetencoes({ faturas, pedidos, hoje, mes = null }) {
  * sr (sem registo: um imposto mensal que já devia estar lançado e não está).
  */
 function mapaFiscal({ linhas, planos, ano, hoje }) {
+  const todoPeriodo = ano === "todos" || !ano;
+  const anoRef = todoPeriodo ? Number(hoje.slice(0, 4)) : Number(ano);
   const mesHoje = hoje.slice(0, 7);
   const prox = addMonthsK(mesHoje, 1);
   const est = (l) => (l.estado === "Pago" ? "pg" : l.estado === "Atrasado" ? "at" : l.estado === "Em pagamento" || l.estado === "Pago parcial" ? "pp" : "fu");
@@ -262,14 +271,13 @@ function mapaFiscal({ linhas, planos, ano, hoje }) {
   const doMes = (m) => ab.filter((l) => String(l.limite || "").slice(0, 7) === m);
   const ppp = (l) => Boolean(l.plano);
 
-  const meses = Array.from({ length: 12 }, (_, i) => `${ano}-${String(i + 1).padStart(2, "0")}`);
+  const meses = Array.from({ length: 12 }, (_, i) => `${anoRef}-${String(i + 1).padStart(2, "0")}`);
   const mesDe = (l) => (l.plano ? String(l.limite || "").slice(0, 7) : l.mes || String(l.limite || "").slice(0, 7));
-  const linha = (nome, tipo, L, mensal) => {
+  const linha = (nome, tipo, L, mensal, sitAdmin = null) => {
     const primeiro = L.map(mesDe).filter(Boolean).sort()[0] || null;
     const celulas = meses.map((m) => {
       const X = L.filter((l) => mesDe(l) === m);
       if (!X.length) {
-        // Imposto mensal (IVA, IRT, INSS) que já venceu sem registo nenhum.
         const lim = limiteAuto(tipo, m);
         const falhou = mensal && primeiro && m >= primeiro && lim && lim < hoje;
         return { m, s: falhou ? "sr" : "", v: 0, n: 0 };
@@ -277,14 +285,23 @@ function mapaFiscal({ linhas, planos, ano, hoje }) {
       const s = X.map(est).sort((a, b) => ORD[b] - ORD[a])[0];
       return { m, s, v: soma(X), n: X.length };
     });
-    const doAno = L.filter((l) => String(mesDe(l)).startsWith(String(ano)));
+    const doEscopo = todoPeriodo ? L : L.filter((l) => String(mesDe(l)).startsWith(String(anoRef)));
+    const vPago = soma(doEscopo.filter(pago));
+    const vAtr = sitAdmin === "CANCELADO_AGT" ? 0 : soma(doEscopo.filter((l) => l.estado === "Atrasado"));
+    const vFut = sitAdmin === "CANCELADO_AGT" ? 0 : soma(doEscopo.filter((l) => aberto(l) && l.estado !== "Atrasado"));
+    let situacao = "Ativo";
+    if (sitAdmin === "CANCELADO_AGT") situacao = "Cancelado AGT";
+    else if (sitAdmin === "EM_EXECUCAO") situacao = "Em execução";
+    else if (vAtr > 0.5) situacao = "Com atraso";
+    else if (vFut <= 0.5 && vPago > 0.5) situacao = "Liquidado";
     return {
       nome,
       tipo,
+      situacao,
       celulas,
-      pago: soma(doAno.filter(pago)),
-      atrasado: soma(doAno.filter((l) => l.estado === "Atrasado")),
-      futuro: soma(doAno.filter((l) => aberto(l) && l.estado !== "Atrasado")),
+      pago: vPago,
+      atrasado: vAtr,
+      futuro: vFut,
     };
   };
   const porTipo = new Map();
@@ -292,14 +309,15 @@ function mapaFiscal({ linhas, planos, ano, hoje }) {
     if (!porTipo.has(l.tipo)) porTipo.set(l.tipo, []);
     porTipo.get(l.tipo).push(l);
   }
-  const rows = [...porTipo.entries()].map(([t, L]) => linha(t, t, L, ["IVA", "IRT", "INSS"].includes(t)));
+  const rows = [...porTipo.entries()].map(([t, L]) => linha(t, t, L, ["IVA", "IRT", "INSS"].includes(t), null));
   for (const p of planos || []) {
     const L = linhas.filter((l) => l.plano?.id === p.id);
-    if (L.length) rows.push(linha(p.name || p.nome, "PPP", L, false));
+    if (L.length || p.situacaoAdmin) rows.push(linha(p.name || p.nome, "PPP", L, false, p.situacaoAdmin || null));
   }
   rows.sort((a, b) => (b.atrasado > 0) - (a.atrasado > 0) || (a.tipo === "PPP") - (b.tipo === "PPP") || a.nome.localeCompare(b.nome));
   return {
-    ano,
+    ano: todoPeriodo ? "todos" : anoRef,
+    anoRef,
     meses,
     macro: {
       divida: soma(ab),

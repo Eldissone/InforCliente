@@ -119,6 +119,8 @@ function resumo(e, hoje) {
     liquidado: pl.length > 0 && !prox,
     proxima: prox ? { d: prox.d, prest: prox.prest } : null,
     jurosTotais: round2(pl.reduce((s, p) => s + p.juro, 0)),
+    jurosPorPagar: e.state === "LIQUIDADO" ? 0 : round2(pl.filter((p) => p.d > hoje).reduce((s, p) => s + p.juro, 0)),
+    jurosPagos: round2(pl.filter((p) => p.d <= hoje).reduce((s, p) => s + p.juro, 0)),
     plano: pl,
   };
 }
@@ -126,10 +128,18 @@ function resumo(e, hoje) {
 /** E1 — os totais, uma moeda de cada vez. */
 function resumoE1(itens, moeda = "AOA") {
   const L = itens.filter((x) => x.categoria === "fin" && x.moeda === moeda && x.estado !== "LIQUIDADO");
+  const todosFin = itens.filter((x) => x.categoria === "fin" && x.moeda === moeda);
   const emp = L.filter((x) => x.plano.length);
   const proxs = emp.map((x) => x.proxima && { ...x.proxima, entidade: x.entidade }).filter(Boolean).sort((a, b) => a.d.localeCompare(b.d));
+  const divida = round2(L.reduce((s, x) => s + N(x.divida), 0));
+  const jurosPorPagar = round2(L.reduce((s, x) => s + N(x.jurosPorPagar), 0));
+  const seloPago = round2(todosFin.reduce((s, x) => s + N(x.jurosPagos) * 0.04, 0));
   return {
-    divida: round2(L.reduce((s, x) => s + N(x.divida), 0)),
+    divida,
+    jurosPorPagar,
+    totalPorPagar: round2(divida + jurosPorPagar),
+    prestacoesAtraso: 0,
+    impostoSeloPago: seloPago,
     linhasDisponivel: round2(L.filter((x) => x.disponivel !== null).reduce((s, x) => s + x.disponivel, 0)),
     n: L.length,
     proxima: proxs[0] || null,

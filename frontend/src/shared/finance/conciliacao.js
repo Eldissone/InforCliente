@@ -101,6 +101,7 @@ export function prepararPares(itens) {
 /** Conciliado? — a mesma leitura nos Extratos (T3). */
 export function conciliado(m) {
   if (m.movementType === TRF) return Boolean(m.transferCardId) || PARES.has(m.id);
+  if (!isIncoming(m) && m.reparticao?.partial) return false;
   if (!isIncoming(m) && m.purchaseOrderId) return true; // pago por um pedido do Centro de Pagamentos
   if (isIncoming(m)) {
     if (m.movementType === "OUTRO") return false;
@@ -148,6 +149,22 @@ function concCell(m, ed) {
     return `<span class="t2-pill t2-warnp">Por conciliar · indique a conta de ${isIncoming(m) ? "origem" : "destino"}</span>`;
   }
   if (!isIncoming(m) && m.purchaseOrderId) {
+    if (m.reparticao?.partial) {
+      const resumo = (m.reparticao.pedidos || []).map((p) => `${p.number}: ${fmt(p.amount)}`).join(" · ");
+      return `<div class="t2-conc" style="flex-wrap:wrap;gap:4px">
+        <span class="t2-pill t2-warnp" title="${esc(resumo)}">Parcial · falta ${fmt(m.reparticao.falta)}</span>
+        <span class="t3-small fx2-mut">${esc((m.reparticao.pedidos || []).map((p) => p.number).join(" · "))}</span>
+        ${ed ? `<button type="button" class="finance-btn finance-btn--sm" data-t2as="${esc(m.id)}" title="Conciliar o valor restante deste movimento">＋ Conciliar o Resto</button>` : ""}
+        ${ed ? `<button type="button" class="t2-mini" data-t2unlink="${esc(m.id)}" title="Desfazer a conciliação (os pagamentos registados nos pedidos ficam)">↺</button>` : ""}
+      </div>`;
+    }
+    if (m.reparticao && (m.reparticao.pedidos || []).length > 1) {
+      const resumo = m.reparticao.pedidos.map((p) => `${p.number} (${fmt(p.amount)})`).join(" · ");
+      return `<div class="t2-conc">
+        <span class="t2-pill t2-ok" title="${esc(resumo)}">✓ ${esc(m.reparticao.pedidos.map((p) => p.number).join(" + "))}</span>
+        ${ed ? ` <button type="button" class="t2-mini" data-t2unlink="${esc(m.id)}" title="Desfazer a conciliação">↺</button>` : ""}
+      </div>`;
+    }
     const p = m.pedido || {};
     return `<div class="t2-conc"><span class="t2-pill t2-ok" title="${esc([p.supplierName, p.description].filter(Boolean).join(" · "))}">✓ ${esc(p.number || "pedido")}</span>${p.supplierName ? ` <b class="t3-small">${esc(p.supplierName)}</b>` : ""}${
       ed ? ` <button type="button" class="t2-mini" data-t2unlink="${esc(m.id)}" title="Desfazer a conciliação (o pagamento registado no pedido fica)">↺</button>` : ""
@@ -201,7 +218,16 @@ function desenhar() {
   // Muitos movimentos: começa no mês mais recente (como no protótipo).
   if (S.mes === null) S.mes = M0.length > 300 ? meses[0] || "" : "";
   const q = norm(S.q).trim();
-  const qNum = /^[-+]?[\d\s.,]+$/.test(S.q || "") && String(S.q).replace(/\D/g, "").length >= 2 ? String(S.q).replace(/\D/g, "") : "";
+  const rawQ = String(S.q || "").trim();
+  const isNumQ = /^[-+]?[\d\s.,]+$/.test(rawQ) && rawQ.replace(/\D/g, "").length >= 2;
+  const qDigits = isNumQ ? rawQ.replace(/\D/g, "") : "";
+  const qVal = isNumQ ? Math.abs(Number(rawQ.replace(/\s+/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", "."))) : NaN;
+  const matchValor = (amt) => {
+    if (!isNumQ) return false;
+    const abs = Math.abs(Number(amt) || 0);
+    if (Number.isFinite(qVal) && Math.abs(abs - qVal) < 0.01) return true;
+    return abs.toFixed(2).replace(/\D/g, "").includes(qDigits) || String(Math.round(abs)).includes(qDigits);
+  };
   const noMes = (m) => !S.mes || dia(m).startsWith(S.mes);
   const L = M0.filter(
     (m) =>
@@ -209,8 +235,8 @@ function desenhar() {
       (!S.so || !conciliado(m)) &&
       (!S.tipo || (S.tipo === "__sem" ? m.movementType === "OUTRO" : m.movementType === S.tipo)) &&
       (!q ||
-        norm([m.description, m.notes, m.docNumber, m.supplier?.name, m.project?.name, m.project?.referencia, m.statement?.name].join(" ")).includes(q) ||
-        (qNum && Math.abs(Number(m.amount)).toFixed(2).replace(/\D/g, "").includes(qNum)))
+        norm([m.description, m.notes, m.docNumber, m.supplier?.name, m.project?.name, m.project?.referencia, m.statement?.name, m.pedido?.number].join(" ")).includes(q) ||
+        matchValor(m.amount))
   );
   const np = Math.ceil(L.length / POR_PAGINA) || 1;
   const pg = Math.min(S.pg, np - 1);

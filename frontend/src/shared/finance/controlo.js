@@ -229,7 +229,7 @@ function renderTable() {
     .sort((a, b) => sortValue(b) - sortValue(a));
 
   document.getElementById("ctrlHint").textContent =
-    `${rows.length} obras · esperado = orçamento de custo × avanço · resultado sem IVA`;
+    `${rows.length} obras · execução face ao orçamento de custo · margens sem IVA`;
 
   if (!rows.length) {
     wrap.innerHTML = `<div class="ov-empty ov-empty--lg"><span class="material-symbols-outlined">apartment</span>Sem obras para os filtros.</div>`;
@@ -239,6 +239,30 @@ function renderTable() {
   const body = rows
     .map((p) => {
       const cur = p.project.currency || "AOA";
+      const budget = num(p.forecastCost);
+      const realized = num(p.realizedCost);
+      const committed = num(p.committedCost);
+      const porGastar = budget > 0 ? budget - realized : null;
+      const execPct = budget > 0 ? (realized / budget) * 100 : null;
+      const sale = num(p.saleForecast);
+      const plannedCell =
+        sale > 0
+          ? `<div class="co-dev"><strong class="ov-${toneOf(p.plannedMargin)}">${esc(compact(p.plannedMargin))}</strong><small class="ov-muted">${esc(pct(p.plannedMarginPct))}</small></div>`
+          : `<span class="ov-muted">—</span>`;
+      const execCell =
+        execPct !== null
+          ? `<div class="ov-cell-bar">
+              <span>${esc(pct(execPct))}</span>
+              ${meter(
+                [
+                  { value: execPct, tone: execPct > 100 ? "red" : "blue" },
+                  { value: (committed / budget) * 100, tone: "amber-soft" },
+                ],
+                { marker: isTracked(p) ? p.progressPct : null, title: "Execução orçamental (marcador = avanço físico)" }
+              )}
+              <small>${p.progressSource && p.progressSource !== "SEM_AVANCO" ? `avanço ${esc(pct(p.progressPct, 0))}` : committed > 0 ? `+${esc(compact(committed))} compr.` : ""}</small>
+            </div>`
+          : progressCell(p);
       return `
       <tr>
         <td>
@@ -247,39 +271,49 @@ function renderTable() {
             <span class="ov-project-meta">${esc([p.project.referencia || p.project.code, p.project.client?.name].filter(Boolean).join(" · "))}</span>
           </div>
         </td>
-        <td>${progressCell(p)}</td>
+        <td class="fin-num">${budget > 0 ? esc(money(budget, cur)) : `<span class="ov-muted">—</span>`}</td>
         <td class="fin-num">${realizedCell(p, cur)}</td>
-        <td class="fin-num">${deviationCell(p)}</td>
-        <td class="fin-num">${eacCell(p, cur)}</td>
+        <td class="fin-num">${porGastar !== null ? `<strong class="ov-${porGastar < -0.005 ? "neg" : "muted"}">${esc(money(porGastar, cur))}</strong>` : `<span class="ov-muted">—</span>`}</td>
+        <td>${execCell}</td>
+        <td class="fin-num">${sale > 0 ? esc(money(sale, cur)) : `<span class="ov-muted">—</span>`}</td>
         <td class="fin-num">${revenueCell(p, cur)}</td>
+        <td class="fin-num">${plannedCell}</td>
         <td class="fin-num">${marginCell(p)}</td>
       </tr>`;
     })
     .join("");
 
   const sum = (fn) => rows.reduce((a, p) => a + fn(p), 0);
-  const tDev = sum((p) => (isTracked(p) ? num(p.deviationToDate) : 0));
+  const tBudget = sum((p) => num(p.forecastCost));
+  const tRealized = sum((p) => num(p.realizedCost));
+  const tPorGastar = sum((p) => (num(p.forecastCost) > 0 ? num(p.forecastCost) - num(p.realizedCost) : 0));
+  const tSale = sum((p) => num(p.saleForecast));
   const tRevenue = sum((p) => num(p.revenue));
+  const tPlanned = sum((p) => num(p.plannedMargin));
   const tResult = sum((p) => num(p.resultBase));
   wrap.innerHTML = `
     <table class="fin-table co-table ctrl-table">
       <thead><tr>
-        <th>Obra</th>
-        <th>Avanço</th>
-        <th style="text-align:right">Realizado</th>
-        <th style="text-align:right" title="Realizado − orçamento × avanço">Desvio à data</th>
-        <th style="text-align:right" title="Realizado + comprometido, nunca abaixo do orçamento">Custo final previsto</th>
+        <th>Centro de custo</th>
+        <th style="text-align:right">Custo previsto</th>
+        <th style="text-align:right">Custo realizado</th>
+        <th style="text-align:right">Por gastar</th>
+        <th>Execução</th>
+        <th style="text-align:right">Contrato</th>
         <th style="text-align:right">Faturado</th>
-        <th style="text-align:right" title="Faturado − custo realizado, sem IVA">Resultado</th>
+        <th style="text-align:right">Margem prevista</th>
+        <th style="text-align:right" title="Faturado − custo realizado, sem IVA">Margem atual</th>
       </tr></thead>
       <tbody>${body}</tbody>
       <tfoot><tr>
         <td>Totais (${rows.length} obras)</td>
-        <td></td>
-        <td class="fin-num">${esc(compact(sum((p) => num(p.realizedCost))))}</td>
-        <td class="fin-num ov-${costTone(tDev)}">${esc(signed(tDev))}</td>
-        <td class="fin-num">${esc(compact(sum((p) => num(p.eac))))}</td>
+        <td class="fin-num">${esc(compact(tBudget))}</td>
+        <td class="fin-num">${esc(compact(tRealized))}</td>
+        <td class="fin-num ov-${tPorGastar < -0.005 ? "neg" : "muted"}">${esc(compact(tPorGastar))}</td>
+        <td>${tBudget > 0 ? esc(pct((tRealized / tBudget) * 100)) : "—"}</td>
+        <td class="fin-num">${esc(compact(tSale))}</td>
         <td class="fin-num">${esc(compact(tRevenue))}</td>
+        <td class="fin-num ov-${toneOf(tPlanned)}">${esc(compact(tPlanned))}${tSale > 0 ? ` · ${esc(pct((tPlanned / tSale) * 100))}` : ""}</td>
         <td class="fin-num ov-${toneOf(tResult)}">${esc(compact(tResult))}${tRevenue > 0 ? ` · ${esc(pct((tResult / tRevenue) * 100))}` : ""}</td>
       </tr></tfoot>
     </table>`;

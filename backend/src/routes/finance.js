@@ -42,7 +42,8 @@ const DSB = require("../services/finance/dashboard");
 const TAX = require("../services/finance/taxes");
 const CARDS = require("../services/finance/cards");
 const FIN = require("../services/finance/financing");
-const { orderTotals: taxOrderTotals, derivedStatus: taxDerivedStatus } = require("../services/purchase/purchaseTotals");
+const PT = require("../services/purchase/purchaseTotals");
+const { orderTotals: taxOrderTotals, derivedStatus: taxDerivedStatus } = PT;
 const { planear } = require("../services/finance/autosPrevistos");
 
 /** Autos previstos (R3) com a forma dos autos, para a previsão de recebimentos. */
@@ -864,14 +865,37 @@ financeRoutes.get(
     const rows = await prisma.invoice.findMany({
       where,
       include: {
-        project: { select: { id: true, code: true, referencia: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
+        project: { select: { id: true, code: true, referencia: true, name: true, currency: true, budgetTotal: true, client: { select: { id: true, name: true, code: true } } } },
         client: { select: { id: true, name: true, code: true } },
         measurement: { select: { id: true, reportNumber: true, reportDate: true } },
       },
       orderBy: [{ docDate: "desc" }, { createdAt: "desc" }],
     });
 
-    const items = rows.map(mapInvoice);
+    // Acumulado % da obra por ordem cronológica dentro de cada obra (v639).
+    const cumByInvoice = new Map();
+    const byProj = new Map();
+    for (const r of rows) {
+      if (!r.projectId) continue;
+      if (!byProj.has(r.projectId)) byProj.set(r.projectId, []);
+      byProj.get(r.projectId).push(r);
+    }
+    for (const list of byProj.values()) {
+      list.sort((a, b) => new Date(a.docDate) - new Date(b.docDate) || new Date(a.createdAt) - new Date(b.createdAt));
+      let accGross = 0;
+      const sale = toNumber(list[0]?.project?.budgetTotal);
+      for (const r of list) {
+        accGross += toNumber(r.grossAmount);
+        cumByInvoice.set(r.id, sale > 0 ? round2((accGross / sale) * 100) : null);
+      }
+    }
+
+    const items = rows.map((r) => {
+      const m = mapInvoice(r);
+      const vatEff = m.flagVatCativo ? 0 : m.vatAmount;
+      const totalToLiquidate = round2(m.grossAmount + vatEff - m.carInsuranceAmount - m.guaranteeAmount);
+      return { ...m, totalToLiquidate, cumWorkPercent: cumByInvoice.get(r.id) ?? null };
+    });
     const filtered = status ? items.filter((i) => i.status === status) : items;
 
     // R1: recebido no mês corrente e autos aprovados ainda sem fatura («Previsto»).
@@ -1252,6 +1276,91 @@ financeRoutes.delete(
     await prisma.invoice.delete({ where: { id: invoice.id } });
     if (invoice.documentPath) await deleteStoredFile(invoice.documentPath).catch(() => null);
     return res.json({ ok: true });
+  })
+);
+
+/** R1 · Recibo único para várias faturas do mesmo cliente (v638/v639 `rcmul`). */
+financeRoutes.post(
+  "/invoices/bulk-receipts",
+  edit,
+  asyncHandler(async (req, res) => {
+    const body = z
+      .object({
+        receivedDate: z.string().min(1),
+        cardId: z.string().nullable().optional(),
+        cardLabel: z.string().nullable().optional(),
+        reference: z.string().min(1),
+        method: z.string().nullable().optional(),
+        lines: z
+          .array(
+            z.object({
+              invoiceId: z.string().min(1),
+              amount: z.number().positive(),
+            })
+          )
+          .min(1),
+      })
+      .parse(req.body);
+
+    const receivedDate = parseOptionalDate(body.receivedDate);
+    if (!receivedDate) return res.status(400).json({ error: "INVALID_DATE", message: "Data do recebimento inválida." });
+    if (receivedDate.getTime() > Date.now() + DAY_MS) {
+      return res.status(400).json({ error: "FUTURE_DATE", message: "A data do recebimento não pode ser futura." });
+    }
+
+    const ids = [...new Set(body.lines.map((l) => l.invoiceId))];
+    const invoices = await prisma.invoice.findMany({
+      where: { id: { in: ids } },
+      include: { project: { select: { clientId: true, client: { select: { name: true } } } }, client: { select: { id: true, name: true } } },
+    });
+    if (invoices.length !== ids.length) {
+      return res.status(404).json({ error: "INVOICE_NOT_FOUND", message: "Uma ou mais faturas não foram encontradas." });
+    }
+
+    const clientKeys = new Set(invoices.map((i) => i.clientId || i.project?.clientId || i.client?.name || i.project?.client?.name || i.id));
+    if (clientKeys.size > 1) {
+      return res.status(400).json({ error: "DIFFERENT_CLIENTS", message: "As faturas de um recibo único têm de ser do mesmo cliente." });
+    }
+
+    const invMap = new Map(invoices.map((i) => [i.id, i]));
+    for (const line of body.lines) {
+      const inv = invMap.get(line.invoiceId);
+      const net = toNumber(inv.netAmount ?? inv.grossAmount) - toNumber(inv.creditedAmount);
+      const missing = round2(net - toNumber(inv.receivedAmount));
+      if (line.amount > missing + 0.5) {
+        return res.status(400).json({
+          error: "RECEIPT_EXCEEDS_MISSING",
+          message: `${inv.docNumber || "Fatura"}: valor recebido (${line.amount}) maior do que falta (${missing}).`,
+        });
+      }
+    }
+
+    const grp = `rc_${Date.now().toString(36)}`;
+    const totalReceipt = round2(body.lines.reduce((s, l) => s + l.amount, 0));
+    const actor = req.user?.name || req.user?.email || null;
+    const noteText = [`RC ${body.reference.trim()}`, body.cardLabel, `recibo único (${body.lines.length} fat. · total ${totalReceipt})`, `[${grp}]`]
+      .filter(Boolean)
+      .join(" · ");
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const out = [];
+      for (const line of body.lines) {
+        await tx.invoiceReceipt.create({
+          data: {
+            invoiceId: line.invoiceId,
+            amount: round2(line.amount),
+            receivedDate,
+            method: body.method || "Transferência",
+            notes: noteText,
+            createdBy: actor,
+          },
+        });
+        out.push(await syncInvoiceReceived(tx, line.invoiceId));
+      }
+      return out;
+    });
+
+    return res.status(201).json({ ok: true, count: updated.length, total: totalReceipt, items: updated.map(mapInvoice) });
   })
 );
 
@@ -2396,12 +2505,38 @@ async function loadCalendarItems(hoje, ledgerArg) {
       estado: l.estado === "Atrasado" ? "atr" : "abe",
       link: "/Financeiro/impostos",
     }));
+  // Notas de débito e saldos iniciais de fornecedor (v625) entram no Mapa de Obrigações / Calendário.
+  const ncfRow = await prisma.companySetting.findUnique({ where: { key: "fornecedores.notas_saldos" } }).catch(() => null);
+  const ncfItems = (Array.isArray(ncfRow?.value) ? ncfRow.value : [])
+    .filter((x) => (x.tipo === "ND" || x.tipo === "SI") && toNumber(x.valor) > 0)
+    .map((x) => {
+      const data = String(x.venc || x.data || hoje).slice(0, 10);
+      const doc = x.tipo === "SI" ? `Saldo Inicial${x.num ? ` ${x.num}` : ""}` : `ND ${x.num || "(por receber)"}`;
+      return {
+        id: `NCF:${x.id}`,
+        lado: "P",
+        data,
+        estimada: false,
+        valor: round2(toNumber(x.valor)),
+        valorOriginal: round2(toNumber(x.valor)),
+        moeda: String(x.moeda || "AOA").toUpperCase(),
+        supplierId: x.fornecedorId || null,
+        entidade: x.fornecedor || "—",
+        doc,
+        sub: x.motivo || "",
+        grupo: "Fornecedores",
+        estado: data < hoje ? "atr" : "abe",
+        link: `/compras/conta-corrente-fornecedores?fornecedor=${encodeURIComponent(x.fornecedorId ? `id:${x.fornecedorId}` : `nome:${String(x.fornecedor || "").toLowerCase()}`)}`,
+      };
+    });
+
   return {
     itens: [
       ...FCAL.fromPayables(payables, hoje),
       ...FCAL.fromReceivables(receivables, hoje),
       ...FCAL.fromOpenMeasurements([...autos, ...previstos], hoje, DEFAULT_INVOICE_TERM_DAYS),
       ...impostos,
+      ...ncfItems,
     ],
     fontes: { pagar: payables.length, faturas: receivables.length, autos: autos.length, impostos: impostos.length },
   };
@@ -2554,16 +2689,30 @@ async function loadTaxes(hoje) {
         requestType: true,
         createdAt: true,
         paymentPlan: { select: { installments: { select: { amount: true, dueDate: true, status: true } } } },
+        requisition: { select: { attachments: { select: { id: true, fileName: true, url: true } } } },
       },
     }),
     prisma.taxPaymentPlan.findMany({ orderBy: { name: "asc" } }),
   ]);
+  const estRow = await prisma.companySetting.findUnique({ where: { key: "impostos.planos_estado" } });
+  const estMap = estRow && estRow.value && typeof estRow.value === "object" && !Array.isArray(estRow.value) ? estRow.value : {};
+  const planosEnriched = planos.map((p) => ({ ...p, situacaoAdmin: estMap[p.id] || null }));
   const agora = new Date(`${hoje}T12:00:00`);
   const pedidos = pedidosRaw
-    .map((o) => ({ ...o, estado: taxDerivedStatus(o, agora).code, total: taxOrderTotals(o).total }))
+    .map((o) => {
+      const compAtt = (o.requisition?.attachments || []).find((a) =>
+        String(a.fileName || "").toLowerCase().includes("comprovativo")
+      );
+      return {
+        ...o,
+        estado: taxDerivedStatus(o, agora).code,
+        total: taxOrderTotals(o).total,
+        comprovativo: compAtt ? { path: compAtt.url, nome: compAtt.fileName || "comprovativo" } : null,
+      };
+    })
     .filter((o) => !["CANCELADO", "REJEITADO", "ELIMINADO"].includes(o.estado));
   const obs = obrigacoes.map((o) => ({ ...o, plan: o.plan ? { ...o.plan, n: o.plan._count.installments } : null }));
-  return { linhas: TAX.linhasImpostos({ obrigacoes: obs, pedidos, hoje }), planos };
+  return { linhas: TAX.linhasImpostos({ obrigacoes: obs, pedidos, hoje }), planos: planosEnriched };
 }
 
 /** G1 Impostos — todas as linhas; o ecrã filtra por mês, grupo, estado e plano. */
@@ -2701,12 +2850,21 @@ financeRoutes.get(
     const hoje = todayKeyLocal();
     const { linhas, planos } = await loadTaxes(hoje);
     const resumos = planos.map((p) => TAX.resumoPlano(p, linhas.filter((l) => l.plano?.id === p.id), hoje));
-    const ativos = resumos.filter((r) => r.falta > 0.5);
+    const ativos = resumos.filter((r) => r.falta > 0.5 && r.estado !== "Cancelado AGT");
+    const emExecucao = resumos.filter((r) => r.estado === "Em execução").length;
+    const cancelados = resumos.filter((r) => r.estado === "Cancelado AGT").length;
     const prox = ativos.map((r) => r.proxima && { ...r.proxima, plano: r.nome }).filter(Boolean).sort((a, b) => (a.limite || "9").localeCompare(b.limite || "9"))[0] || null;
     return res.json({
       hoje,
       planos: resumos,
-      resumo: { ativos: ativos.length, divida: Math.round(ativos.reduce((s, r) => s + r.falta, 0) * 100) / 100, proxima: prox, atrasadas: resumos.reduce((s, r) => s + r.atrasadas, 0) },
+      resumo: {
+        ativos: ativos.length,
+        emExecucao,
+        cancelados,
+        divida: Math.round(ativos.reduce((s, r) => s + r.falta, 0) * 100) / 100,
+        proxima: prox,
+        atrasadas: resumos.reduce((s, r) => s + r.atrasadas, 0),
+      },
     });
   })
 );
@@ -2759,18 +2917,33 @@ financeRoutes.post(
   })
 );
 
-/** G2 › editar o plano (nome, processo, imposto, notas). As prestações editam-se uma a uma em G1. */
+/** G2 › editar o plano (nome, processo, imposto, notas, situacao). As prestações editam-se uma a uma em G1. */
 financeRoutes.patch(
   "/tax-plans/:id",
   edit,
   asyncHandler(async (req, res) => {
-    const b = planBody.pick({ nome: true, processo: true, imposto: true, notas: true }).partial().parse(req.body);
+    const b = planBody
+      .pick({ nome: true, processo: true, imposto: true, notas: true })
+      .extend({ situacao: z.enum(["ATIVO", "EM_EXECUCAO", "CANCELADO_AGT"]).optional() })
+      .partial()
+      .parse(req.body);
     const data = {};
     if (b.nome !== undefined) data.name = b.nome;
     if (b.processo !== undefined) data.reference = b.processo || null;
     if (b.imposto !== undefined) data.taxType = b.imposto || null;
     if (b.notas !== undefined) data.notes = b.notas || null;
     const p = await prisma.taxPaymentPlan.update({ where: { id: String(req.params.id) }, data });
+    if (b.situacao !== undefined) {
+      const estRow = await prisma.companySetting.findUnique({ where: { key: "impostos.planos_estado" } });
+      const estMap = estRow && estRow.value && typeof estRow.value === "object" && !Array.isArray(estRow.value) ? { ...estRow.value } : {};
+      if (b.situacao === "ATIVO") delete estMap[p.id];
+      else estMap[p.id] = b.situacao;
+      await prisma.companySetting.upsert({
+        where: { key: "impostos.planos_estado" },
+        create: { key: "impostos.planos_estado", value: estMap },
+        update: { value: estMap },
+      });
+    }
     return res.json({ id: p.id });
   })
 );
@@ -2824,13 +2997,14 @@ financeRoutes.get(
   })
 );
 
-/** G4 Mapa Fiscal (`?ano=`). */
+/** G4 Mapa Fiscal (`?ano=` ou `?ano=todos`). */
 financeRoutes.get(
   "/taxes/map",
   view,
   asyncHandler(async (req, res) => {
     const hoje = todayKeyLocal();
-    const ano = /^\d{4}$/.test(String(req.query.ano || "")) ? Number(req.query.ano) : Number(hoje.slice(0, 4));
+    const rawAno = String(req.query.ano || "");
+    const ano = rawAno === "todos" ? "todos" : /^\d{4}$/.test(rawAno) ? Number(rawAno) : Number(hoje.slice(0, 4));
     const { linhas, planos } = await loadTaxes(hoje);
     return res.json({ hoje, ...TAX.mapaFiscal({ linhas, planos, ano, hoje }) });
   })
@@ -3234,19 +3408,64 @@ financeRoutes.delete(
   })
 );
 
-/** T6 — o histórico das alocações. */
+/** T6 — o histórico das alocações (com dias, carregado e gasto no período). */
 financeRoutes.get(
   "/card-allocations",
   view,
   asyncHandler(async (_req, res) => {
     const items = await prisma.cardAllocation.findMany({
       include: {
-        card: { select: { id: true, label: true, bank: true, lastDigits: true, type: true } },
+        card: { select: { id: true, label: true, bank: true, lastDigits: true, type: true, expiresAt: true } },
         project: { select: { id: true, code: true, name: true } },
       },
       orderBy: [{ startDate: "desc" }],
     });
-    return res.json({ items });
+    const cardIds = [...new Set(items.map((a) => a.cardId).filter(Boolean))];
+    const [movBanco, movFundo] = cardIds.length
+      ? await Promise.all([
+          prisma.bankMovement.findMany({
+            where: { cardId: { in: cardIds }, movementType: { not: "OPERACAO_ANULADA" } },
+            select: { cardId: true, direction: true, amount: true, movementDate: true },
+          }),
+          prisma.pettyCashMovement.findMany({
+            where: { cardId: { in: cardIds } },
+            select: { cardId: true, type: true, amount: true, createdAt: true },
+          }),
+        ])
+      : [[], []];
+    const hoje = new Date().toISOString().slice(0, 10);
+    const enriched = items.map((a) => {
+      const ini = a.startDate ? a.startDate.toISOString().slice(0, 10) : "";
+      const fim = a.endDate ? a.endDate.toISOString().slice(0, 10) : null;
+      const fimRef = fim || hoje;
+      const dias = ini ? Math.max(0, Math.round((new Date(fimRef) - new Date(ini)) / 86400000)) : 0;
+      const mb = movBanco.filter((m) => {
+        if (m.cardId !== a.cardId) return false;
+        const d = m.movementDate ? m.movementDate.toISOString().slice(0, 10) : "";
+        return d >= ini && (fim ? d <= fim : d <= hoje);
+      });
+      const mf = movFundo.filter((m) => {
+        if (m.cardId !== a.cardId) return false;
+        const d = m.createdAt ? m.createdAt.toISOString().slice(0, 10) : "";
+        return d >= ini && (fim ? d <= fim : d <= hoje);
+      });
+      const carregado = round2(
+        mb.filter((m) => m.direction === "ENTRADA").reduce((s, m) => s + toNumber(m.amount), 0) +
+          mf.filter((m) => m.type === "CREDITO").reduce((s, m) => s + toNumber(m.amount), 0)
+      );
+      const gasto = round2(
+        mb.filter((m) => m.direction === "SAIDA").reduce((s, m) => s + toNumber(m.amount), 0) +
+          mf.filter((m) => m.type === "DEBITO").reduce((s, m) => s + toNumber(m.amount), 0)
+      );
+      return {
+        ...a,
+        dias,
+        carregado,
+        gasto,
+        movimentosCount: mb.length + mf.length,
+      };
+    });
+    return res.json({ items: enriched });
   })
 );
 
@@ -3511,18 +3730,155 @@ financeRoutes.post(
   })
 );
 
-/** E4 Distribuição aos Sócios. */
+/** E4 Distribuição aos Sócios (quotas, distribuições, empréstimos a sócios e extrato). */
 financeRoutes.get(
   "/partners",
   view,
   asyncHandler(async (_req, res) => {
-    const [dist, pags] = await Promise.all([
+    const [dist, pags, quotasRow, loansRow] = await Promise.all([
       prisma.profitDistribution.findMany({ orderBy: { date: "desc" } }),
       prisma.distributionPayment.findMany({ orderBy: { date: "desc" } }),
+      prisma.companySetting.findUnique({ where: { key: "socios.quotas" } }),
+      prisma.companySetting.findUnique({ where: { key: "socios.emprestimos" } }),
     ]);
-    const distribuicoes = dist.map((d) => ({ id: d.id, data: d.date.toISOString().slice(0, 10), exercicio: d.exercise, descricao: d.description, total: toNumber(d.total), iacPct: d.iacPct === null ? 10 : toNumber(d.iacPct), parts: Array.isArray(d.parts) ? d.parts : [] }));
-    const pagamentos = pags.map((p) => ({ id: p.id, socio: p.partner, tipo: p.kind, data: p.date.toISOString().slice(0, 10), valor: toNumber(p.amount), notas: p.notes }));
-    return res.json({ distribuicoes, pagamentos, ...FIN.distribuicaoSocios(distribuicoes, pagamentos) });
+    const quotas = Array.isArray(quotasRow?.value) ? quotasRow.value : [];
+    const emprestimos = Array.isArray(loansRow?.value) ? loansRow.value : [];
+    const distribuicoes = dist.map((d) => ({
+      id: d.id,
+      data: d.date.toISOString().slice(0, 10),
+      exercicio: d.exercise,
+      descricao: d.description,
+      total: toNumber(d.total),
+      iacPct: d.iacPct === null ? 10 : toNumber(d.iacPct),
+      parts: Array.isArray(d.parts) ? d.parts : [],
+    }));
+    const pagamentos = pags.map((p) => ({
+      id: p.id,
+      socio: p.partner,
+      tipo: p.kind,
+      data: p.date.toISOString().slice(0, 10),
+      valor: toNumber(p.amount),
+      notas: p.notes,
+    }));
+    const base = FIN.distribuicaoSocios(distribuicoes, pagamentos);
+    const quotaByName = new Map(quotas.map((q) => [String(q.nome || "").trim().toLowerCase(), Number(q.quota) || 0]));
+    const sociosMap = new Map(base.socios.map((s) => [s.socio.toLowerCase(), { ...s, quota: quotaByName.get(s.socio.toLowerCase()) ?? null }]));
+    for (const q of quotas) {
+      const k = String(q.nome || "").trim().toLowerCase();
+      if (k && !sociosMap.has(k)) {
+        sociosMap.set(k, {
+          socio: String(q.nome).trim(),
+          quota: Number(q.quota) || 0,
+          bruto: 0,
+          iac: 0,
+          liquido: 0,
+          pago: 0,
+          iacPago: 0,
+          remanescente: 0,
+        });
+      }
+    }
+    const socios = [...sociosMap.values()].sort((a, b) => (b.quota || 0) - (a.quota || 0) || b.bruto - a.bruto);
+    return res.json({
+      quotas,
+      emprestimos,
+      distribuicoes,
+      pagamentos,
+      ...base,
+      socios,
+    });
+  })
+);
+
+financeRoutes.put(
+  "/partners/quotas",
+  edit,
+  asyncHandler(async (req, res) => {
+    const b = z
+      .object({
+        quotas: z.array(z.object({ nome: z.string().trim().min(2).max(160), quota: z.number().min(0).max(100) })),
+      })
+      .parse(req.body);
+    const soma = b.quotas.reduce((s, q) => s + q.quota, 0);
+    if (b.quotas.length > 0 && Math.abs(soma - 100) > 0.05) {
+      return res.status(400).json({ error: "QUOTAS_SUM", message: `As quotas somam ${soma}%: têm de somar 100%.` });
+    }
+    await prisma.companySetting.upsert({
+      where: { key: "socios.quotas" },
+      create: { key: "socios.quotas", value: b.quotas },
+      update: { value: b.quotas },
+    });
+    return res.json({ ok: true, quotas: b.quotas });
+  })
+);
+
+financeRoutes.post(
+  "/partners/loans",
+  edit,
+  asyncHandler(async (req, res) => {
+    const b = z
+      .object({
+        socio: z.string().trim().min(2).max(160),
+        data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        valor: z.number().positive(),
+        devolvido: z.number().min(0).optional().default(0),
+        ata: z.string().trim().max(120).nullable().optional(),
+        notas: z.string().trim().max(500).nullable().optional(),
+      })
+      .parse(req.body);
+    const row = await prisma.companySetting.findUnique({ where: { key: "socios.emprestimos" } });
+    const list = Array.isArray(row?.value) ? [...row.value] : [];
+    const item = {
+      id: `emp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      socio: b.socio,
+      data: b.data,
+      valor: round2(b.valor),
+      devolvido: round2(b.devolvido || 0),
+      ata: b.ata || null,
+      notas: b.notas || null,
+      createdAt: new Date().toISOString(),
+    };
+    list.unshift(item);
+    await prisma.companySetting.upsert({
+      where: { key: "socios.emprestimos" },
+      create: { key: "socios.emprestimos", value: list },
+      update: { value: list },
+    });
+    return res.status(201).json({ item });
+  })
+);
+
+financeRoutes.patch(
+  "/partners/loans/:id",
+  edit,
+  asyncHandler(async (req, res) => {
+    const b = z.object({ devolvido: z.number().min(0), ata: z.string().trim().max(120).nullable().optional() }).parse(req.body);
+    const row = await prisma.companySetting.findUnique({ where: { key: "socios.emprestimos" } });
+    const list = Array.isArray(row?.value) ? [...row.value] : [];
+    const idx = list.findIndex((x) => x.id === req.params.id);
+    if (idx < 0) return res.status(404).json({ error: "NOT_FOUND" });
+    list[idx] = { ...list[idx], devolvido: round2(b.devolvido), ...(b.ata !== undefined ? { ata: b.ata || null } : {}) };
+    await prisma.companySetting.upsert({
+      where: { key: "socios.emprestimos" },
+      create: { key: "socios.emprestimos", value: list },
+      update: { value: list },
+    });
+    return res.json({ item: list[idx] });
+  })
+);
+
+financeRoutes.delete(
+  "/partners/loans/:id",
+  edit,
+  asyncHandler(async (req, res) => {
+    const row = await prisma.companySetting.findUnique({ where: { key: "socios.emprestimos" } });
+    const list = (Array.isArray(row?.value) ? row.value : []).filter((x) => x.id !== req.params.id);
+    await prisma.companySetting.upsert({
+      where: { key: "socios.emprestimos" },
+      create: { key: "socios.emprestimos", value: list },
+      update: { value: list },
+    });
+    return res.json({ ok: true });
   })
 );
 
@@ -4114,18 +4470,72 @@ financeRoutes.get(
         code: true,
         name: true,
         currency: true,
-        pettyCashFunds: { select: { name: true, cards: { select: { label: true, lastDigits: true, currentBalance: true, active: true } } } },
+        pettyCashFunds: { select: { name: true, cards: { select: { id: true, bank: true, label: true, lastDigits: true, responsibleName: true, currentBalance: true, active: true } } } },
       },
     });
     if (!projeto) return res.status(404).json({ error: "NOT_FOUND", errors: ["Obra não encontrada."] });
     const data = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || "")) ? String(v) : undefined);
     const ledger = await buildCostLedger();
-    const cash = await loadProjectCash(ledger, [id]);
-    const cartoes = projeto.pettyCashFunds.flatMap((f) => f.cards.filter((c) => c.active));
+    const [cash, alocs] = await Promise.all([
+      loadProjectCash(ledger, [id]),
+      prisma.cardAllocation.findMany({
+        where: { projectId: id },
+        include: { card: { select: { id: true, bank: true, label: true, lastDigits: true, currentBalance: true, active: true } } },
+        orderBy: [{ startDate: "desc" }],
+      }),
+    ]);
+    const fundCards = projeto.pettyCashFunds.flatMap((f) => f.cards.filter((c) => c.active));
+    const cardMap = new Map();
+    for (const c of fundCards) cardMap.set(c.id, { card: c, responsavel: c.responsibleName || null, inicio: null, fim: null });
+    for (const a of alocs) {
+      if (!a.card) continue;
+      if (!cardMap.has(a.card.id) || !a.endDate) {
+        cardMap.set(a.card.id, {
+          card: a.card,
+          responsavel: a.responsible || null,
+          inicio: a.startDate ? a.startDate.toISOString().slice(0, 10) : null,
+          fim: a.endDate ? a.endDate.toISOString().slice(0, 10) : null,
+        });
+      }
+    }
+    const allCardIds = [...cardMap.keys()];
+    const [mb, mf] = allCardIds.length
+      ? await Promise.all([
+          prisma.bankMovement.findMany({
+            where: { cardId: { in: allCardIds }, movementType: { not: "OPERACAO_ANULADA" } },
+            select: { cardId: true, direction: true, amount: true },
+          }),
+          prisma.pettyCashMovement.findMany({
+            where: { cardId: { in: allCardIds } },
+            select: { cardId: true, type: true, amount: true },
+          }),
+        ])
+      : [[], []];
+    const fundoManeioObra = [...cardMap.values()].map(({ card: c, responsavel, inicio, fim }) => {
+      const carregado = round2(
+        mb.filter((m) => m.cardId === c.id && m.direction === "ENTRADA").reduce((s, m) => s + toNumber(m.amount), 0) +
+          mf.filter((m) => m.cardId === c.id && m.type === "CREDITO").reduce((s, m) => s + toNumber(m.amount), 0)
+      );
+      const gasto = round2(
+        mb.filter((m) => m.cardId === c.id && m.direction === "SAIDA").reduce((s, m) => s + toNumber(m.amount), 0) +
+          mf.filter((m) => m.cardId === c.id && m.type === "DEBITO").reduce((s, m) => s + toNumber(m.amount), 0)
+      );
+      return {
+        id: c.id,
+        nome: [c.bank, c.label, c.lastDigits ? `•${c.lastDigits}` : ""].filter(Boolean).join(" "),
+        digitos: c.lastDigits,
+        responsavel,
+        inicio,
+        fim,
+        carregado,
+        gasto,
+        saldo: round2(toNumber(c.currentBalance)),
+      };
+    });
     return res.json({
       obra: { id: projeto.id, codigo: projeto.code, nome: projeto.name, moeda: projeto.currency || "AOA" },
-      cartoes: cartoes.map((c) => ({ nome: c.label, digitos: c.lastDigits, saldo: toNumber(c.currentBalance) })),
-      saldoCartoes: round2(cartoes.reduce((s, c) => s + toNumber(c.currentBalance), 0)),
+      cartoes: fundoManeioObra,
+      saldoCartoes: round2(fundoManeioObra.reduce((s, c) => s + c.saldo, 0)),
       ...cashOf(cash, id, { de: data(req.query.de), ate: data(req.query.ate) }, projeto.currency || "AOA"),
     });
   })
@@ -4634,7 +5044,7 @@ financeRoutes.get(
   "/payment-center",
   view,
   asyncHandler(async (_req, res) => {
-    const [payables, generalExtras, generalPurchases, receivables, balances, schedule, reinforcements, paid] = await Promise.all([
+    const [payables, generalExtras, generalPurchases, receivables, balances, schedule, reinforcements, paid, rawOrders, bankMoves] = await Promise.all([
       buildPayables(),
       loadGeneralExtraPayables(),
       loadGeneralPurchasePayables(),
@@ -4655,7 +5065,124 @@ financeRoutes.get(
         },
       }),
       loadRecentPayments(30),
+      prisma.purchaseOrder.findMany({
+        where: { deletedAt: null, type: "PEDIDO" },
+        orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
+        take: 1500,
+        include: {
+          items: { orderBy: { order: "asc" } },
+          supplier: { select: { id: true, name: true, nif: true, iban: true, bankAccounts: { select: { iban: true, bankName: true, isPrimary: true } } } },
+          pettyCashFund: { select: { id: true, name: true, currency: true } },
+          project: { select: { id: true, name: true, code: true, referencia: true } },
+          costCenter: { select: { id: true, name: true, code: true, currency: true } },
+          requisition: { include: { attachments: true } },
+          approvals: { orderBy: { decidedAt: "desc" } },
+          paymentPlan: { include: { installments: { orderBy: { number: "asc" } } } },
+          history: { orderBy: { createdAt: "asc" } },
+        },
+      }),
+      prisma.bankMovement.findMany({
+        where: { purchaseOrderId: { not: null } },
+        select: { id: true, purchaseOrderId: true, movementDate: true, amount: true, description: true, card: { select: { id: true, label: true, bank: true, lastDigits: true } } },
+      }),
     ]);
+
+    const movesByOrder = new Map();
+    bankMoves.forEach((m) => {
+      if (!m.purchaseOrderId) return;
+      if (!movesByOrder.has(m.purchaseOrderId)) movesByOrder.set(m.purchaseOrderId, []);
+      movesByOrder.get(m.purchaseOrderId).push({
+        id: m.id,
+        date: m.movementDate,
+        amount: toNumber(m.amount),
+        description: m.description,
+        card: m.card,
+      });
+    });
+
+    const orders = rawOrders.map((o) => {
+      const dec = PT.decorateOrder(o);
+      const bankAcc = (o.supplier?.bankAccounts || []).find((a) => a.isPrimary) || o.supplier?.bankAccounts?.[0] || null;
+      const ibanNote = String(o.notes || "").match(/IBAN fornecedor:\s*(\S+)/i)?.[1] || null;
+      const bankNote = String(o.notes || "").match(/Banco:\s*(.+)/i)?.[1]?.trim() || null;
+      const iban = ibanNote || o.supplier?.iban || bankAcc?.iban || o.typeData?.iban || null;
+      const bankName = bankNote || bankAcc?.bankName || null;
+      const dueKey = dec.dueDate ? toDateKeyUtc(dec.dueDate) : null;
+      return {
+        id: o.id,
+        number: o.number,
+        createdAt: o.createdAt,
+        dueDate: dec.dueDate,
+        dueKey,
+        daysLate: dec.status === "PAGO" ? 0 : daysPastDue(dec.dueDate),
+        requestType: o.requestType || (o.projectId ? "OBRA" : "SEDE"),
+        paymentMode: o.paymentMode || "FORN",
+        paymentTerm: o.paymentTerm || "PRONTO",
+        creditDays: o.creditDays,
+        requiresQuote: Boolean(o.requiresQuote),
+        onHold: Boolean(o.onHold),
+        holdReason: o.holdReason || null,
+        status: o.status,
+        derivedStatus: dec.status,
+        derivedStatusLabel: dec.statusLabel,
+        derivedStatusSeverity: dec.statusSeverity,
+        currency: o.currency || "AOA",
+        totals: dec.totals,
+        paidAmount: dec.paid,
+        payable: Math.max(0, dec.outstanding),
+        beneficiary: dec.beneficiary,
+        benefNome: o.typeData?.benefNome || null,
+        supplierId: o.supplierId,
+        supplierName: o.supplierName || o.supplier?.name || null,
+        supplierNif: o.supplier?.nif || null,
+        iban,
+        bankName,
+        shortDescription: dec.shortDescription,
+        description: o.description,
+        notes: o.notes,
+        requestedBy: o.requestedByName || null,
+        requestedById: o.requestedById || null,
+        project: o.project,
+        costCenter: o.costCenter,
+        fund: o.pettyCashFund,
+        typeData: o.typeData || {},
+        documents: dec.documents,
+        attachments: (o.requisition?.attachments || []).map((a) => ({
+          id: a.id,
+          fileName: a.fileName,
+          url: a.url,
+          uploadedAt: a.createdAt,
+          uploadedByName: a.uploadedByName,
+        })),
+        items: (o.items || []).map((it) => ({
+          id: it.id,
+          code: it.code || null,
+          name: it.name,
+          unit: it.unit,
+          notes: it.notes,
+          quantity: toNumber(it.quantity),
+          unitPrice: toNumber(it.unitPrice),
+          vatPercent: toNumber(it.vatPercent),
+          withholdingPercent: toNumber(it.withholdingPercent),
+          discountPercent: toNumber(it.discountPercent),
+          docException: it.docException || null,
+          lineSupplierName: it.lineSupplierName || null,
+          lineTotals: PT.lineTotals(it),
+        })),
+        installments: (o.paymentPlan?.installments || []).map((inst) => ({
+          id: inst.id,
+          number: inst.number,
+          amount: toNumber(inst.amount),
+          dueDate: inst.dueDate,
+          paidAt: inst.paidAt,
+          status: inst.status,
+          notes: inst.notes || null,
+        })),
+        approvals: o.approvals || [],
+        history: o.history || [],
+        bankMovements: movesByOrder.get(o.id) || [],
+      };
+    });
 
     const items = [...payables, ...generalExtras, ...generalPurchases].sort(
       (a, b) => (a.dueDate ? new Date(a.dueDate) : Infinity) - (b.dueDate ? new Date(b.dueDate) : Infinity)
@@ -4696,6 +5223,7 @@ financeRoutes.get(
     return res.json({
       today: startOfToday(),
       balances,
+      orders,
       items,
       schedule: scheduleItems,
       approvals,
@@ -5409,7 +5937,16 @@ financeRoutes.get(
       take: Math.min(Math.max(Number(req.query.limit) || 500, 1), 20000),
     });
     const ids = items.map((m) => m.id);
-    const pedidoIds = [...new Set(items.map((m) => m.purchaseOrderId).filter(Boolean))];
+    const repRow = await prisma.companySetting.findUnique({ where: { key: "conciliacao.reparticoes" } });
+    const repMap = repRow && repRow.value && typeof repRow.value === "object" && !Array.isArray(repRow.value) ? repRow.value : {};
+    const repOrderIds = [];
+    for (const id of ids) {
+      const rep = repMap[id];
+      if (rep && rep.aloc && typeof rep.aloc === "object") {
+        repOrderIds.push(...Object.keys(rep.aloc));
+      }
+    }
+    const pedidoIds = [...new Set([...items.map((m) => m.purchaseOrderId).filter(Boolean), ...repOrderIds])];
     const [costs, receipts, pedidos] = await Promise.all([
       loadMovementCosts(ids),
       loadMovementReceipts(ids),
@@ -5422,10 +5959,32 @@ financeRoutes.get(
     ]);
     const porPedido = new Map(pedidos.map((o) => [o.id, o]));
     return res.json({
-      items: items.map((m) => ({
-        ...withMovementReceipts(withMovementCosts(m, costs), receipts),
-        pedido: m.purchaseOrderId ? porPedido.get(m.purchaseOrderId) || { id: m.purchaseOrderId } : null,
-      })),
+      items: items.map((m) => {
+        const rep = repMap[m.id];
+        let reparticao = null;
+        if (rep && rep.aloc && typeof rep.aloc === "object") {
+          const pedidosRep = Object.entries(rep.aloc)
+            .filter(([, v]) => Number(v) > 0.005)
+            .map(([oid, v]) => {
+              const p = porPedido.get(oid) || { id: oid };
+              return { id: oid, number: p.number || oid, supplierName: p.supplierName || null, amount: round2(v) };
+            });
+          const totalAlocado = round2(pedidosRep.reduce((s, p) => s + p.amount, 0));
+          const falta = Math.max(0, round2(toNumber(m.amount) - totalAlocado));
+          reparticao = {
+            aloc: rep.aloc,
+            pedidos: pedidosRep,
+            totalAlocado,
+            falta,
+            partial: Boolean(rep.partial) && falta > 0.5,
+          };
+        }
+        return {
+          ...withMovementReceipts(withMovementCosts(m, costs), receipts),
+          pedido: m.purchaseOrderId ? porPedido.get(m.purchaseOrderId) || { id: m.purchaseOrderId } : null,
+          reparticao,
+        };
+      }),
     });
   })
 );

@@ -1,15 +1,10 @@
 /**
- * O3 Tesouraria da Obra — o `tesHtml` do protótipo.
- *
- * O que entrou e saiu de dinheiro numa obra: recebimentos do cliente,
- * pagamentos feitos pela conta principal e transferências para os cartões de
- * fundo de maneio. O saldo diz se a obra está a crédito ou se a empresa a está
- * a financiar. Os gastos com os cartões aparecem à parte: já saíram da conta
- * principal na transferência.
+ * O3 Tesouraria da Obra — alinhado com `tesHtml` do protótipo:
+ * inclui os KPIs de cartões e o quadro «Fundo de Maneio da Obra».
  */
 
 import { apiRequest } from "../../services/api.js";
-import { esc, fmt, codigoNoCabecalho, kpis, vazio, erro } from "./f2Ui.js";
+import { esc, fmt, fmtData, codigoNoCabecalho, kpis, vazio, erro } from "./f2Ui.js";
 import { MESES } from "./calendarioCore.js";
 import { carregarObras, obraDoEndereco, gravarObra, obraSelect } from "./obraEscolha.js";
 
@@ -28,8 +23,10 @@ function desenhar() {
   </div>`;
   if (!S.obra) return (el.innerHTML = filtros + vazio("Escolha uma obra."));
   if (S.carregando || !S.d) return (el.innerHTML = filtros + vazio("A carregar…"));
-  const { totais: T, meses, categorias, cartoes, saldoCartoes, obra, outraMoeda = {} } = S.d;
+  const { totais: T, meses, categorias, cartoes = [], saldoCartoes, obra, outraMoeda = {} } = S.d;
   const outras = Object.entries(outraMoeda);
+  const totCarregadoCartoes = cartoes.reduce((s, c) => s + (Number(c.carregado) || 0), 0) || T.trf;
+  const totGastoCartoes = cartoes.reduce((s, c) => s + (Number(c.gasto) || 0), 0) || T.car;
 
   el.innerHTML = `${filtros}
     ${
@@ -51,11 +48,11 @@ function desenhar() {
         nota: T.saldo < 0 ? "a empresa está a financiar a obra" : "obra a crédito",
       },
     ])}
-    <div class="fx2-chips">
-      <span class="fx2-chip"><span>Gasto com os cartões</span><b>${fmt(T.car)}</b></span>
-      <span class="fx2-chip"><span>Transferido e ainda por justificar</span><b>${fmt(T.porJustificar)}</b></span>
-      <span class="fx2-chip"><span>Saldo atual nos cartões da obra${cartoes.length ? ` (${cartoes.map((c) => esc(c.nome)).join(", ")})` : ""}</span><b>${fmt(saldoCartoes)}</b></span>
-    </div>
+    ${kpis([
+      { tom: "blue", titulo: "Entregue nos Cartões", valor: fmt(totCarregadoCartoes), nota: `${cartoes.length} cartão(ões) da obra` },
+      { tom: "warn", titulo: "Gasto com os Cartões", valor: fmt(totGastoCartoes), nota: `por justificar: ${fmt(T.porJustificar)}` },
+      { tom: "good", titulo: "Saldo Atual nos Cartões", valor: fmt(saldoCartoes), nota: cartoes.map((c) => c.nome).join(" · ") || "sem cartões ativos" },
+    ])}
     ${
       meses.length
         ? `<div class="fx2-tw"><table class="fx2-t">
@@ -79,6 +76,28 @@ function desenhar() {
     </table></div>`
         : vazio(`Sem recebimentos nem pagamentos registados para esta obra${S.de || S.ate ? " no período" : ""}.`)
     }
+    <section class="fx2-blk" style="margin-top:.875rem">
+      <h3>Fundo de Maneio da Obra</h3>
+      ${
+        cartoes.length
+          ? `<div class="fx2-tw"><table class="fx2-t">
+              <thead><tr><th>Cartão</th><th>Responsável</th><th>Período</th><th class="r">Carregado</th><th class="r">Gasto</th><th class="r">Saldo Atual</th></tr></thead>
+              <tbody>${cartoes
+                .map(
+                  (c) => `<tr>
+                    <td><b>${esc(c.nome)}</b></td>
+                    <td>${esc(c.responsavel || "—")}</td>
+                    <td class="fx2-mut">${c.inicio ? `desde ${fmtData(c.inicio)}${c.fim ? ` até ${fmtData(c.fim)}` : ""}` : "fundo da obra"}</td>
+                    <td class="r">${c.carregado ? fmt(c.carregado) : "—"}</td>
+                    <td class="r">${c.gasto ? fmt(c.gasto) : "—"}</td>
+                    <td class="r"><b>${fmt(c.saldo)}</b></td>
+                  </tr>`
+                )
+                .join("")}</tbody>
+            </table></div>`
+          : `<p class="fx2-mut t3-small">Sem cartões de fundo de maneio alocados a esta obra.</p>`
+      }
+    </section>
     ${
       categorias.length
         ? `<section class="fx2-blk" style="margin-top:.875rem"><h3>Pagamentos por Categoria</h3><div class="fx2-tw"><table class="fx2-t">

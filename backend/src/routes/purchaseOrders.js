@@ -245,17 +245,72 @@ function mapOrder(o) {
 // pago por vários movimentos.
 
 const ESTADOS_CONCILIAVEIS = ["APROVADO", "EM_PAGAMENTO", "CONCLUIDO"];
+const CONC_REPARTICOES_KEY = "conciliacao.reparticoes";
 
-/** Quanto do pedido já está conciliado com movimentos do banco. */
+async function loadConcReparticoes(db = prisma) {
+  const row = await db.companySetting.findUnique({ where: { key: CONC_REPARTICOES_KEY } });
+  return row && row.value && typeof row.value === "object" && !Array.isArray(row.value) ? row.value : {};
+}
+
+async function saveConcReparticoes(map, db = prisma) {
+  await db.companySetting.upsert({
+    where: { key: CONC_REPARTICOES_KEY },
+    create: { key: CONC_REPARTICOES_KEY, value: map },
+    update: { value: map },
+  });
+}
+
+function parseFlexQueryNumber(raw) {
+  const s = String(raw || "").trim();
+  if (!s || !/^[-+]?[\d\s.,]+$/.test(s)) return null;
+  const digits = s.replace(/\D/g, "");
+  if (digits.length < 2) return null;
+  const normNum = s.replace(/\s+/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", ".");
+  const val = Math.abs(Number(normNum));
+  return { digits, val: Number.isFinite(val) ? val : null };
+}
+
+function matchesFlexAmount(amount, qParsed) {
+  if (!qParsed) return false;
+  const abs = Math.abs(Number(amount) || 0);
+  if (qParsed.val !== null && Math.abs(abs - qParsed.val) < 0.01) return true;
+  const centsDigits = abs.toFixed(2).replace(/\D/g, "");
+  const intDigits = String(Math.round(abs));
+  return centsDigits.includes(qParsed.digits) || intDigits.includes(qParsed.digits);
+}
+
+/** Quanto do pedido já está conciliado com movimentos do banco (incluindo repartições v630). */
 async function conciliadoDoPedido(orderIds) {
   if (!orderIds.length) return new Map();
-  const rows = await prisma.bankMovement.groupBy({
-    by: ["purchaseOrderId"],
-    where: { purchaseOrderId: { in: orderIds } },
-    _sum: { amount: true },
-    _count: true,
-  });
-  return new Map(rows.map((r) => [r.purchaseOrderId, { valor: Number(r._sum.amount || 0), n: r._count }]));
+  const idSet = new Set(orderIds);
+  const [rows, repMap] = await Promise.all([
+    prisma.bankMovement.findMany({
+      where: { purchaseOrderId: { in: orderIds } },
+      select: { id: true, purchaseOrderId: true, amount: true },
+    }),
+    loadConcReparticoes(),
+  ]);
+  const res = new Map();
+  const add = (oid, val) => {
+    const cur = res.get(oid) || { valor: 0, n: 0 };
+    cur.valor = Math.round((cur.valor + val) * 100) / 100;
+    cur.n += 1;
+    res.set(oid, cur);
+  };
+  const handledMovs = new Set();
+  for (const [movId, rep] of Object.entries(repMap || {})) {
+    if (rep && rep.aloc && typeof rep.aloc === "object") {
+      handledMovs.add(movId);
+      for (const [oid, val] of Object.entries(rep.aloc)) {
+        if (idSet.has(oid) && Number(val) > 0.005) add(oid, Number(val));
+      }
+    }
+  }
+  for (const m of rows) {
+    if (handledMovs.has(m.id)) continue;
+    if (m.purchaseOrderId && idSet.has(m.purchaseOrderId)) add(m.purchaseOrderId, Number(m.amount || 0));
+  }
+  return res;
 }
 
 /** GET /purchase-orders/bank-candidates?movementId=&q=&todos=1 — pedidos para conciliar com a saída. */
@@ -267,34 +322,66 @@ purchaseRouter.get(
     if (!mov) return res.status(404).json({ error: "MOVEMENT_NOT_FOUND" });
     const todos = req.query.todos === "1";
     const q = String(req.query.q || "").trim();
+    const qParsed = parseFlexQueryNumber(q);
+    const textFilter =
+      q && !qParsed
+        ? {
+            OR: [
+              { number: { contains: q, mode: "insensitive" } },
+              { supplierName: { contains: q, mode: "insensitive" } },
+              { description: { contains: q, mode: "insensitive" } },
+              { items: { some: { name: { contains: q, mode: "insensitive" } } } },
+            ],
+          }
+        : {};
     const orders = await prisma.purchaseOrder.findMany({
       where: {
         deletedAt: null,
         status: { in: ESTADOS_CONCILIAVEIS },
         ...(todos ? {} : { paymentMode: "FORN", requestType: { in: ["SEDE", "OBRA", "FROTA"] } }),
-        ...(q
-          ? {
-              OR: [
-                { number: { contains: q, mode: "insensitive" } },
-                { supplierName: { contains: q, mode: "insensitive" } },
-                { description: { contains: q, mode: "insensitive" } },
-                { items: { some: { name: { contains: q, mode: "insensitive" } } } },
-              ],
-            }
-          : {}),
+        ...textFilter,
       },
-      include: { items: true, paymentPlan: { include: { installments: true } }, supplier: { select: { name: true } } },
+      include: {
+        items: true,
+        paymentPlan: { include: { installments: true } },
+        supplier: { select: { name: true } },
+        requisition: { include: { attachments: { select: { id: true, fileName: true } } } },
+      },
       orderBy: { createdAt: "desc" },
-      take: 300,
+      take: 400,
     });
-    const conc = await conciliadoDoPedido(orders.map((o) => o.id));
-    const valor = Number(mov.amount);
-    const qNum = q.replace(/\D/g, "");
+    const [conc, repMap] = await Promise.all([conciliadoDoPedido(orders.map((o) => o.id)), loadConcReparticoes()]);
+    const movRep = repMap[mov.id];
+    const movAlready = movRep && movRep.aloc ? Object.values(movRep.aloc).reduce((s, v) => s + (Number(v) || 0), 0) : 0;
+    const valorRestanteMov = Math.max(0, Math.round((Number(mov.amount) - movAlready) * 100) / 100);
+    const valor = valorRestanteMov > 0.005 ? valorRestanteMov : Number(mov.amount);
+    const movDay = mov.movementDate ? new Date(mov.movementDate) : null;
+
     const items = orders
       .map((o) => {
         const total = PT.orderTotals(o).total;
         const ja = conc.get(o.id)?.valor || 0;
         const pago = PT.paidAmount(o);
+        const faltaConc = Math.max(0, Math.round((total - ja) * 100) / 100);
+        const faltaPagar = Math.max(0, Math.round((total - pago) * 100) / 100);
+        const insts = o.paymentPlan?.installments || [];
+        const regSemBanco = insts
+          .filter((inst) => {
+            if (inst.status !== "PAGO") return false;
+            const n = String(inst.notes || "");
+            if (n.includes("Movimento bancário ")) return false;
+            if (!movDay || !inst.paidAt) return true;
+            return Math.abs(new Date(inst.paidAt) - movDay) / 86400000 <= 10;
+          })
+          .map((inst) => ({
+            id: inst.id,
+            amount: Number(inst.amount || 0),
+            paidAt: inst.paidAt,
+          }));
+        const regTotal = Math.round(regSemBanco.reduce((s, x) => s + x.amount, 0) * 100) / 100;
+        const temComprovativo = (o.requisition?.attachments || []).some((a) =>
+          String(a.fileName || "").toLowerCase().includes("comprovativo")
+        );
         return {
           id: o.id,
           number: o.number,
@@ -307,17 +394,233 @@ purchaseRouter.get(
           total,
           pago,
           conciliado: ja,
-          falta: Math.max(0, total - ja),
+          falta: faltaConc,
+          faltaPagar,
+          regSemBanco,
+          regTotal,
+          temComprovativo,
           estado: pago >= total - 0.5 ? "Pago" : pago > 0 ? "Pago em parte" : "Em aberto",
-          proximo: Math.abs(total - ja - valor) <= 0.5,
+          proximo: Math.abs(faltaConc - valor) <= 0.5 || (regTotal > 0 && Math.abs(regTotal - valor) <= 0.5),
           dias: o.dueDate ? Math.abs(new Date(o.dueDate) - new Date(mov.movementDate)) / 86400000 : 999,
         };
       })
-      // Já conciliado por inteiro sai da lista (a não ser que se procure por ele).
-      .filter((o) => (o.falta > 0.5 || q) && (!qNum || qNum.length < 3 || o.number.includes(qNum) || String(Math.round(o.total * 100)).includes(qNum) || !/^\d+$/.test(q)))
+      .filter((o) => {
+        if (!q) return o.falta > 0.5;
+        if (qParsed) {
+          return (
+            String(o.number || "").includes(qParsed.digits) ||
+            matchesFlexAmount(o.total, qParsed) ||
+            matchesFlexAmount(o.falta, qParsed) ||
+            matchesFlexAmount(o.pago, qParsed)
+          );
+        }
+        return true;
+      })
       .sort((a, b) => Number(b.proximo) - Number(a.proximo) || a.dias - b.dias)
-      .slice(0, 30);
-    return res.json({ items });
+      .slice(0, 40);
+    return res.json({ items, movementRemaining: valor });
+  })
+);
+
+/**
+ * POST /purchase-orders/bank-reconcile (multipart, v630)
+ *   movementId, allocations (JSON: [{ orderId, amount, linkOnly }]), comprovativo[], fatura[]
+ * Reparte uma saída bancária por 1 ou vários pedidos (ou concilia apenas parte do movimento,
+ * deixando o resto como «Parcial · falta X» para conciliar depois).
+ */
+purchaseRouter.post(
+  "/bank-reconcile",
+  requirePurchasePay,
+  fileUpload.fields([
+    { name: "comprovativo", maxCount: 10 },
+    { name: "fatura", maxCount: 5 },
+  ]),
+  asyncHandler(async (req, res) => {
+    const movementId = String(req.body?.movementId || "");
+    let allocations = [];
+    try {
+      allocations = JSON.parse(String(req.body?.allocations || "[]"));
+    } catch {
+      return res.status(400).json({ error: "INVALID_ALLOCATIONS", message: "Repartição inválida." });
+    }
+    allocations = (Array.isArray(allocations) ? allocations : [])
+      .map((a) => ({
+        orderId: String(a.orderId || ""),
+        amount: Math.round((Number(a.amount) || 0) * 100) / 100,
+        linkOnly: Boolean(a.linkOnly),
+      }))
+      .filter((a) => a.orderId && a.amount > 0.005);
+    if (!movementId || !allocations.length) {
+      return res.status(400).json({ error: "EMPTY_ALLOCATIONS", message: "Indique pelo menos um pedido e valor a conciliar." });
+    }
+
+    const mov = await prisma.bankMovement.findUnique({ where: { id: movementId } });
+    if (!mov) return res.status(404).json({ error: "MOVEMENT_NOT_FOUND" });
+    if (mov.direction !== "SAIDA") return res.status(400).json({ error: "SO_SAIDAS", message: "Só uma saída do banco paga um pedido." });
+    if (mov.costAssigned) {
+      return res.status(409).json({ error: "MOVEMENT_HAS_COST", message: "Este movimento já tem custo associado: desfaça-o antes de o ligar a um pedido." });
+    }
+
+    const repMap = await loadConcReparticoes();
+    const existingRep = repMap[mov.id]?.aloc || {};
+    const alreadyAllocated = Object.values(existingRep).reduce((s, v) => s + (Number(v) || 0), 0);
+    if (mov.purchaseOrderId && !repMap[mov.id]) {
+      return res.status(409).json({ error: "JA_CONCILIADO", message: "Este movimento já está conciliado por inteiro." });
+    }
+
+    const sumNow = Math.round(allocations.reduce((s, a) => s + a.amount, 0) * 100) / 100;
+    const movTotal = Math.round(Number(mov.amount) * 100) / 100;
+    if (alreadyAllocated + sumNow > movTotal + 0.5) {
+      return res.status(400).json({ error: "EXCEEDS_MOVEMENT", message: "O total a conciliar ultrapassa o valor disponível do movimento." });
+    }
+
+    const orderIds = [...new Set(allocations.map((a) => a.orderId))];
+    const orders = await prisma.purchaseOrder.findMany({
+      where: { id: { in: orderIds }, deletedAt: null },
+      include: { items: true, requisition: true, paymentPlan: { include: { installments: true } } },
+    });
+    const orderById = new Map(orders.map((o) => [o.id, o]));
+    for (const a of allocations) {
+      const o = orderById.get(a.orderId);
+      if (!o) return res.status(404).json({ error: "NOT_FOUND", message: "Pedido não encontrado." });
+      const doMov = o.typeData && o.typeData.movimentoId === mov.id;
+      if (!ESTADOS_CONCILIAVEIS.includes(o.status) && !doMov) {
+        return res.status(409).json({ error: "PEDIDO_NAO_APROVADO", message: `O pedido ${o.number} ainda não está aprovado.` });
+      }
+    }
+
+    const comps = req.files?.comprovativo || [];
+    const fats = req.files?.fatura || [];
+    const now = new Date();
+    const dataPag = mov.effectiveDate || mov.movementDate || now;
+
+    const mergedAloc = { ...existingRep };
+    for (const a of allocations) {
+      mergedAloc[a.orderId] = Math.round(((Number(mergedAloc[a.orderId]) || 0) + a.amount) * 100) / 100;
+    }
+    const newSum = Math.round(Object.values(mergedAloc).reduce((s, v) => s + (Number(v) || 0), 0) * 100) / 100;
+    const partial = movTotal - newSum > 0.5;
+    const primaryOrderId = mov.purchaseOrderId || allocations[0].orderId;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.bankMovement.update({ where: { id: mov.id }, data: { purchaseOrderId: primaryOrderId } });
+      for (const a of allocations) {
+        const order = orderById.get(a.orderId);
+        const valor = a.amount;
+        const total = PT.orderTotals(order).total || valor;
+        if (a.linkOnly) {
+          // Marca a prestação já paga como ligada ao movimento bancário.
+          const plan = order.paymentPlan;
+          if (plan?.installments?.length) {
+            const match = plan.installments.find((i) => i.status === "PAGO" && !String(i.notes || "").includes("Movimento bancário "));
+            if (match) {
+              await tx.purchasePaymentInstallment.update({
+                where: { id: match.id },
+                data: { notes: [match.notes, `Movimento bancário ${mov.id}`].filter(Boolean).join(" · ") },
+              });
+            }
+          }
+          await tx.purchaseOrderHistory.create({
+            data: {
+              purchaseOrderId: order.id,
+              action: "CONCILIADO_BANCO",
+              fromStatus: order.status,
+              toStatus: order.status,
+              userId: req.user?.sub || null,
+              userName: req.user?.name || null,
+              notes: `Conciliado com o movimento bancário de ${new Date(mov.movementDate).toISOString().slice(0, 10)}: ${valor} — pagamento já registado, ligado ao banco`,
+            },
+          });
+          continue;
+        }
+        const plan = order.paymentPlan;
+        if (!plan) {
+          const resto = Math.round((total - valor) * 100) / 100;
+          await tx.purchasePaymentPlan.create({
+            data: {
+              purchaseOrderId: order.id,
+              totalValue: Math.max(total, valor),
+              currency: order.currency || "AOA",
+              status: resto > 0.5 ? "PARCIAL" : "PAGO",
+              notes: "Pago pelo banco (conciliação)",
+              installments: {
+                create: [
+                  { number: 1, amount: valor, currency: order.currency || "AOA", dueDate: dataPag, paidAt: dataPag, status: "PAGO", notes: `Movimento bancário ${mov.id}` },
+                  ...(resto > 0.5 ? [{ number: 2, amount: resto, currency: order.currency || "AOA", dueDate: order.dueDate || now, status: "PENDENTE" }] : []),
+                ],
+              },
+            },
+          });
+        } else {
+          const abertas = plan.installments.filter((i) => i.status !== "PAGO").sort((x, y) => x.number - y.number);
+          const igual = abertas.find((i) => Math.abs(Number(i.amount) - valor) <= 0.5);
+          const restoAberto = abertas.reduce((s2, i) => s2 + Number(i.amount), 0);
+          if (igual) {
+            await tx.purchasePaymentInstallment.update({ where: { id: igual.id }, data: { status: "PAGO", paidAt: dataPag, notes: `Movimento bancário ${mov.id}` } });
+          } else if (abertas.length && valor >= restoAberto - 0.5) {
+            await tx.purchasePaymentInstallment.updateMany({ where: { id: { in: abertas.map((i) => i.id) } }, data: { status: "PAGO", paidAt: dataPag, notes: `Movimento bancário ${mov.id}` } });
+          } else if (abertas.length) {
+            const p0 = abertas[0];
+            const n = Math.max(...plan.installments.map((i) => i.number)) + 1;
+            await tx.purchasePaymentInstallment.create({
+              data: { paymentPlanId: plan.id, number: n, amount: valor, currency: order.currency || "AOA", dueDate: dataPag, paidAt: dataPag, status: "PAGO", notes: `Movimento bancário ${mov.id}` },
+            });
+            await tx.purchasePaymentInstallment.update({ where: { id: p0.id }, data: { amount: Math.max(0, Math.round((Number(p0.amount) - valor) * 100) / 100) } });
+          } else {
+            const n = Math.max(0, ...plan.installments.map((i) => i.number)) + 1;
+            await tx.purchasePaymentInstallment.create({
+              data: { paymentPlanId: plan.id, number: n, amount: valor, currency: order.currency || "AOA", dueDate: dataPag, paidAt: dataPag, status: "PAGO", notes: `Movimento bancário ${mov.id}` },
+            });
+          }
+          const depois = await tx.purchasePaymentInstallment.findMany({ where: { paymentPlanId: plan.id } });
+          const tudo = depois.every((i) => i.status === "PAGO" || Number(i.amount) <= 0.005);
+          await tx.purchasePaymentPlan.update({ where: { id: plan.id }, data: { status: tudo ? "PAGO" : "PARCIAL" } });
+        }
+        const pagoAgora = await tx.purchasePaymentInstallment.aggregate({
+          where: { paymentPlan: { purchaseOrderId: order.id }, status: "PAGO" },
+          _sum: { amount: true },
+        });
+        const pagoTudo = Number(pagoAgora._sum.amount || 0) >= total - 0.5;
+        const novo = pagoTudo ? "CONCLUIDO" : "EM_PAGAMENTO";
+        const nextTd = order.typeData && typeof order.typeData === "object" ? { ...order.typeData } : {};
+        if (nextTd.emTransito) delete nextTd.emTransito;
+        await tx.purchaseOrder.update({
+          where: { id: order.id },
+          data: {
+            status: novo,
+            typeData: nextTd,
+            history: {
+              create: {
+                action: pagoTudo ? "CONCLUIDO" : "PAGAMENTO_PARCIAL",
+                fromStatus: order.status,
+                toStatus: novo,
+                userId: req.user?.sub || null,
+                userName: req.user?.name || null,
+                notes: `Pago pelo banco: ${valor} (movimento de ${new Date(mov.movementDate).toISOString().slice(0, 10)})`,
+              },
+            },
+          },
+        });
+      }
+      if (Object.keys(mergedAloc).length > 1 || partial) {
+        repMap[mov.id] = { aloc: mergedAloc, partial, updatedAt: now.toISOString() };
+      } else {
+        delete repMap[mov.id];
+      }
+      await saveConcReparticoes(repMap, tx);
+    });
+
+    if (comps.length || fats.length) {
+      for (const a of allocations) {
+        const order = orderById.get(a.orderId);
+        let requisitionId = order.requisition?.id;
+        if (!requisitionId) requisitionId = (await prisma.purchaseRequisition.create({ data: { purchaseOrderId: order.id } })).id;
+        for (const f of comps) await savePurchaseDoc(order.id, requisitionId, f, "comprovativo", req.user);
+        for (const f of fats) await savePurchaseDoc(order.id, requisitionId, f, "fatura", req.user);
+      }
+    }
+    await logAction(req, { action: "PURCHASE_BANK_RECONCILE", purchaseOrderId: primaryOrderId, details: { movementId: mov.id, allocations, partial } });
+    return res.json({ ok: true, partial, remaining: Math.max(0, Math.round((movTotal - newSum) * 100) / 100) });
   })
 );
 
@@ -450,8 +753,16 @@ purchaseRouter.delete(
   requirePurchasePay,
   asyncHandler(async (req, res) => {
     const mov = await prisma.bankMovement.findUnique({ where: { id: req.params.movementId }, select: { id: true, purchaseOrderId: true } });
-    if (!mov || mov.purchaseOrderId !== req.params.id) return res.status(404).json({ error: "NOT_LINKED" });
-    await prisma.bankMovement.update({ where: { id: mov.id }, data: { purchaseOrderId: null } });
+    const repMap = await loadConcReparticoes();
+    const hasRep = Boolean(repMap[req.params.movementId]);
+    if (!mov || (mov.purchaseOrderId !== req.params.id && !hasRep)) return res.status(404).json({ error: "NOT_LINKED" });
+    await prisma.$transaction(async (tx) => {
+      await tx.bankMovement.update({ where: { id: mov.id }, data: { purchaseOrderId: null } });
+      if (repMap[mov.id]) {
+        delete repMap[mov.id];
+        await saveConcReparticoes(repMap, tx);
+      }
+    });
     await logAction(req, { action: "PURCHASE_BANK_UNLINK", purchaseOrderId: req.params.id, details: { movementId: mov.id } });
     return res.json({ ok: true });
   })
@@ -1318,39 +1629,108 @@ purchaseRouter.post(
       return res.status(400).json({ error: "INVALID_AMOUNT" });
     }
 
-    const now = new Date();
+    const paidDateRaw = req.body?.paidAt;
+    const now = paidDateRaw && /^\d{4}-\d{2}-\d{2}/.test(String(paidDateRaw)) ? new Date(`${String(paidDateRaw).slice(0, 10)}T12:00:00Z`) : new Date();
+    const cardId = req.body?.cardId ? String(req.body.cardId).trim() : null;
+    const cardLabel = req.body?.cardLabel ? String(req.body.cardLabel).trim() : null;
+    const reference = req.body?.reference ? String(req.body.reference).trim() : null;
+
+    const prevTd = order.typeData && typeof order.typeData === "object" ? { ...order.typeData } : {};
+    delete prevTd.emTransito;
+    const prevPags = Array.isArray(prevTd.pagamentos) ? [...prevTd.pagamentos] : [];
+    const payEntry = {
+      id: `pg_${Date.now().toString(36)}`,
+      data: now.toISOString().slice(0, 10),
+      valor: paidAmount,
+      contaId: cardId,
+      contaNome: cardLabel,
+      ref: reference,
+      por: req.user?.name || req.user?.email || null,
+      em: new Date().toISOString(),
+    };
+    prevPags.push(payEntry);
+    prevTd.pagamentos = prevPags;
+
+    const totalOrder = fallbackAmount > 0 ? fallbackAmount : paidAmount;
+    const prevPaid = PT.paidAmount(order);
+    const fullyPaid = prevPaid + paidAmount >= totalOrder - 0.5;
+    const nextOrderStatus = fullyPaid ? "CONCLUIDO" : "EM_PAGAMENTO";
 
     await prisma.$transaction(async (tx) => {
-      if (order.paymentPlan) {
+      if (order.paymentPlan && fullyPaid) {
         await tx.purchasePaymentInstallment.updateMany({
           where: {
             paymentPlanId: order.paymentPlan.id,
             status: { not: "PAGO" },
           },
-          data: { status: "PAGO", paidAt: now },
+          data: { status: "PAGO", paidAt: now, ...(reference || cardLabel ? { notes: [cardLabel, reference].filter(Boolean).join(" · ") } : {}) },
         });
         await tx.purchasePaymentPlan.update({
           where: { id: order.paymentPlan.id },
           data: { status: "PAGO" },
         });
+      } else if (order.paymentPlan && !fullyPaid) {
+        let rem = paidAmount;
+        const openInst = [...(order.paymentPlan.installments || [])]
+          .filter((i) => i.status !== "PAGO")
+          .sort((a, b) => a.number - b.number);
+        for (const inst of openInst) {
+          if (rem <= 0.005) break;
+          const v = Number(inst.amount) || 0;
+          if (rem >= v - 0.5) {
+            await tx.purchasePaymentInstallment.update({
+              where: { id: inst.id },
+              data: { status: "PAGO", paidAt: now, ...(reference || cardLabel ? { notes: [cardLabel, reference].filter(Boolean).join(" · ") } : {}) },
+            });
+            rem -= v;
+          } else {
+            const maxNum = Math.max(0, ...(order.paymentPlan.installments || []).map((i) => i.number));
+            await tx.purchasePaymentInstallment.update({
+              where: { id: inst.id },
+              data: { amount: rem, status: "PAGO", paidAt: now, notes: [cardLabel, reference].filter(Boolean).join(" · ") || inst.notes },
+            });
+            await tx.purchasePaymentInstallment.create({
+              data: {
+                paymentPlanId: order.paymentPlan.id,
+                number: maxNum + 1,
+                amount: Math.round((v - rem) * 100) / 100,
+                currency: order.currency || "AOA",
+                dueDate: inst.dueDate,
+                status: "PENDENTE",
+              },
+            });
+            rem = 0;
+          }
+        }
       } else {
+        const insts = [
+          {
+            number: 1,
+            amount: paidAmount,
+            currency: order.currency || "AOA",
+            dueDate: now,
+            paidAt: now,
+            status: "PAGO",
+            notes: [cardLabel, reference].filter(Boolean).join(" · ") || null,
+          },
+        ];
+        if (!fullyPaid && totalOrder - paidAmount > 0.5) {
+          insts.push({
+            number: 2,
+            amount: Math.round((totalOrder - paidAmount) * 100) / 100,
+            currency: order.currency || "AOA",
+            dueDate: order.dueDate || now,
+            status: "PENDENTE",
+          });
+        }
         await tx.purchasePaymentPlan.create({
           data: {
             purchaseOrderId: order.id,
-            totalValue: paidAmount,
+            totalValue: totalOrder,
             currency: order.currency || "AOA",
-            status: "PAGO",
-            notes: "Liquidação no plano de pagamentos",
-            installments: {
-              create: {
-                number: 1,
-                amount: paidAmount,
-                currency: order.currency || "AOA",
-                dueDate: now,
-                paidAt: now,
-                status: "PAGO",
-              },
-            },
+            status: fullyPaid ? "PAGO" : "PENDENTE",
+            notes: "Liquidação no Centro de Pagamentos",
+            installments: { create: insts },
           },
         });
       }
@@ -1358,16 +1738,17 @@ purchaseRouter.post(
       await tx.purchaseOrder.update({
         where: { id: order.id },
         data: {
-          status: "CONCLUIDO",
-          ...(order.totalValue == null ? { totalValue: paidAmount } : {}),
+          status: nextOrderStatus,
+          typeData: prevTd,
+          ...(order.totalValue == null ? { totalValue: totalOrder } : {}),
           history: {
             create: {
-              action: "CONCLUIDO",
+              action: nextOrderStatus === "CONCLUIDO" ? "CONCLUIDO" : "PAGAMENTO_PARCIAL",
               fromStatus: order.status,
-              toStatus: "CONCLUIDO",
+              toStatus: nextOrderStatus,
               userId: req.user?.sub || null,
               userName: req.user?.name || null,
-              notes: `Liquidado no plano de pagamentos (${paidAmount})`,
+              notes: `Pagamento registado (${paidAmount}${cardLabel ? ` · ${cardLabel}` : ""}${reference ? ` · ref. ${reference}` : ""})`,
             },
           },
         },
@@ -1679,25 +2060,60 @@ purchaseRouter.get(
   })
 );
 
-// ─── POST /purchase-orders/:id/hold — pôr em pausa / retomar ─────────────────
+// ─── POST /purchase-orders/:id/hold — pôr em pausa / retomar (v635) ──────────
 /**
  * Em pausa é diferente de rejeitado: o pedido fica retido sem se perder a
- * aprovação nem o histórico, como no protótipo.
+ * aprovação nem o histórico, como no protótipo (v635: retomar só volta a
+ * «Por aprovar» se o valor mudou desde a aprovação; o Financeiro pode retomar).
  */
 purchaseRouter.post(
   "/:id/hold",
-  requirePurchaseApprove,
   asyncHandler(async (req, res) => {
+    const role = String(req.user?.role || "").toLowerCase();
+    if (!APPROVER_ROLES.includes(role) && !FINANCE_ROLES.includes(role)) {
+      return res.status(403).json({ error: "FORBIDDEN" });
+    }
     const schema = z.object({ onHold: z.boolean(), reason: z.string().trim().max(500).optional().nullable() });
     const parsed = schema.safeParse(req.body || {});
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     const { onHold, reason } = parsed.data;
 
-    const order = await prisma.purchaseOrder.findUnique({ where: { id: req.params.id } });
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id: req.params.id },
+      include: { items: true, requisition: true, approvals: true },
+    });
     if (!order) return res.status(404).json({ error: "NOT_FOUND" });
     if (order.deletedAt) return res.status(409).json({ error: "ELIMINADO" });
     if (onHold && !reason) {
       return res.status(400).json({ error: "FALTA_MOTIVO", message: "Escreva porque é que o pedido fica em pausa." });
+    }
+
+    const curTot = Math.round(PT.orderTotals(order).total * 100) / 100;
+    const td = order.typeData && typeof order.typeData === "object" ? { ...order.typeData } : {};
+    let nextStatus = order.status;
+    let histNote = reason || null;
+
+    if (onHold) {
+      td.pausa = { tot: curTot, status: order.status, at: new Date().toISOString(), by: req.user?.name || null };
+    } else {
+      if (!FINANCE_ROLES.includes(role) && role !== "admin") {
+        return res.status(403).json({ error: "SO_FINANCEIRO_RETOMA", message: "Só o Financeiro retoma pedidos em pausa." });
+      }
+      const hadApproval =
+        ["APROVADO", "EM_PAGAMENTO", "CONCLUIDO"].includes(order.status) ||
+        (order.approvals || []).some((a) => a.decision === "APROVADO");
+      const refTot = td.pausa?.tot != null ? Number(td.pausa.tot) : null;
+      const changed = refTot !== null && Math.abs(refTot - curTot) > 0.5;
+      if (hadApproval && !changed) {
+        nextStatus = order.status === "PENDENTE_APROVACAO" ? "APROVADO" : order.status;
+        histNote = "Retomada (mantém a aprovação — o valor não mudou)";
+      } else {
+        nextStatus = "PENDENTE_APROVACAO";
+        histNote = changed
+          ? `Retomada — volta a aprovação porque o valor mudou (${refTot} → ${curTot})`
+          : "Retomada — ainda não tinha sido aprovada";
+      }
+      delete td.pausa;
     }
 
     const updated = await prisma.purchaseOrder.update({
@@ -1705,20 +2121,307 @@ purchaseRouter.post(
       data: {
         onHold,
         holdReason: onHold ? reason : null,
+        status: nextStatus,
+        typeData: td,
         history: {
           create: {
             action: onHold ? "EM_PAUSA" : "RETOMADO",
             fromStatus: order.status,
-            toStatus: order.status,
+            toStatus: nextStatus,
             userId: req.user?.sub || null,
             userName: req.user?.name || null,
-            notes: reason || null,
+            notes: histNote,
           },
         },
       },
       include: PURCHASE_ORDER_INCLUDE,
     });
     res.json(mapOrder(updated));
+  })
+);
+
+// ─── POST /purchase-orders/:id/transit — pôr / tirar «Em trânsito» (v607) ────
+purchaseRouter.post(
+  "/:id/transit",
+  requirePurchasePay,
+  asyncHandler(async (req, res) => {
+    const schema = z.object({
+      inTransit: z.boolean(),
+      cardId: z.string().optional().nullable(),
+      cardLabel: z.string().optional().nullable(),
+    });
+    const parsed = schema.safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    const order = await prisma.purchaseOrder.findUnique({ where: { id: req.params.id } });
+    if (!order) return res.status(404).json({ error: "NOT_FOUND" });
+
+    const td = order.typeData && typeof order.typeData === "object" ? { ...order.typeData } : {};
+    if (parsed.data.inTransit) {
+      td.emTransito = {
+        cardId: parsed.data.cardId || null,
+        cardLabel: parsed.data.cardLabel || null,
+        at: new Date().toISOString(),
+        by: req.user?.name || null,
+      };
+    } else {
+      delete td.emTransito;
+    }
+
+    const updated = await prisma.purchaseOrder.update({
+      where: { id: order.id },
+      data: {
+        typeData: td,
+        history: {
+          create: {
+            action: parsed.data.inTransit ? "EM_TRANSITO" : "EM_ABERTO",
+            fromStatus: order.status,
+            toStatus: order.status,
+            userId: req.user?.sub || null,
+            userName: req.user?.name || null,
+            notes: parsed.data.inTransit
+              ? `Em trânsito${parsed.data.cardLabel ? ` · ${parsed.data.cardLabel}` : ""}`
+              : "Retirado de trânsito",
+          },
+        },
+      },
+      include: PURCHASE_ORDER_INCLUDE,
+    });
+    res.json(mapOrder(updated));
+  })
+);
+
+// ─── POST /purchase-orders/bulk-proof — um comprovativo para vários pedidos (v592)
+purchaseRouter.post(
+  "/bulk-proof",
+  requirePurchasePay,
+  fileUpload.single("comprovativo"),
+  asyncHandler(async (req, res) => {
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: "FALTA_FICHEIRO", message: "Anexe o comprovativo." });
+    let ids = [];
+    try {
+      ids = Array.isArray(req.body?.orderIds)
+        ? req.body.orderIds
+        : JSON.parse(String(req.body?.orderIds || "[]"));
+    } catch {
+      ids = String(req.body?.orderIds || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+    ids = [...new Set(ids.map(String).filter(Boolean))];
+    if (!ids.length) return res.status(400).json({ error: "SEM_PEDIDOS", message: "Selecione pelo menos um pedido." });
+
+    const ext = (file.originalname || "pdf").split(".").pop() || "pdf";
+    const storagePath = `purchase-proformas/bulk/comprovativo-${Date.now()}.${ext}`;
+    const url = await uploadToSupabase(storagePath, file.buffer, file.mimetype);
+    const original = file.originalname || `comprovativo.${ext}`;
+    const fileName = /comprovativo/i.test(original) ? original : `comprovativo-${original}`;
+
+    const orders = await prisma.purchaseOrder.findMany({
+      where: { id: { in: ids }, deletedAt: null },
+      include: { requisition: true },
+    });
+    for (const order of orders) {
+      let reqId = order.requisition?.id;
+      if (!reqId) {
+        const cr = await prisma.purchaseRequisition.create({ data: { purchaseOrderId: order.id } });
+        reqId = cr.id;
+      }
+      await prisma.purchaseAttachment.create({
+        data: {
+          purchaseRequisitionId: reqId,
+          fileName,
+          mimeType: file.mimetype,
+          size: file.size,
+          url,
+          uploadedById: req.user?.sub || null,
+          uploadedByName: req.user?.name || null,
+        },
+      });
+      await prisma.purchaseOrderHistory.create({
+        data: {
+          purchaseOrderId: order.id,
+          action: "COMPROVATIVO_ANEXADO",
+          fromStatus: order.status,
+          toStatus: order.status,
+          userId: req.user?.sub || null,
+          userName: req.user?.name || null,
+          notes: `Comprovativo anexado em lote (${orders.map((o) => o.number).join(", ")})`,
+        },
+      });
+    }
+    res.json({ ok: true, count: orders.length, url });
+  })
+);
+
+// ─── POST /purchase-orders/:id/doc/:kind — carregar proforma / fatura / comprovativo
+purchaseRouter.post(
+  "/:id/doc/:kind",
+  requirePurchaseEdit,
+  fileUpload.single("file"),
+  asyncHandler(async (req, res) => {
+    const kind = String(req.params.kind || "").toLowerCase();
+    if (!["proforma", "fatura", "comprovativo"].includes(kind)) {
+      return res.status(400).json({ error: "TIPO_INVALIDO" });
+    }
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: "FALTA_FICHEIRO", message: "Escolha o ficheiro." });
+
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id: req.params.id },
+      include: { requisition: true },
+    });
+    if (!order) return res.status(404).json({ error: "NOT_FOUND" });
+
+    let reqId = order.requisition?.id;
+    if (!reqId) {
+      const cr = await prisma.purchaseRequisition.create({ data: { purchaseOrderId: order.id } });
+      reqId = cr.id;
+    }
+    const att = await savePurchaseDoc(order.id, reqId, file, kind, req.user);
+
+    const td = order.typeData && typeof order.typeData === "object" ? { ...order.typeData } : {};
+    if (kind === "fatura" && (req.body?.docNumber || req.body?.docType)) {
+      const fats = Array.isArray(td.faturas) ? [...td.faturas] : [];
+      fats.push({
+        attId: att.id,
+        num: String(req.body.docNumber || "").trim(),
+        tipo: String(req.body.docType || "FT").trim(),
+        data: req.body.docDate || new Date().toISOString().slice(0, 10),
+        url: att.url,
+        nome: att.fileName,
+      });
+      td.faturas = fats;
+    }
+
+    const updated = await prisma.purchaseOrder.update({
+      where: { id: order.id },
+      data: {
+        typeData: td,
+        history: {
+          create: {
+            action: "DOCUMENTO_ANEXADO",
+            fromStatus: order.status,
+            toStatus: order.status,
+            userId: req.user?.sub || null,
+            userName: req.user?.name || null,
+            notes: `${kind.toUpperCase()} anexado: ${att.fileName}`,
+          },
+        },
+      },
+      include: PURCHASE_ORDER_INCLUDE,
+    });
+    res.json(mapOrder(updated));
+  })
+);
+
+// ─── DELETE /purchase-orders/:id/attachments/:attId — retirar anexo errado (v634)
+purchaseRouter.delete(
+  "/:id/attachments/:attId",
+  requirePurchasePay,
+  asyncHandler(async (req, res) => {
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id: req.params.id },
+      include: { requisition: { include: { attachments: true } } },
+    });
+    if (!order) return res.status(404).json({ error: "NOT_FOUND" });
+    const att = (order.requisition?.attachments || []).find((a) => a.id === req.params.attId);
+    if (!att) return res.status(404).json({ error: "ATTACHMENT_NOT_FOUND" });
+
+    await prisma.purchaseAttachment.delete({ where: { id: att.id } });
+    const td = order.typeData && typeof order.typeData === "object" ? { ...order.typeData } : {};
+    if (Array.isArray(td.faturas)) td.faturas = td.faturas.filter((f) => f.attId !== att.id);
+
+    const updated = await prisma.purchaseOrder.update({
+      where: { id: order.id },
+      data: {
+        typeData: td,
+        history: {
+          create: {
+            action: "ANEXO_RETIRADO",
+            fromStatus: order.status,
+            toStatus: order.status,
+            userId: req.user?.sub || null,
+            userName: req.user?.name || null,
+            notes: `Anexo retirado: ${att.fileName}`,
+          },
+        },
+      },
+      include: PURCHASE_ORDER_INCLUDE,
+    });
+    res.json(mapOrder(updated));
+  })
+);
+
+// ─── PATCH /purchase-orders/:id/payments/:instId — editar pagamento registado (v632)
+purchaseRouter.patch(
+  "/:id/payments/:instId",
+  requirePurchasePay,
+  fileUpload.single("comprovativo"),
+  asyncHandler(async (req, res) => {
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id: req.params.id },
+      include: { requisition: true, paymentPlan: { include: { installments: true } }, items: true },
+    });
+    if (!order) return res.status(404).json({ error: "NOT_FOUND" });
+    const inst = (order.paymentPlan?.installments || []).find((i) => i.id === req.params.instId);
+    if (!inst) return res.status(404).json({ error: "INSTALLMENT_NOT_FOUND" });
+
+    const amount = req.body?.amount != null ? Number(req.body.amount) : Number(inst.amount);
+    const dateStr = req.body?.paidAt ? String(req.body.paidAt).slice(0, 10) : inst.paidAt ? inst.paidAt.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+    const cardLabel = req.body?.cardLabel !== undefined ? String(req.body.cardLabel || "").trim() : null;
+    const reference = req.body?.reference !== undefined ? String(req.body.reference || "").trim() : null;
+    if (!(amount > 0)) return res.status(400).json({ error: "INVALID_AMOUNT", message: "Indique um valor maior que zero." });
+
+    const notesParts = [cardLabel, reference].filter(Boolean);
+    const nextNotes = notesParts.length ? notesParts.join(" · ") : inst.notes;
+
+    await prisma.purchasePaymentInstallment.update({
+      where: { id: inst.id },
+      data: {
+        amount,
+        paidAt: new Date(`${dateStr}T12:00:00Z`),
+        notes: nextNotes,
+      },
+    });
+
+    if (req.file) {
+      let reqId = order.requisition?.id;
+      if (!reqId) {
+        const cr = await prisma.purchaseRequisition.create({ data: { purchaseOrderId: order.id } });
+        reqId = cr.id;
+      }
+      await savePurchaseDoc(order.id, reqId, req.file, "comprovativo", req.user);
+    }
+
+    const refreshedPlan = await prisma.purchasePaymentPlan.findUnique({
+      where: { id: order.paymentPlan.id },
+      include: { installments: true },
+    });
+    const totalOrder = PT.orderTotals(order).total;
+    const paidSum = PT.paidAmount({ paymentPlan: refreshedPlan });
+    const allPaid = totalOrder > 0 && paidSum >= totalOrder - 0.5;
+
+    await prisma.purchaseOrder.update({
+      where: { id: order.id },
+      data: {
+        status: allPaid ? "CONCLUIDO" : "EM_PAGAMENTO",
+        history: {
+          create: {
+            action: "PAGAMENTO_EDITADO",
+            fromStatus: order.status,
+            toStatus: allPaid ? "CONCLUIDO" : "EM_PAGAMENTO",
+            userId: req.user?.sub || null,
+            userName: req.user?.name || null,
+            notes: `Pagamento editado: ${amount} em ${dateStr}${nextNotes ? ` (${nextNotes})` : ""}`,
+          },
+        },
+      },
+    });
+
+    const fresh = await prisma.purchaseOrder.findUnique({ where: { id: order.id }, include: PURCHASE_ORDER_INCLUDE });
+    res.json(mapOrder(fresh));
   })
 );
 

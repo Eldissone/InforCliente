@@ -223,7 +223,7 @@ function supplierKey(name, id) {
  * `payables`: contas a pagar `A_PAGAR` (o que o Centro de Pagamentos mostra);
  * `payments`: liquidações (`loadRecentPayments`), com `party` = beneficiário.
  */
-function buildSupplierAccounts({ payables = [], payments = [], suppliers = [] }, moeda = "AOA") {
+function buildSupplierAccounts({ payables = [], payments = [], suppliers = [], orders = [], notes = [] }, moeda = "AOA") {
   const byName = new Map(suppliers.map((s) => [norm(s.name), s]));
   const byId = new Map(suppliers.map((s) => [s.id, s]));
   const M = new Map();
@@ -232,12 +232,18 @@ function buildSupplierAccounts({ payables = [], payments = [], suppliers = [] },
     const key = supplierKey(rec?.name || name, rec?.id || null);
     let x = M.get(key);
     if (!x) {
+      const creditLimit = num(rec?.profile?.limiteCredito ?? rec?.profile?.creditLimit ?? 0);
       x = {
         chave: key,
         id: rec?.id || null,
         nome: rec?.name || name || "—",
         nif: rec?.nif || null,
+        limiteCredito: creditLimit > 0 ? round2(creditLimit) : null,
         saldo: 0,
+        semFatura: 0,
+        ncTotal: 0,
+        ndTotal: 0,
+        retencao: 0,
         documentos: 0,
         pago12m: 0,
         ultPagamento: null,
@@ -247,6 +253,20 @@ function buildSupplierAccounts({ payables = [], payments = [], suppliers = [] },
     }
     return x;
   };
+
+  // Pre-seed orders info (sem fatura & retenção)
+  const orderHasInvoice = new Map();
+  orders.forEach((o) => {
+    if ((o.currency || "AOA") !== moeda) return;
+    const atts = o.requisition?.attachments || [];
+    const hasFt = atts.some((a) => /fatura/i.test(a.fileName || ""));
+    const allExc = (o.items || []).length > 0 && (o.items || []).every((i) => i.docException === "DSC" || i.docException === "AF");
+    orderHasInvoice.set(o.id, hasFt || allExc);
+    if (o.withheld > 0 && (o.supplierName || o.supplierId)) {
+      const x = get(o.supplierName, o.supplierId);
+      x.retencao += num(o.withheld);
+    }
+  });
 
   const moedas = new Set(["AOA"]);
   payables.forEach((p) => {
@@ -258,8 +278,35 @@ function buildSupplierAccounts({ payables = [], payments = [], suppliers = [] },
     const v = num(p.payable);
     x.saldo += v;
     x.documentos += 1;
+    if (p.source === "PEDIDO_COMPRA" && p.sourceId && orderHasInvoice.get(p.sourceId) === false) {
+      x.semFatura += v;
+    }
     addAging(x.ag, v, p.daysLate);
   });
+
+  // Saldos iniciais e Notas de Crédito / Débito (v625)
+  const today = new Date();
+  notes.forEach((n) => {
+    const cur = String(n.moeda || "AOA").toUpperCase();
+    moedas.add(cur);
+    if (cur !== moeda) return;
+    const val = num(n.valor);
+    if (!(val > 0)) return;
+    const x = get(n.fornecedor, n.fornecedorId);
+    if (n.tipo === "NC" || (n.tipo === "SI" && n.sentido === "CREDITO_NOSSO")) {
+      x.saldo -= val;
+      if (n.tipo === "NC") x.ncTotal += val;
+    } else {
+      // ND ou Saldo Inicial em dívida ao fornecedor
+      x.saldo += val;
+      x.ndTotal += val;
+      x.documentos += 1;
+      const dt = n.venc || n.data;
+      const late = dt ? ageDays(dt, today) : 0;
+      addAging(x.ag, val, late);
+    }
+  });
+
   if (moeda === "AOA") {
     payments.forEach((p) => {
       if (!p.party) return;
@@ -272,11 +319,19 @@ function buildSupplierAccounts({ payables = [], payments = [], suppliers = [] },
   const fornecedores = [...M.values()].map((x) => ({
     ...x,
     saldo: round2(x.saldo),
+    semFatura: round2(x.semFatura),
+    ncTotal: round2(x.ncTotal),
+    ndTotal: round2(x.ndTotal),
+    retencao: round2(x.retencao),
     pago12m: round2(x.pago12m),
+    acimaLimite: Boolean(x.limiteCredito && x.saldo > x.limiteCredito + 0.5),
     ag: roundAging(x.ag),
   }));
   fornecedores.sort((a, b) => b.saldo - a.saldo || a.nome.localeCompare(b.nome, "pt"));
   const comSaldo = fornecedores.filter((f) => f.saldo > 0.5);
+  const comFavor = fornecedores.filter((f) => f.saldo < -0.5);
+  const comSemFat = fornecedores.filter((f) => f.semFatura > 0.5);
+  const comAcimaLim = fornecedores.filter((f) => f.acimaLimite);
   const T = (k) => round2(fornecedores.reduce((s, f) => s + f.ag[k], 0));
   return {
     moeda,
@@ -289,13 +344,19 @@ function buildSupplierAccounts({ payables = [], payments = [], suppliers = [] },
       comAtraso: fornecedores.filter((f) => f.ag.atr > 0.5).length,
       mais90: T("b4"),
       com90: fornecedores.filter((f) => f.ag.b4 > 0.5).length,
+      semFatura: round2(comSemFat.reduce((s, f) => s + f.semFatura, 0)),
+      comSemFatura: comSemFat.length,
+      aNossoFavor: round2(comFavor.reduce((s, f) => s + Math.abs(f.saldo), 0)),
+      comFavor: comFavor.length,
+      notasCredito: round2(fornecedores.reduce((s, f) => s + f.ncTotal, 0)),
+      comAcimaLimite: comAcimaLim.length,
     },
   };
 }
 
-/** O extrato de um fornecedor: documentos em aberto e pagamentos feitos. */
-function supplierStatement({ payables = [], payments = [], suppliers = [] }, chave, moeda = "AOA") {
-  const acc = buildSupplierAccounts({ payables, payments, suppliers }, moeda);
+/** O extrato de um fornecedor: movimentos corridos Débito/Crédito/Saldo (v627/v631), documentos em aberto e pagamentos. */
+function supplierStatement({ payables = [], payments = [], suppliers = [], orders = [], notes = [] }, chave, moeda = "AOA") {
+  const acc = buildSupplierAccounts({ payables, payments, suppliers, orders, notes }, moeda);
   const f = acc.fornecedores.find((x) => x.chave === chave);
   if (!f) return null;
   const belongs = (name, id) => {
@@ -306,6 +367,7 @@ function supplierStatement({ payables = [], payments = [], suppliers = [] }, cha
     .filter((p) => p.stage === "A_PAGAR" && (p.currency || "AOA") === moeda && belongs(p.supplier || p.beneficiary, p.supplierId))
     .map((p) => ({
       id: p.id,
+      sourceId: p.sourceId || null,
       data: p.date || null,
       documento: p.docNumber || null,
       origem: p.sourceLabel || p.source,
@@ -316,6 +378,7 @@ function supplierStatement({ payables = [], payments = [], suppliers = [] }, cha
       valor: round2(p.payable),
     }))
     .sort((a, b) => String(a.vencimento || "9").localeCompare(String(b.vencimento || "9")));
+
   const pagos =
     moeda === "AOA"
       ? payments
@@ -331,7 +394,147 @@ function supplierStatement({ payables = [], payments = [], suppliers = [] }, cha
           }))
           .sort((a, b) => String(b.data || "").localeCompare(String(a.data || "")))
       : [];
-  return { fornecedor: f, abertos, pagos, moeda };
+
+  // Extrato corrido (Débito / Crédito / Saldo) com Retenção na Fonte em linha própria (v627/v631)
+  const movs = [];
+  const fornNotes = notes.filter((n) => String(n.moeda || "AOA").toUpperCase() === moeda && belongs(n.fornecedor, n.fornecedorId));
+  fornNotes.forEach((n) => {
+    const val = round2(n.valor);
+    if (n.tipo === "SI") {
+      const cred = n.sentido === "CREDITO_NOSSO" ? 0 : val;
+      const deb = n.sentido === "CREDITO_NOSSO" ? val : 0;
+      movs.push({
+        id: n.id,
+        noteId: n.id,
+        data: n.data,
+        tp: "SI",
+        doc: n.num ? `SI ${n.num}` : "Saldo Inicial",
+        pedido: "",
+        obra: "",
+        desc: n.motivo || "Saldo do ano anterior",
+        venc: n.venc || n.data,
+        deb,
+        cred,
+      });
+    } else if (n.tipo === "NC") {
+      movs.push({
+        id: n.id,
+        noteId: n.id,
+        data: n.data,
+        tp: "NC",
+        doc: n.num ? `NC ${n.num}` : "NC (por receber)",
+        pedido: n.pedidoNum || "",
+        obra: "",
+        desc: n.motivo || "Nota de crédito de fornecedor",
+        venc: "",
+        deb: val,
+        cred: 0,
+      });
+    } else {
+      movs.push({
+        id: n.id,
+        noteId: n.id,
+        data: n.data,
+        tp: "ND",
+        doc: n.num ? `ND ${n.num}` : "ND",
+        pedido: n.pedidoNum || "",
+        obra: "",
+        desc: n.motivo || "Nota de débito de fornecedor",
+        venc: n.venc || n.data,
+        deb: 0,
+        cred: val,
+      });
+    }
+  });
+
+  // Pedidos / faturas (valor bruto a crédito + linha RF a débito)
+  const fornOrders = orders.filter((o) => (o.currency || "AOA") === moeda && belongs(o.supplierName, o.supplierId));
+  const coveredOrderIds = new Set();
+  fornOrders.forEach((o) => {
+    coveredOrderIds.add(o.id);
+    const bruto = round2(num(o.base) + num(o.vat));
+    const rf = round2(num(o.withheld));
+    const fatNum = (Array.isArray(o.typeData?.faturas) && o.typeData.faturas[0]?.num) || o.number;
+    const dStr = o.createdAt ? new Date(o.createdAt).toISOString().slice(0, 10) : "";
+    const vencStr = o.dueDate ? new Date(o.dueDate).toISOString().slice(0, 10) : "";
+    if (bruto > 0.005) {
+      movs.push({
+        id: `ft:${o.id}`,
+        orderId: o.id,
+        data: dStr,
+        tp: Array.isArray(o.typeData?.faturas) && o.typeData.faturas.length ? "FT" : "PD",
+        doc: fatNum || o.number,
+        pedido: o.number || "",
+        obra: o.project?.code || "",
+        desc: o.description || "",
+        venc: vencStr,
+        deb: 0,
+        cred: bruto,
+      });
+    }
+    if (rf > 0.005) {
+      const pctRf = num(o.base) > 0 ? Math.round((rf / num(o.base)) * 1000) / 10 : 0;
+      movs.push({
+        id: `rf:${o.id}`,
+        orderId: o.id,
+        data: dStr,
+        tp: "RF",
+        doc: fatNum || o.number,
+        pedido: o.number || "",
+        obra: o.project?.code || "",
+        desc: `Retenção na fonte${pctRf ? ` ${String(pctRf).replace(".", ",")}%` : ""} (entregue ao Estado)`,
+        venc: "",
+        deb: rf,
+        cred: 0,
+      });
+    }
+    // Pagamentos registados nas prestações do pedido
+    (o.installments || [])
+      .filter((i) => i.status === "PAGO" && num(i.amount) > 0)
+      .forEach((i) => {
+        movs.push({
+          id: `pg:${i.id}`,
+          orderId: o.id,
+          instId: i.id,
+          data: i.paidAt ? new Date(i.paidAt).toISOString().slice(0, 10) : dStr,
+          tp: "PG",
+          doc: i.notes ? String(i.notes).slice(0, 28) : "Pagamento",
+          pedido: o.number || "",
+          obra: o.project?.code || "",
+          desc: `→ Liquida ${fatNum || o.number}${i.notes ? ` · ${i.notes}` : ""}`,
+          venc: "",
+          deb: round2(i.amount),
+          cred: 0,
+        });
+      });
+  });
+
+  // Contas em aberto que não vêm de PurchaseOrder (ex.: pedidos extra / lançamentos diretos)
+  abertos.forEach((a) => {
+    if (a.sourceId && coveredOrderIds.has(a.sourceId)) return;
+    movs.push({
+      id: `ab:${a.id}`,
+      data: a.data ? new Date(a.data).toISOString().slice(0, 10) : "",
+      tp: "PD",
+      doc: a.documento || a.origem,
+      pedido: "",
+      obra: a.obra || "",
+      desc: a.descricao || "",
+      venc: a.vencimento ? new Date(a.vencimento).toISOString().slice(0, 10) : "",
+      deb: 0,
+      cred: a.valor,
+    });
+  });
+
+  const tpOrder = { SI: 0, FT: 1, PD: 1, ND: 2, RF: 3, NC: 4, PG: 5 };
+  movs.sort((a, b) => String(a.data || "").localeCompare(String(b.data || "")) || (tpOrder[a.tp] ?? 9) - (tpOrder[b.tp] ?? 9));
+  let running = 0;
+  const extrato = movs.map((m) => {
+    running = round2(running + m.cred - m.deb);
+    return { ...m, saldo: running };
+  });
+
+  return { fornecedor: f, abertos, pagos, extrato, notas: fornNotes, moeda };
 }
 
 // ─── S3 Stock por Armazém ──────────────────────────────────────────────────

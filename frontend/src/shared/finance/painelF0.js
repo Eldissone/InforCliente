@@ -127,13 +127,16 @@ function obrasHtml(d) {
   const L = (d.obras || []).filter((o) => o.venda || o.custo || o.faturado);
   if (!L.length) return vazio("Sem obras com contrato ou custos nesta moeda.");
   return `<div class="fx2-tw"><table class="fx2-t">
-    <thead><tr><th>Obra</th><th class="r">Contrato</th><th class="r">Faturado</th><th class="r">Recebido</th><th class="r">Por Receber</th><th class="r">Custo Real</th><th class="r">Margem Prev.</th></tr></thead>
-    <tbody>${L.map(
-      (o) => `<tr class="f0-row" data-f0obra="${esc(o.id)}"><td><b>${esc(o.codigo || "")}</b> <span class="fx2-mut">${esc(o.nome || "")}</span></td>
+    <thead><tr><th>Obra</th><th class="r">Contrato</th><th class="r">Faturado</th><th class="r">Recebido</th><th class="r">Por Receber</th><th class="r">Custo Real</th><th class="r">Desvio Custo</th><th class="r">Margem Prev.</th></tr></thead>
+    <tbody>${L.map((o) => {
+      const temDesv = o.desvioCusto !== null && o.desvioCusto !== undefined;
+      const desvTxt = temDesv ? `${o.desvioCusto > 0.005 ? "+" : ""}${fmt(o.desvioCusto)}` : "—";
+      return `<tr class="f0-row" data-f0obra="${esc(o.id)}"><td><b>${esc(o.codigo || "")}</b> <span class="fx2-mut">${esc(o.nome || "")}</span></td>
         <td class="r">${fmt(o.venda)}</td><td class="r">${fmt(o.faturado)}</td><td class="r">${fmt(o.recebido)}</td>
         <td class="r">${fmt(Math.max(0, o.faturado - o.recebido))}</td><td class="r">${fmt(o.custo)}</td>
-        <td class="r${o.margem < 0 ? " f0-neg" : ""}">${fmt(o.margem)}${o.venda ? ` <small class="fx2-mut">${pc(o.margem / o.venda)}</small>` : ""}</td></tr>`
-    ).join("")}</tbody></table></div>`;
+        <td class="r${temDesv && o.desvioCusto > 0.5 ? " f0-neg" : ""}">${desvTxt}</td>
+        <td class="r${o.margem < 0 ? " f0-neg" : ""}">${fmt(o.margem)}${o.venda ? ` <small class="fx2-mut">${pc(o.margem / o.venda)}</small>` : ""}</td></tr>`;
+    }).join("")}</tbody></table></div>`;
 }
 
 function desenhar() {

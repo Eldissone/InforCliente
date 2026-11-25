@@ -23,7 +23,24 @@ const {
   loadGeneralExtraPayables,
   loadRecentPayments,
 } = require("./finance");
+const { z } = require("zod");
+const PT = require("../services/purchase/purchaseTotals");
 const A = require("../services/compras/aggregates");
+
+const SUPPLIER_NOTES_KEY = "fornecedores.notas_saldos";
+
+async function readSupplierNotes() {
+  const row = await prisma.companySetting.findUnique({ where: { key: SUPPLIER_NOTES_KEY } }).catch(() => null);
+  return Array.isArray(row?.value) ? row.value : [];
+}
+
+async function writeSupplierNotes(list) {
+  await prisma.companySetting.upsert({
+    where: { key: SUPPLIER_NOTES_KEY },
+    create: { key: SUPPLIER_NOTES_KEY, value: list, label: "Conta Corrente Fornecedores — Notas e Saldos Iniciais" },
+    update: { value: list },
+  });
+}
 
 const comprasStockRoutes = express.Router();
 comprasStockRoutes.use(authRequired);
@@ -151,23 +168,103 @@ comprasStockRoutes.get(
   })
 );
 
+const editFinance = requireAnyPermission([
+  ["financeiro", "edit"],
+  ["fornecedores", "edit"],
+]);
+
 comprasStockRoutes.get(
   "/supplier-accounts",
   viewPurchases,
   asyncHandler(async (req, res) => {
     const moeda = String(req.query.moeda || "AOA").toUpperCase();
-    const [payables, payments, suppliers] = await Promise.all([
+    const [payables, payments, suppliers, rawOrders, notes] = await Promise.all([
       allPayables(),
       loadRecentPayments(365),
-      prisma.supplier.findMany({ select: { id: true, name: true, nif: true } }),
+      prisma.supplier.findMany({ select: { id: true, name: true, nif: true, profile: true } }),
+      prisma.purchaseOrder.findMany({
+        where: { deletedAt: null, type: "PEDIDO", status: { in: ["APROVADO", "EM_PAGAMENTO", "CONCLUIDO"] } },
+        select: {
+          id: true,
+          number: true,
+          description: true,
+          currency: true,
+          supplierId: true,
+          supplierName: true,
+          requestType: true,
+          typeData: true,
+          createdAt: true,
+          dueDate: true,
+          items: true,
+          project: { select: { code: true, name: true } },
+          requisition: { select: { quotedValue: true, attachments: { select: { fileName: true } } } },
+          paymentPlan: { select: { installments: { select: { id: true, amount: true, paidAt: true, status: true, notes: true } } } },
+        },
+      }),
+      readSupplierNotes(),
     ]);
-    const input = { payables, payments, suppliers };
+    const orders = rawOrders.map((o) => {
+      const t = PT.orderTotals(o);
+      return {
+        ...o,
+        base: t.base,
+        vat: t.vat,
+        withheld: t.withheld,
+        total: t.total,
+        installments: o.paymentPlan?.installments || [],
+      };
+    });
+    const input = { payables, payments, suppliers, orders, notes };
     if (req.query.fornecedor) {
       const ext = A.supplierStatement(input, String(req.query.fornecedor), moeda);
       if (!ext) return res.status(404).json({ error: "FORNECEDOR_SEM_MOVIMENTOS" });
       return res.json(ext);
     }
-    return res.json(A.buildSupplierAccounts(input, moeda));
+    return res.json({ ...A.buildSupplierAccounts(input, moeda), suppliers: suppliers.map((s) => ({ id: s.id, name: s.name, nif: s.nif })) });
+  })
+);
+
+comprasStockRoutes.post(
+  "/supplier-notes",
+  editFinance,
+  asyncHandler(async (req, res) => {
+    const body = z
+      .object({
+        tipo: z.enum(["NC", "ND", "SI"]),
+        sentido: z.enum(["DIVIDA_FORN", "CREDITO_NOSSO"]).optional(),
+        fornecedorId: z.string().nullable().optional(),
+        fornecedor: z.string().trim().min(1),
+        num: z.string().trim().nullable().optional(),
+        data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        venc: z.string().nullable().optional(),
+        valor: z.number().positive(),
+        moeda: z.string().default("AOA"),
+        motivo: z.string().trim().nullable().optional(),
+        pedidoNum: z.string().trim().nullable().optional(),
+      })
+      .parse(req.body);
+    const list = await readSupplierNotes();
+    const item = {
+      id: `ncf_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+      ...body,
+      moeda: String(body.moeda || "AOA").toUpperCase(),
+      createdAt: new Date().toISOString(),
+      createdBy: req.user?.name || req.user?.email || null,
+    };
+    list.push(item);
+    await writeSupplierNotes(list);
+    return res.status(201).json({ item });
+  })
+);
+
+comprasStockRoutes.delete(
+  "/supplier-notes/:id",
+  editFinance,
+  asyncHandler(async (req, res) => {
+    const list = await readSupplierNotes();
+    const next = list.filter((x) => x.id !== req.params.id);
+    await writeSupplierNotes(next);
+    return res.json({ ok: true });
   })
 );
 

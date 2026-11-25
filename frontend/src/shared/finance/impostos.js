@@ -120,7 +120,7 @@ function desenhar() {
     ${
       L.length
         ? `<div class="fx2-tw"><table class="fx2-t g1-t">
-      <thead><tr><th>Imposto</th><th>Tipo</th><th>Mês Ref.</th><th>Data Limite</th><th class="r">Valor</th><th>RUPE</th><th>Estado</th><th>Nota</th><th>Pedido</th><th></th></tr></thead>
+      <thead><tr><th>Imposto</th><th>Tipo</th><th>Mês Ref.</th><th>Data Limite</th><th class="r">Valor</th><th>RUPE</th><th>Estado</th><th>Nota</th><th>Comprovativo</th><th>Pedido</th><th></th></tr></thead>
       <tbody>${L.map((l) => {
         const nome = l.plano ? `<b>${esc(/^PPP/i.test(l.plano.nome) ? l.plano.nome : `PPP · ${l.plano.nome}`)}</b> <span class="fx2-mut">${l.plano.prestacao}/${l.plano.prestacoes || "?"}</span>` : `<b>${esc(l.tipo)}</b>`;
         const tipo = l.plano ? "PPP" : S.d.tiposRH.includes(l.tipo) ? "RH" : "Financeiro";
@@ -136,6 +136,7 @@ function desenhar() {
           <td class="fx2-mut">${esc(l.rupe || "")}</td>
           <td><span class="fcal-pill fcal-pill--${ESTADO_TOM[l.estado] || "slate"}">${esc(l.estado)}</span>${l.pagoEm ? `<div class="fx2-mut">${fmtData(l.pagoEm)}${l.pagoNota ? ` · ${esc(l.pagoNota)}` : ""}</div>` : ""}</td>
           <td>${l.nota ? `<a href="${esc(getAssetUrl(l.nota.path))}" target="_blank" rel="noopener" title="${esc(l.nota.nome || "Nota de liquidação")}"><span class="material-symbols-outlined" style="font-size:18px;vertical-align:text-bottom">description</span></a>` : "—"}</td>
+          <td>${l.comprovativo ? `<a href="${esc(getAssetUrl(l.comprovativo.path))}" target="_blank" rel="noopener" title="${esc(l.comprovativo.nome || "Comprovativo de pagamento")}"><span class="material-symbols-outlined" style="font-size:18px;vertical-align:text-bottom;color:#15803d">task_alt</span></a>` : "—"}</td>
           <td>${l.pedido ? `<a href="/Financeiro/centro-pagamentos" title="${esc(l.pedido.estado)}">${esc(l.pedido.numero)}</a>` : "—"}</td>
           <td class="g1-acts">${acoes.join(" ")}</td>
         </tr>`;
@@ -287,9 +288,10 @@ function criarPedido(l) {
 export async function render() {
   codigoNoCabecalho("G1");
   const acts = document.getElementById("financePageActions");
-  if (acts && podeEditar()) {
-    acts.innerHTML = `<button type="button" class="finance-btn finance-btn--primary" id="g1Novo">+ Novo Imposto</button>`;
-    document.getElementById("g1Novo").onclick = () => S.d && formImposto(null);
+  if (acts) {
+    acts.innerHTML = `<a class="finance-btn" href="/Financeiro/impostos-planos">Planos de Pagamento</a>${podeEditar() ? ` <button type="button" class="finance-btn finance-btn--primary" id="g1Novo">+ Novo Imposto</button>` : ""}`;
+    const btnNovo = document.getElementById("g1Novo");
+    if (btnNovo) btnNovo.onclick = () => S.d && formImposto(null);
   }
   const el = root();
   el.addEventListener("click", (e) => {

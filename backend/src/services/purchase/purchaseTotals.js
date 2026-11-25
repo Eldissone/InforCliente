@@ -252,6 +252,7 @@ function derivedStatus(order, today = new Date()) {
   const paid = paidAmount(order);
 
   if (total > 0 && paid >= total - 0.5) return { code: "PAGO", label: "Pago", severity: "good" };
+  if (order?.typeData?.emTransito) return { code: "EM_TRANSITO", label: "Em trânsito", severity: "warn" };
 
   // O atraso vem antes do pagamento parcial, como no protótipo: um pedido com
   // uma prestação paga e a seguinte vencida está **atrasado** — é isso que

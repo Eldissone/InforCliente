@@ -81,6 +81,20 @@ function typeHasItems(type) {
   return hit ? hit[2] : true;
 }
 const isGO = (t) => t === "SEDE" || t === "OBRA";
+const GEN_RE = /^\s*(T\d+\s*-\s*)?GEN[EÉ]RICO\b/i;
+
+function isTerceiroGenerico() {
+  const nome = val("ccExtraSupplierName") || val("rqTerceiro") || "";
+  return GEN_RE.test(nome);
+}
+
+function applyGenericoVisibility() {
+  const comItens = typeHasItems(currentRequestType());
+  const fm = $("ccPedidoModo")?.value === "FM";
+  const gen = comItens && !fm && isTerceiroGenerico();
+  show("rqBenefGenWrap", gen);
+  if (!gen && $("rqBenefNome")) $("rqBenefNome").value = "";
+}
 
 /** O tipo escolhido. «GERAL» era o valor antigo e lê-se como sede. */
 function currentRequestType() {
@@ -216,6 +230,7 @@ function escolherTerceiro(s) {
   $("ccExtraSupplierIban").value = iban;
   $("rqTercBanco").value = banco;
   modoCriarTerceiro(false);
+  applyGenericoVisibility();
 }
 
 function modoCriarTerceiro(on) {
@@ -273,6 +288,7 @@ function bindSupplierNifLookup() {
       id.value = "";
       $("ccExtraSupplierName").value = "";
     }
+    applyGenericoVisibility();
   });
 }
 
@@ -726,9 +742,13 @@ export function applyTypeVisibility() {
   show("rqPagRow", comItens);
   show("ccItemsSection", comItens);
   show("rqCentros", isGO(type));
+  if (!isGO(type)) {
+    ST.dist = [{ cc: "", pct: 100, val: "" }];
+  }
   show("rqCond", type !== "EMPRESTIMO");
   if (type === "PESSOAL" && !document.querySelector("#ccPessoalBody .cc-pes-row")) addPersonRow();
   applyPaymentModeVisibility();
+  applyGenericoVisibility();
 }
 
 /** TRF INT (fundo de maneio): o fornecedor é de cada item e não há crédito. */
@@ -1061,9 +1081,17 @@ async function buildPedidoPayload() {
     const nif = normalizeNif(val("ccExtraSupplierNif"));
     const validado = $("ccExtraSupplierNif")?.dataset?.validatedNif || "";
     if (!requiresQuote) {
-      if (!supplierId && !(nif && validado === nif && supplierName)) {
+      if (!supplierId && !(nif && validado === nif && supplierName) && !GEN_RE.test(supplierName || "")) {
         notify("Escolha o terceiro na lista, ou use «+ Criar terceiro» e consulte o NIF.", "error");
         return null;
+      }
+      if (GEN_RE.test(supplierName || "")) {
+        const benef = val("rqBenefNome").toUpperCase();
+        if (!benef) {
+          notify("No terceiro genérico, indique o Beneficiário da conta (titular do IBAN).", "error");
+          return null;
+        }
+        typeData.benefNome = benef;
       }
     } else if (!supplierId) {
       supplierName = null; // com cotação, as Compras escolhem o fornecedor
@@ -1291,6 +1319,7 @@ export async function fillPedidoForm(order, { extra = false } = {}) {
     if (iban && !val("ccExtraSupplierIban")) $("ccExtraSupplierIban").value = iban[1];
     if (banco && !val("rqTercBanco")) $("rqTercBanco").value = banco[1].trim();
   }
+  if ($("rqBenefNome")) $("rqBenefNome").value = order.typeData?.benefNome || "";
 
   fillItemRows(order.items || []);
   cabecalho(extra ? null : order);

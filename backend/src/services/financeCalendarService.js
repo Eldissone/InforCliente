@@ -68,6 +68,8 @@ function fromPayables(items, hoje) {
         data,
         estimada: false,
         valor: round2(p.payable),
+        valorOriginal: round2(N(p.amount) > 0 ? p.amount : p.payable),
+        supplierId: p.supplierId || null,
         moeda: p.currency || "AOA",
         // Sem fornecedor nem beneficiário, diz-se que falta. O cliente da obra
         // não serve de recurso: é quem paga à MBT, não quem recebe dela.

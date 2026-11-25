@@ -7,7 +7,8 @@ import { openInvoiceDocumentModal, invoiceHasDocument } from "./invoiceDocument.
 import { compactMoney as compact } from "./charts.js";
 import { daysLate } from "./aging.js";
 import { openReceiptModal, RECEIPT_METHODS } from "./receiptModal.js";
-import { kpiCardsHtml, meterHtml, num, skeletonHtml, stripHtml } from "./widgets.js";
+import { meterHtml, num, stripHtml } from "./widgets.js";
+import { codigoNoCabecalho } from "./f2Ui.js";
 
 /**
  * Ecrã «Registar Faturas» (Financeiro · Faturação).
@@ -34,8 +35,10 @@ const state = {
   query: "",
   projects: [],
   clients: [],
+  cards: [],
   items: [],
   totals: null,
+  selected: new Set(),
   expanded: new Set(),
   // Estado da leitura automática de faturas (Gemini).
   ai: { configured: false, model: null, loaded: false },
@@ -108,33 +111,32 @@ const POR_RECEBER = ["EM_ABERTO", "PAGO_PARCIAL", "ATRASADO"];
 const SHEETJS = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
 
 function renderShell() {
+  codigoNoCabecalho("R1");
   const root = document.getElementById("financeRoot");
   root.innerHTML = `
-    <div class="ov">
-      <div class="cp-filtros">
-        <input id="invSearch" class="finance-input" type="search" placeholder="Pesquisar n.º, cliente, obra, auto, valor…" autocomplete="off" />
-        <select id="invFilterType" class="finance-select inv-filter" title="Tipo de fatura">
+    <div class="ov fcp-root">
+      <div class="fcp-f1">
+        <input id="invSearch" class="finance-input fcp-q" type="search" placeholder="Pesquisar n.º, cliente, obra, auto, valor…" autocomplete="off" />
+        <select id="invFilterType" class="finance-select fcp-sel" title="Tipo de fatura">
           <option value="">Todos os tipos de fatura</option>
           ${TIPOS.map(([k, l]) => `<option value="${k}">${k} — ${esc(l)}</option>`).join("")}
           <option value="PREV">Previstos (ainda sem fatura)</option>
         </select>
-        <select id="invFilterClient" class="finance-select inv-filter" title="Cliente"></select>
-        <select id="invFilterProject" class="finance-select inv-filter" title="Obra"></select>
-        <input id="invFilterMonth" class="finance-input inv-filter" type="month" title="Mês do documento" />
-        <button id="invFilterClear" type="button" class="finance-btn">Limpar</button>
+        <select id="invFilterClient" class="finance-select fcp-sel" title="Cliente"></select>
+        <select id="invFilterProject" class="finance-select fcp-sel" title="Obra"></select>
+        <input id="invFilterMonth" class="finance-input fcp-sel" type="month" title="Mês do documento" />
+        <button id="invFilterClear" type="button" class="finance-btn finance-btn--sm">Limpar</button>
       </div>
-      <div id="invFiltros2" class="cp-filtros"></div>
-      <div id="invCards"></div>
-      <p class="cp-resumo" id="invCount">—</p>
-      <section class="finance-card ov-panel">
-        <div id="invoiceTable" class="finance-table-scroll"></div>
+      <div id="invFiltros2" class="fcp-f2"></div>
+      <div id="invCards" class="fcp-kpr"></div>
+      <p class="fcp-resumo" id="invCount">—</p>
+      <div id="invBulkBar"></div>
+      <section class="finance-card ov-panel" style="padding:0">
+        <div id="invoiceTable" class="fx2-tw"></div>
       </section>
       <p class="fcal-nota">Tipos: AM Auto de Medição · FU Fatura Única / Final · MC Marco de Pagamento · ADI Adiantamento ·
         RET Retenção · DRET Devolução de Retenção · REV Revisão de Preços · SERV Serviços / Manutenção.
-        Os recebimentos registam-se na linha da fatura (ou a partir do extrato, em T2). Clique numa linha para ver o detalhe.</p>
-
-      <h3 class="cp-sec">Análise</h3>
-      <div id="invoiceKpis" class="ov-kpis">${skeletonHtml(4, "kpi")}</div>
+        Selecione uma ou várias faturas do mesmo cliente para registar um <b>Recibo Único</b>, ou clique numa linha para ver o detalhe.</p>
     </div>`;
 
   const clientSel = document.getElementById("invFilterClient");
@@ -290,32 +292,31 @@ function atraso90(inv) {
 }
 
 /**
- * Os três cartões da versão final do protótipo (v555): por receber, em atraso
- * e em atraso há mais de 90 dias — cada um com faturas, clientes e o peso no
- * que está por receber. Filtram a lista. O previsto e o recebido do mês ficam
- * no estado «Previstos» e na Análise.
+ * Os 5 cartões KPI do Centro de Recebimentos (v638, mesmo formato do Centro de Pagamentos):
+ * Por Receber · Em Atraso · Vence em 7 Dias · Atraso Superior a 90 Dias · Recebido.
  */
 function renderCards() {
   const base = filteredBase();
-  const ab = base.filter((i) => POR_RECEBER.includes(i.status));
-  const atr = base.filter((i) => i.status === "ATRASADO");
+  const ab = base.filter((i) => POR_RECEBER.includes(i.status) && num(i.missingAmount) > 0.5);
+  const atr = ab.filter((i) => i.status === "ATRASADO");
+  const v7 = ab.filter(em7Dias);
   const a90 = atr.filter(atraso90);
+  const rec = base.filter((i) => num(i.receivedAmount) > 0.5);
   const st = state.filters.status;
-  const nCli = (L) => new Set(L.map((i) => i.client?.id || i.client?.name || "—")).size;
-  // O peso só se calcula na moeda principal (não se somam moedas).
-  const totAOA = porMoeda(ab, (i) => i.missingAmount).AOA || 0;
-  const peso = (L) => (totAOA ? ((porMoeda(L, (i) => i.missingAmount).AOA || 0) / totAOA) * 100 : 0);
-  const card = (k, tom, titulo, L, cor) => {
-    const p = peso(L);
-    return `<button type="button" class="fx2-k fx2-k--${tom} r1-box${st === k ? " on" : ""}" data-r1est="${k}"><span class="fx2-kt">${esc(titulo)}</span><b class="fx2-kv">${moedasHtml(
-      porMoeda(L, (i) => i.missingAmount)
-    )}</b><span class="fx2-kn">${L.length} fatura(s) · ${nCli(L)} cliente(s)${k !== "__aberto" && totAOA > 0 ? ` · ${p.toLocaleString("pt-PT", { maximumFractionDigits: 1 })}%` : ""}</span><span class="r1-bar"><i style="width:${Math.min(100, k === "__aberto" ? (ab.length ? 100 : 0) : p)}%;background:${cor}"></i></span></button>`;
-  };
-  document.getElementById("invCards").innerHTML = `<div class="fx2-kpis r1-boxes">
-    ${card("__aberto", "blue", "Por Receber de Clientes", ab, "#1f5fd1")}
-    ${card("ATRASADO", "bad", "Em Atraso", atr, "#d64545")}
-    ${card("a90", "bad", "Atraso Superior a 90 Dias", a90, "#7a1010")}
-  </div>`;
+
+  const kpi = (k, cls, lbl, L, valFn = (i) => i.missingAmount) =>
+    `<button type="button" class="fcp-kpc ${cls}${st === k ? " is-on" : ""}" data-r1est="${k}">
+      <span>${esc(lbl)}</span>
+      <b>${moedasHtml(porMoeda(L, valFn))}</b>
+      <i>${L.length} fatura(s)</i>
+    </button>`;
+
+  document.getElementById("invCards").innerHTML =
+    kpi("__aberto", "", "Por Receber", ab) +
+    kpi("ATRASADO", "bad", "Em Atraso", atr) +
+    kpi("v7", "warn", "Vence em 7 Dias", v7) +
+    kpi("a90", "bad", "Atraso Superior a 90 Dias", a90) +
+    kpi("rec_any", "good", "Recebido", rec, (i) => i.receivedAmount);
 }
 
 function renderFiltros2() {
@@ -408,13 +409,20 @@ function filteredBase() {
   );
 }
 
+function totalLiquidarOf(inv) {
+  if (inv.totalToLiquidate !== undefined && inv.totalToLiquidate !== null) return num(inv.totalToLiquidate);
+  const vat = inv.flagVatCativo ? 0 : num(inv.vatAmount);
+  return Math.round((num(inv.grossAmount) + vat - num(inv.carInsuranceAmount) - num(inv.guaranteeAmount)) * 100) / 100;
+}
+
 /** Faturas visíveis na tabela. */
 function visibleItems() {
   const items = filteredBase();
   const s = state.filters.status;
-  if (s === "__aberto") return items.filter((i) => POR_RECEBER.includes(i.status));
+  if (s === "__aberto") return items.filter((i) => POR_RECEBER.includes(i.status) && num(i.missingAmount) > 0.5);
   if (s === "v7") return items.filter(em7Dias);
   if (s === "a90") return items.filter(atraso90);
+  if (s === "rec_any") return items.filter((i) => num(i.receivedAmount) > 0.5);
   if (s === "prev") return [];
   return s ? items.filter((i) => i.status === s) : items;
 }
@@ -534,93 +542,252 @@ function detailRow(inv, cur) {
     </div>`;
 }
 
+function renderBulkReceiptBar(items) {
+  const slot = document.getElementById("invBulkBar");
+  if (!slot) return;
+  const openIds = new Set(state.items.filter((i) => num(i.missingAmount) > 0.5).map((i) => i.id));
+  [...state.selected].forEach((id) => {
+    if (!openIds.has(id)) state.selected.delete(id);
+  });
+  if (!state.selected.size || !canEdit()) {
+    slot.innerHTML = "";
+    return;
+  }
+  const selList = state.items.filter((i) => state.selected.has(i.id));
+  const clients = [...new Set(selList.map((i) => i.client?.name || i.project?.client?.name || "—"))];
+  slot.innerHTML = `
+    <div class="fcp-bulkbar">
+      <b>${selList.length} fatura(s)</b>
+      <span class="fx2-mut">${esc(clients.join(", "))} · falta receber <b>${moedasHtml(porMoeda(selList, (i) => i.missingAmount))}</b></span>
+      <span style="flex:1"></span>
+      <button type="button" class="finance-btn finance-btn--sm" id="invSelClear">Limpar</button>
+      <button type="button" class="finance-btn finance-btn--sm finance-btn--primary" id="invBulkRcvBtn">Registar Recebimento (Recibo Único)</button>
+    </div>`;
+  document.getElementById("invSelClear")?.addEventListener("click", () => {
+    state.selected.clear();
+    renderTable();
+  });
+  document.getElementById("invBulkRcvBtn")?.addEventListener("click", () => openBulkReceiptModal(selList));
+}
+
+/** Recibo Único para várias faturas (`FXDRAW.rcmul` v638/v639). */
+function openBulkReceiptModal(selList) {
+  const clientKeys = new Set(selList.map((i) => i.client?.id || i.client?.name || i.project?.client?.name || i.id));
+  if (clientKeys.size > 1) {
+    return toast("Selecione apenas faturas do mesmo cliente para emitir um Recibo Único.", { type: "error" });
+  }
+  const cur = selList[0]?.project?.currency || "AOA";
+  const cliName = selList[0]?.client?.name || selList[0]?.project?.client?.name || "Cliente";
+  const lines = selList.map((inv) => ({ inv, val: Math.round(num(inv.missingAmount) * 100) / 100 }));
+  const today = toDateKey(new Date());
+  const fmtN = (v) => (Number(v) || 0).toLocaleString("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  openModal({
+    title: `RECEBIMENTO · ${lines.length} fatura(s) · ${cliName}`,
+    width: 980,
+    primaryLabel: "Registar Recebimento",
+    secondaryLabel: "Cancelar",
+    contentHtml: `
+      <p class="fx2-mut t3-small" style="margin:0 0 10px">Um só recibo para várias faturas. Pode receber só parte de uma fatura: ajuste o valor recebido em cada linha.</p>
+      <div class="finance-form-grid finance-form-grid--3" style="margin-bottom:12px">
+        <div class="finance-field">
+          <label class="finance-label">Data do recebimento <span class="inv-req">*</span></label>
+          <input id="rcmDate" type="date" class="finance-input" value="${today}" max="${today}">
+        </div>
+        <div class="finance-field">
+          <label class="finance-label">Conta onde entrou <span class="inv-req">*</span></label>
+          <select id="rcmCard" class="finance-select">
+            <option value="">— escolher conta —</option>
+            ${state.cards.map((c) => `<option value="${esc(c.id)}" data-label="${esc([c.bank, c.label].filter(Boolean).join(" "))}">${esc([c.bank, c.label, c.lastDigits ? `•${c.lastDigits}` : ""].filter(Boolean).join(" "))}</option>`).join("")}
+          </select>
+        </div>
+        <div class="finance-field">
+          <label class="finance-label">N.º do recibo / referência <span class="inv-req">*</span></label>
+          <input id="rcmRef" type="text" class="finance-input" placeholder="ex.: RC MBT2026/15">
+        </div>
+      </div>
+      <div class="fx2-tw">
+        <table class="fx2-t">
+          <thead>
+            <tr>
+              <th>Fatura</th><th>Obra</th><th>Vencimento</th>
+              <th class="r" title="Ilíquido + IVA − seguro − garantia">Total a Liquidar</th>
+              <th class="r">Retenção</th>
+              <th class="r">V. a Receber</th>
+              <th class="r">Já Recebido</th>
+              <th class="r">Falta</th>
+              <th class="r">Valor Recebido Agora</th>
+              <th class="r">Fica a Faltar</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${lines
+              .map((z, idx) => {
+                const f = Math.round(num(z.inv.missingAmount) * 100) / 100;
+                return `<tr>
+                  <td><b>${esc(z.inv.docNumber || "—")}</b></td>
+                  <td class="fx2-mut">${esc(z.inv.project?.referencia || z.inv.project?.code || z.inv.project?.name || "—")}</td>
+                  <td>${esc(formatDateOnly(z.inv.dueDate || z.inv.effectiveDueDate))}</td>
+                  <td class="r"><b>${fmtN(totalLiquidarOf(z.inv))}</b></td>
+                  <td class="r">${fmtN(z.inv.withholdingAmount)}</td>
+                  <td class="r">${fmtN(z.inv.netAmount)}</td>
+                  <td class="r">${fmtN(z.inv.receivedAmount)}</td>
+                  <td class="r">${fmtN(f)}</td>
+                  <td class="r"><input type="number" step="0.01" min="0" max="${f}" class="finance-input" style="width:140px;text-align:right" data-rcmval="${idx}" value="${z.val}"></td>
+                  <td class="r" data-rcmrest="${idx}">—</td>
+                </tr>`;
+              })
+              .join("")}
+          </tbody>
+          <tfoot>
+            <tr class="f0-tot">
+              <td colspan="8"><b>Total do recibo (${esc(cur)})</b></td>
+              <td class="r"><b id="rcmTotal">${fmtN(lines.reduce((s, z) => s + z.val, 0))}</b></td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>`,
+    onRender: ({ panel }) => {
+      panel.addEventListener("input", (e) => {
+        const inp = e.target.closest("[data-rcmval]");
+        if (!inp) return;
+        const idx = Number(inp.dataset.rcmval);
+        lines[idx].val = Math.round((Number(inp.value) || 0) * 100) / 100;
+        const rest = Math.round((num(lines[idx].inv.missingAmount) - lines[idx].val) * 100) / 100;
+        const cell = panel.querySelector(`[data-rcmrest="${idx}"]`);
+        if (cell) cell.textContent = rest > 0.5 ? fmtN(rest) : "—";
+        const tot = lines.reduce((s, z) => s + (z.val > 0 ? z.val : 0), 0);
+        panel.querySelector("#rcmTotal").textContent = fmtN(tot);
+      });
+    },
+    onPrimary: async ({ panel, btn, close }) => {
+      const receivedDate = panel.querySelector("#rcmDate")?.value;
+      const cardSel = panel.querySelector("#rcmCard");
+      const reference = panel.querySelector("#rcmRef")?.value?.trim();
+      if (!receivedDate) return toast("Indique a data do recebimento.", { type: "error" });
+      if (!cardSel?.value && state.cards.length) return toast("Escolha a conta onde entrou o valor.", { type: "error" });
+      if (!reference) return toast("Indique o n.º do recibo ou referência.", { type: "error" });
+      const validLines = lines.filter((z) => z.val > 0);
+      if (!validLines.length) return toast("Indique um valor recebido maior que zero.", { type: "error" });
+      for (const z of validLines) {
+        if (z.val > num(z.inv.missingAmount) + 0.5) {
+          return toast(`${z.inv.docNumber}: valor recebido maior do que falta.`, { type: "error" });
+        }
+      }
+      setButtonLoading(btn, true);
+      try {
+        const res = await apiRequest("/finance/invoices/bulk-receipts", {
+          method: "POST",
+          body: {
+            receivedDate,
+            cardId: cardSel?.value || null,
+            cardLabel: cardSel?.selectedOptions?.[0]?.dataset?.label || null,
+            reference,
+            lines: validLines.map((z) => ({ invoiceId: z.inv.id, amount: z.val })),
+          },
+        });
+        toast(`Recibo ${reference} registado em ${res.count} fatura(s).`, { type: "success" });
+        state.selected.clear();
+        close();
+        await loadInvoices();
+      } catch (err) {
+        setButtonLoading(btn, false);
+        toast(err?.data?.message || err.message || "Falha ao registar recibo único.", { type: "error" });
+      }
+    },
+  });
+}
+
 function renderTable() {
   const wrap = document.getElementById("invoiceTable");
   if (!wrap) return;
   const showPrev = state.filters.status === "prev" || state.filters.type === "PREV";
-  if (showPrev) return renderForecastTable(wrap);
+  if (showPrev) {
+    renderBulkReceiptBar([]);
+    return renderForecastTable(wrap);
+  }
   const items = visibleItems();
+  renderBulkReceiptBar(items);
   const count = document.getElementById("invCount");
   if (count) {
     const falta = porMoeda(items, (i) => i.missingAmount);
-    count.innerHTML = `${items.length} documento(s) na lista · falta receber <b>${moedasHtml(falta)}</b>`;
+    const totLiq = porMoeda(items, totalLiquidarOf);
+    count.innerHTML = `<span class="fx2-mut">${items.length} fatura(s) na lista · total a liquidar <b>${moedasHtml(totLiq)}</b> · em falta <b>${moedasHtml(falta)}</b></span>`;
   }
 
   if (!items.length) {
     wrap.innerHTML = `
-      <div class="ov-empty ov-empty--lg">
-        <span class="material-symbols-outlined">receipt_long</span>
+      <div class="finance-empty">
         ${state.items.length ? "Nenhuma fatura corresponde aos filtros." : "Ainda não há faturas registadas."}
       </div>`;
     return;
   }
 
   const editable = canEdit();
+  const fmtN = (v) => (Number(v) || 0).toLocaleString("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const selectableItems = items.filter((i) => num(i.missingAmount) > 0.5);
+  const allChecked = selectableItems.length > 0 && selectableItems.every((i) => state.selected.has(i.id));
+
   const rows = items
     .map((inv) => {
       const cur = inv.project?.currency || "AOA";
       const open = state.expanded.has(inv.id);
-      const receivedPct = num(inv.netAmount) > 0 ? (num(inv.receivedAmount) / num(inv.netAmount)) * 100 : 0;
+      const canSel = editable && num(inv.missingAmount) > 0.5;
+      const tl = totalLiquidarOf(inv);
+      const falta = num(inv.missingAmount);
+      const wp = inv.workPercent !== null && inv.workPercent !== undefined ? `${Number(inv.workPercent).toFixed(1)}%` : "—";
+      const cp = inv.cumWorkPercent !== null && inv.cumWorkPercent !== undefined ? `${Number(inv.cumWorkPercent).toFixed(1)}%` : null;
+      const hasDoc = invoiceHasDocument(inv);
       return `
-      <tr data-id="${esc(inv.id)}" class="fin-row--clickable ${inv.status === "ATRASADO" ? "fin-row--overdue" : ""}">
+      <tr data-id="${esc(inv.id)}" class="fcp-row ${inv.status === "ATRASADO" ? "is-late" : ""}">
+        <td data-stop>${canSel ? `<input type="checkbox" data-invsel="${esc(inv.id)}"${state.selected.has(inv.id) ? " checked" : ""} title="Selecionar para Recibo Único">` : ""}</td>
         <td>
-          <div class="inv-doc">
-            <span class="material-symbols-outlined inv-toggle ${open ? "open" : ""}">chevron_right</span>
-            <div>
-              <div class="inv-doc-number">
-                ${esc(inv.docNumber || "Sem nº")}
-                ${invoiceHasDocument(inv) ? `<span class="material-symbols-outlined inv-doc-icon" title="Fatura física anexada">attach_file</span>` : ""}
-                ${inv.scanSource === "IA" ? `<span class="finance-chip finance-chip--violet" title="Lida automaticamente com IA${inv.scanModel ? ` (${esc(inv.scanModel)})` : ""}">IA</span>` : ""}
-              </div>
-              <div class="ov-project-meta">${esc(formatDateOnly(inv.docDate))}${inv.measurement ? ` · ${esc(inv.measurement.reportNumber || "AM")}` : ""}</div>
-            </div>
-          </div>
+          <b style="color:#1a8a5a">${esc(inv.docNumber || "Sem n.º")}</b>
+          ${inv.invoiceType ? ` <span class="fcp-docpill">${esc(inv.invoiceType)}</span>` : ""}
+          ${inv.scanSource === "IA" ? ` <span class="fcp-docpill" title="Lida com IA">IA</span>` : ""}
         </td>
-        <td><b>${esc(inv.invoiceType || "—")}</b></td>
+        <td class="fx2-mut">${esc(inv.measurement?.reportNumber || "—")}</td>
         <td>
-          <div class="ov-project">
-            <span class="ov-project-name">${esc(inv.project?.name || "—")}</span>
-            <span class="ov-project-meta">${esc(inv.client?.name || inv.project?.referencia || inv.project?.code || "")}</span>
-          </div>
+          <div><b>${esc(inv.client?.name || inv.project?.client?.name || "—")}</b></div>
+          <div class="fx2-mut" style="font-size:11.5px">${esc([inv.project?.referencia || inv.project?.code, inv.project?.name].filter(Boolean).join(" · ") || "—")}</div>
         </td>
+        <td>${esc(formatDateOnly(inv.docDate))}</td>
         <td>
-          <div class="inv-due-cell">${esc(formatDateOnly(inv.dueDate || inv.effectiveDueDate))}${
-            inv.dueEstimated ? `<span class="inv-due inv-due--est" title="Sem vencimento registado: data do documento + 30 dias">estimado</span>` : ""
-          }${dueChip(inv)}</div>
+          <div>${esc(formatDateOnly(inv.dueDate || inv.effectiveDueDate))}</div>
+          ${dueChip(inv)}
         </td>
-        <td class="fin-num">${esc(money(inv.grossAmount, cur))}</td>
-        <td class="fin-num"><strong>${esc(money(inv.netAmount, cur))}</strong></td>
-        <td class="fin-num">
-          <div class="ov-cell-bar">
-            <span>${esc(money(inv.receivedAmount, cur))}</span>
-            ${meterHtml([{ value: receivedPct, tone: "emerald" }])}
-          </div>
-        </td>
-        <td class="fin-num ${num(inv.missingAmount) > 0 ? "ov-neg" : "ov-pos"}"><strong>${esc(money(inv.missingAmount, cur))}</strong></td>
-        <td>${statusBadge(inv.status)}</td>
-        <td>
+        <td class="r fx2-mut">${esc(cp ? `${wp} · ${cp}` : wp)}</td>
+        <td class="r">${fmtN(inv.grossAmount)}</td>
+        <td class="r">${inv.flagVatCativo ? '<span class="fx2-mut" title="IVA cativo">cativo</span>' : fmtN(inv.vatAmount)}</td>
+        <td class="r">${num(inv.carInsuranceAmount) ? fmtN(inv.carInsuranceAmount) : "—"}</td>
+        <td class="r">${num(inv.guaranteeAmount) ? fmtN(inv.guaranteeAmount) : "—"}</td>
+        <td class="r" title="Ilíquido + IVA − seguro − garantia (antes da retenção na fonte)"><b>${fmtN(tl)}</b></td>
+        <td class="r">${num(inv.withholdingAmount) ? fmtN(inv.withholdingAmount) : "—"}</td>
+        <td class="r" title="Total a liquidar − retenção na fonte"><b>${fmtN(inv.netAmount)}</b>${cur !== "AOA" ? ` <small class="fx2-mut">${esc(cur)}</small>` : ""}</td>
+        <td class="r fcal-in">${num(inv.receivedAmount) ? fmtN(inv.receivedAmount) : "—"}</td>
+        <td class="r ${falta > 0.5 ? "f0-neg" : ""}"><b>${falta > 0.5 ? fmtN(falta) : "—"}</b></td>
+        <td data-stop style="white-space:nowrap">
           <div class="fin-actions">
             ${
-              invoiceHasDocument(inv)
-                ? `<button type="button" class="fin-icon-btn" title="Ver fatura física" data-action="document">
-                     <span class="material-symbols-outlined" style="font-size:17px">receipt</span>
-                   </button>`
-                : ""
+              hasDoc
+                ? `<button type="button" class="fcp-doc ok" title="Ver fatura física" data-action="document">✓</button>`
+                : `<span class="fcp-doc miss" title="Fatura sem PDF anexado">!</span>`
             }
             ${
               editable
                 ? `${
-                    num(inv.missingAmount) > 0
+                    falta > 0.5
                       ? `<button type="button" class="fin-icon-btn fin-icon-btn--emerald" title="Registar recebimento" data-action="receipt">
-                           <span class="material-symbols-outlined" style="font-size:17px">payments</span>
+                           <span class="material-symbols-outlined" style="font-size:16px">payments</span>
                          </button>`
                       : ""
                   }
                    <button type="button" class="fin-icon-btn fin-icon-btn--blue" title="Editar" data-action="edit">
-                     <span class="material-symbols-outlined" style="font-size:17px">edit</span>
+                     <span class="material-symbols-outlined" style="font-size:16px">edit</span>
                    </button>
                    <button type="button" class="fin-icon-btn fin-icon-btn--red" title="Eliminar" data-action="delete">
-                     <span class="material-symbols-outlined" style="font-size:17px">delete</span>
+                     <span class="material-symbols-outlined" style="font-size:16px">delete</span>
                    </button>`
                 : ""
             }
@@ -628,43 +795,73 @@ function renderTable() {
         </td>
       </tr>
       <tr class="fin-subrow" ${open ? "" : "hidden"}>
-        <td colspan="10">${detailRow(inv, cur)}</td>
+        <td colspan="17">${detailRow(inv, cur)}</td>
       </tr>`;
     })
     .join("");
 
-  const sum = (key) => items.reduce((a, i) => a + num(i[key]), 0);
+  const sum = (fn) => items.reduce((a, i) => a + num(typeof fn === "function" ? fn(i) : i[fn]), 0);
   wrap.innerHTML = `
-    <table class="fin-table inv-table">
+    <table class="fx2-t fcp-table">
       <thead>
         <tr>
-          <th>Documento</th><th>Tipo</th><th>Obra · Cliente</th><th>Receção</th>
-          <th style="text-align:right">V. Ilíquido</th>
-          <th style="text-align:right">V. Líquido</th>
-          <th style="text-align:right">Recebido</th>
-          <th style="text-align:right">Em Falta</th>
-          <th>Estado</th>
-          <th style="text-align:center">Ações</th>
+          <th style="width:26px">${editable && selectableItems.length ? `<input type="checkbox" id="invSelAll"${allChecked ? " checked" : ""} title="Selecionar todas em aberto">` : ""}</th>
+          <th>Fatura</th>
+          <th>Auto</th>
+          <th>Cliente / Obra</th>
+          <th>Emissão</th>
+          <th>Vencimento</th>
+          <th class="r">% Obra<br><small style="font-weight:400">fat. · acum.</small></th>
+          <th class="r">V. Ilíquido</th>
+          <th class="r">IVA</th>
+          <th class="r">Seguro</th>
+          <th class="r">Garantia</th>
+          <th class="r" title="Ilíquido + IVA − seguro − garantia (antes da retenção na fonte)">Total a Liquidar</th>
+          <th class="r">Retenção</th>
+          <th class="r" title="Total a liquidar − retenção na fonte">V. a Receber</th>
+          <th class="r">Recebido</th>
+          <th class="r" title="O que ainda falta receber (já sem a retenção)">Em Falta</th>
+          <th>Docs</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
       <tfoot>
-        <tr>
-          <td colspan="4">Totais (${items.length} faturas)</td>
-          <td class="fin-num">${esc(money(sum("grossAmount")))}</td>
-          <td class="fin-num">${esc(money(sum("netAmount")))}</td>
-          <td class="fin-num">${esc(money(sum("receivedAmount")))}</td>
-          <td class="fin-num">${esc(money(sum("missingAmount")))}</td>
-          <td colspan="2"></td>
+        <tr class="f0-tot">
+          <td colspan="7">Totais (${items.length} fatura${items.length === 1 ? "" : "s"})</td>
+          <td class="r">${fmtN(sum("grossAmount"))}</td>
+          <td class="r">${fmtN(sum((i) => (i.flagVatCativo ? 0 : i.vatAmount)))}</td>
+          <td class="r">${fmtN(sum("carInsuranceAmount"))}</td>
+          <td class="r">${fmtN(sum("guaranteeAmount"))}</td>
+          <td class="r"><b>${fmtN(sum(totalLiquidarOf))}</b></td>
+          <td class="r">${fmtN(sum("withholdingAmount"))}</td>
+          <td class="r"><b>${fmtN(sum("netAmount"))}</b></td>
+          <td class="r">${fmtN(sum("receivedAmount"))}</td>
+          <td class="r"><b>${fmtN(sum("missingAmount"))}</b></td>
+          <td></td>
         </tr>
       </tfoot>
     </table>`;
+
+  wrap.querySelector("#invSelAll")?.addEventListener("change", (e) => {
+    if (e.target.checked) selectableItems.forEach((i) => state.selected.add(i.id));
+    else selectableItems.forEach((i) => state.selected.delete(i.id));
+    renderTable();
+  });
+
+  wrap.querySelectorAll("[data-invsel]").forEach((chk) => {
+    chk.addEventListener("change", (e) => {
+      e.stopPropagation();
+      if (chk.checked) state.selected.add(chk.dataset.invsel);
+      else state.selected.delete(chk.dataset.invsel);
+      renderBulkReceiptBar(items);
+    });
+  });
 
   wrap.querySelectorAll("tbody tr[data-id]").forEach((tr) => {
     const inv = state.items.find((i) => i.id === tr.dataset.id);
     if (!inv) return;
     tr.addEventListener("click", (e) => {
-      if (e.target.closest("button")) return;
+      if (e.target.closest("button, input, [data-stop]")) return;
       if (state.expanded.has(inv.id)) state.expanded.delete(inv.id);
       else state.expanded.add(inv.id);
       renderTable();
@@ -681,7 +878,6 @@ function renderTable() {
 function renderAll() {
   renderFiltros2();
   renderCards();
-  renderKpis();
   renderTable();
 }
 
@@ -705,12 +901,14 @@ function renderForecastTable(wrap) {
 /* ─── Carregamento ────────────────────────────────────────────────────────── */
 
 async function loadOptions() {
-  const [projects, clients] = await Promise.all([
+  const [projects, clients, cards] = await Promise.all([
     apiRequest("/finance/options/projects"),
     apiRequest("/finance/options/clients"),
+    apiRequest("/finance/options/cards").catch(() => ({ items: [] })),
   ]);
   state.projects = projects.items || [];
   state.clients = clients.items || [];
+  state.cards = (cards.items || []).filter((c) => c.active !== false);
 }
 
 async function loadInvoices() {
@@ -743,9 +941,10 @@ function buildPreview(draft) {
   const car = (g * (Number(draft.carPercent) || 0)) / 100;
   const guarantee = (g * (Number(draft.guaranteePercent) || 0)) / 100;
   const net = g + vat - withholding - car - guarantee;
+  const totalLiquidar = g + vat - car - guarantee;
   const budget = Number(draft.saleBudget) || 0;
   const workPercent = budget > 0 ? (g / budget) * 100 : null;
-  return { gross: g, vat, withholding, car, guarantee, net, workPercent };
+  return { gross: g, vat, withholding, car, guarantee, totalLiquidar, net, workPercent };
 }
 
 /** Resumo legível do que a IA leu, para o financeiro confirmar antes de gravar. */
@@ -836,7 +1035,10 @@ async function openInvoiceModal(invoice, { file = null } = {}) {
           ${stepTitle(1, "Identificação", "Obra, terceiro e auto de medição a faturar")}
           <div class="finance-form-grid finance-form-grid--2">
             <div class="finance-field finance-field--full">
-              <label class="finance-label" for="inv_project">Obra <span class="inv-req">*</span></label>
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <label class="finance-label" for="inv_project">Obra <span class="inv-req">*</span></label>
+                ${!isEdit ? `<span style="display:flex;gap:8px;font-size:12px"><a href="/registos/terceiros" target="_blank" rel="noopener" class="t3-lnk">+ Criar novo cliente</a> · <a href="/registos/obras" target="_blank" rel="noopener" class="t3-lnk">+ Nova obra / serviço</a> <button type="button" id="inv_refreshOpts" class="t3-lnk" style="border:0;background:none;cursor:pointer" title="Atualizar lista de obras e clientes">⟳</button></span>` : ""}
+              </div>
               <select id="inv_project" class="finance-select" required ${isEdit ? "disabled" : ""}>
                 <option value="">Selecionar obra…</option>
                 ${state.projects
@@ -1023,9 +1225,10 @@ async function openInvoiceModal(invoice, { file = null } = {}) {
           <dl class="inv-summary-lines">
             <div><dt>V. Ilíquido</dt><dd id="pv_gross">—</dd></div>
             <div><dt>IVA</dt><dd id="pv_vat">—</dd></div>
-            <div><dt>Retenção na fonte</dt><dd id="pv_withholding" class="ov-neg">—</dd></div>
             <div><dt>Seguro CAR</dt><dd id="pv_car" class="ov-neg">—</dd></div>
             <div><dt>Garantia</dt><dd id="pv_guarantee" class="ov-neg">—</dd></div>
+            <div><dt>Total a Liquidar</dt><dd id="pv_liquidar"><strong>—</strong></dd></div>
+            <div><dt>Retenção na fonte</dt><dd id="pv_withholding" class="ov-neg">—</dd></div>
           </dl>
           <div class="inv-summary-net">
             <span>V. Líquido a receber</span>
@@ -1115,6 +1318,7 @@ async function openInvoiceModal(invoice, { file = null } = {}) {
         $("pv_withholding").textContent = `− ${money(pv.withholding, c)}`;
         $("pv_car").textContent = `− ${money(pv.car, c)}`;
         $("pv_guarantee").textContent = `− ${money(pv.guarantee, c)}`;
+        if ($("pv_liquidar")) $("pv_liquidar").textContent = money(pv.totalLiquidar, c);
         $("pv_net").textContent = money(pv.net, c);
         $("inv_withholding_amount").textContent = `− ${money(pv.withholding, c)}`;
         $("inv_vat_amount").textContent = cativo ? "Cativo" : `+ ${money(pv.vat, c)}`;
@@ -1267,6 +1471,15 @@ async function openInvoiceModal(invoice, { file = null } = {}) {
         $("inv_car").value = pctValue(invoice.carInsuranceAmount, invoice.grossAmount);
         $("inv_guarantee").value = pctValue(invoice.guaranteeAmount, invoice.grossAmount);
       }
+
+      $("inv_refreshOpts")?.addEventListener("click", async () => {
+        const prev = projectSel.value;
+        await loadOptions();
+        projectSel.innerHTML =
+          `<option value="">Selecionar obra…</option>` +
+          state.projects.map((p) => `<option value="${esc(p.id)}"${p.id === prev ? " selected" : ""}>${esc([p.referencia || p.code, p.name].filter(Boolean).join(" — "))}</option>`).join("");
+        toast("Lista de obras e clientes atualizada.", { type: "info" });
+      });
 
       projectSel.addEventListener("change", loadProjectContext);
       ["inv_gross", "inv_vat", "inv_withholding", "inv_car", "inv_guarantee"].forEach((id) =>

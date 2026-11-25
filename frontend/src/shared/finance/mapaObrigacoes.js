@@ -69,24 +69,32 @@ function desenhar() {
   const cols = (F.per === "M" && F.inc ? ["ant"] : []).concat(K);
   const estados = S.lado === "R" ? ESTADOS_R : ESTADOS_P;
 
-  // A árvore: cada nó soma por coluna e no total.
+  // A árvore: cada nó soma por coluna e no total (v633: Em Dívida por omissão, ou Valor Original).
+  const valDe = (x) => (S.lado === "P" && F.mo === "orig" ? Number(x.valorOriginal || x.valor) || 0 : Number(x.valor) || 0);
   const T = { v: {}, C: {} };
   for (const x of itens) {
     if (x.lado !== S.lado || String(x.moeda || "AOA").toUpperCase() !== F.moeda || !F.est.includes(x.estado) || !x.data) continue;
+    if (S.lado === "P" && /s[óo]cio/i.test(x.grupo || "")) continue; // v611: Mapa de Obrigações sem sócios
     let k = chaveDe(F, x.data);
     if (!K.includes(k)) {
       if (F.per === "M" && F.inc && x.data < `${K[0]}-01`) k = "ant";
       else continue;
     }
+    const v = valDe(x);
     const nos = [T];
     let c = T;
-    for (const p of caminho(x, F)) {
-      c = c.C[p] = c.C[p] || { k: p, v: {}, C: {} };
+    const parts = caminho(x, F);
+    for (let idx = 0; idx < parts.length; idx++) {
+      const p = parts[idx];
+      c = c.C[p] = c.C[p] || { k: p, v: {}, C: {}, fornKey: null };
+      if (S.lado === "P" && ((F.by === "forn" && idx === 0) || (F.by !== "forn" && idx === 1))) {
+        c.fornKey = x.supplierId ? `id:${x.supplierId}` : `nome:${String(x.entidade || "").trim().toLowerCase()}`;
+      }
       nos.push(c);
     }
     for (const n of nos) {
-      n.v[k] = (n.v[k] || 0) + x.valor;
-      n.v.t = (n.v.t || 0) + x.valor;
+      n.v[k] = (n.v[k] || 0) + v;
+      n.v.t = (n.v.t || 0) + v;
     }
   }
   const atual = F.per === "S" ? weekOf(hoje) : hoje.slice(0, 7);
@@ -99,8 +107,12 @@ function desenhar() {
         const key = `${id}›${z.k}`;
         const tem = Object.keys(z.C).length && nv < niveis;
         const ab = S.abertos.has(key);
+        const ccLink =
+          S.lado === "P" && z.fornKey && z.k !== "—" && z.k !== "Sem beneficiário"
+            ? ` <a class="t3-lnk" style="font-size:11px;margin-left:6px" href="/compras/conta-corrente-fornecedores?fornecedor=${encodeURIComponent(z.fornKey)}&from=mapa-obrigacoes" data-stop title="Abrir Conta Corrente deste fornecedor">Conta Corrente ↗</a>`
+            : "";
         return `<tr class="p4-n${nv}${tem ? " fx2-k-row" : ""}"${tem ? ` data-p4ab="${esc(key)}"` : ""}>
-          <td style="padding-left:${6 + (nv - 1) * 16}px">${tem ? (ab ? "⊟ " : "⊞ ") : ""}${esc(z.k)}</td>
+          <td style="padding-left:${6 + (nv - 1) * 16}px">${tem ? (ab ? "▾ " : "▸ ") : ""}${esc(z.k)}${ccLink}</td>
           ${cols.map((k) => `<td class="r">${z.v[k] ? (nv === 1 ? `<b>${fmt(z.v[k])}</b>` : fmt(z.v[k])) : ""}</td>`).join("")}
           <td class="r"><b>${fmt(z.v.t || 0)}</b></td></tr>${tem && ab ? linhas(z, key, nv + 1) : ""}`;
       })
@@ -120,6 +132,7 @@ function desenhar() {
       <span class="fx2-mut">Estado</span>
       ${estados.map(([k, l]) => `<button type="button" class="fx2-chip${F.est.includes(k) ? " on" : ""}" data-p4est="${k}">${esc(l)}</button>`).join("")}
       ${S.lado === "P" ? seg("p4", "by", F.by, [["geral", "Por tipo"], ["forn", "Por fornecedor"]]) : ""}
+      ${S.lado === "P" ? seg("p4", "mo", F.mo, [["div", "Em Dívida"], ["orig", "Valor Original"]]) : ""}
       ${moedas.length > 1 ? seg("p4", "moeda", F.moeda, moedas.map((m) => [m, m])) : ""}
     </div>
     <div class="cp-filtros">
@@ -164,12 +177,14 @@ export async function render(meta) {
     sem: window.innerWidth < 1600 ? (Number(hoje.slice(5, 7)) <= 6 ? "1" : "2") : "",
     inc: true,
     by: "geral",
+    mo: "div",
     moeda: "AOA",
     est: S.lado === "R" ? ["atr", "abe", "pp", "prev"] : ["atr", "abe", "pp"],
   };
   const el = root();
   el.addEventListener("click", (e) => {
     const t = e.target;
+    if (t.closest("[data-stop]")) return;
     const st = t.closest("[data-p4est]");
     if (st) {
       const k = st.dataset.p4est;
