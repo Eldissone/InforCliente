@@ -136,32 +136,34 @@ function desenhar() {
   const bancos = [...new Set(all.map((c) => bancoSig(c.bank)).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt"));
   const q = norm(S.q).trim();
 
-  const L = all.filter((c) => {
-    const sig = bancoSig(c.bank);
-    if (S.b && sig !== S.b) return false;
-    if (S.t && c.type !== S.t) return false;
-    if (S.e === "A" && !c.active) return false;
-    if (S.e === "I" && c.active) return false;
-    if (q) {
-      const hay = norm(
-        [
-          c.label,
-          c.bank,
-          bancoLbl(c.bank),
-          c.accountNumber,
-          c.iban,
-          c.lastDigits,
-          c.holderName,
-          c.responsible,
-          c.allocation?.responsible,
-          c.project?.name,
-          c.project?.code,
-        ].join(" ")
-      );
-      if (!hay.includes(q)) return false;
-    }
-    return true;
-  });
+  const L = all
+    .filter((c) => {
+      const sig = bancoSig(c.bank);
+      if (S.b && sig !== S.b) return false;
+      if (S.t && c.type !== S.t) return false;
+      if (S.e === "A" && !c.active) return false;
+      if (S.e === "I" && c.active) return false;
+      if (q) {
+        const hay = norm(
+          [
+            c.label,
+            c.bank,
+            bancoLbl(c.bank),
+            c.accountNumber,
+            c.iban,
+            c.lastDigits,
+            c.holderName,
+            c.responsible,
+            c.allocation?.responsible,
+            c.project?.name,
+            c.project?.code,
+          ].join(" ")
+        );
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => String(a.label || "").localeCompare(String(b.label || ""), "pt", { numeric: true }));
 
   const nCP = all.filter((c) => c.active && c.type === "DEBITO").length;
   const nFM = all.filter((c) => c.active && c.type === "PREPAGO").length;

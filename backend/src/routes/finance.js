@@ -2905,7 +2905,14 @@ financeRoutes.get(
 
     return res.json({
       bancosReg: CARDS.BANCOS_REG,
-      items: cards.map((c) => {
+      items: cards
+        .slice()
+        .sort(
+          (a, b) =>
+            String(a.bank || "").localeCompare(String(b.bank || ""), "pt") ||
+            String(a.label || "").localeCompare(String(b.label || ""), "pt", { numeric: true })
+        )
+        .map((c) => {
         const al = CARDS.alocacaoAtual(alocacoes, c.id);
         const estragado = CARDS.estragadoDe(alocacoes, c.id);
         const b = saldo.get(c.id);
