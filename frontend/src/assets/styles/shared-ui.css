@@ -714,16 +714,9 @@ body[data-cost-catalog] .overflow-x-auto:has(> table) thead th {
   }
 }
 
-/* Nome do utilizador no header: visível em desktop, oculto em mobile */
+/* Nome do utilizador no header: oculto */
 [data-user-role] {
-  display: inline;
-}
-
-@media (max-width: 767px) {
-  [data-user-role] {
-    display: none;
-    background-color: #960606;
-  }
+  display: none !important;
 }
 
 /* ── MODALS (Shared) ── */

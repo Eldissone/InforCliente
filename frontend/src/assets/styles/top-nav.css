@@ -153,8 +153,9 @@ body > nav.app-top-nav [data-nav-users][class*="2afc8d"] {
 
 body > nav.app-top-nav [data-user-profile] {
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
-  padding: 0.375rem 0.75rem;
+  padding: 0.375rem;
   border: 0;
   border-radius: var(--tn-radius);
   background: transparent;

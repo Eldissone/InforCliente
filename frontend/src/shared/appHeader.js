@@ -25,9 +25,9 @@ function renderAppHeader() {
       </div>
       <div class="flex flex-1 items-center justify-end gap-3 min-w-0">
       
-        <button data-user-profile class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold text-[#2afc8d] hover:bg-[#2afc8d]/10 transition-all" type="button">
+        <button data-user-profile class="flex items-center justify-center p-1.5 rounded-lg text-xs font-bold text-[#2afc8d] hover:bg-[#2afc8d]/10 transition-all" type="button" aria-label="Perfil do utilizador">
           <span class="material-symbols-outlined text-sm">person</span>
-          <span data-user-role></span>
+          <span data-user-role class="hidden"></span>
         </button>
        
         <button id="mobileMenuBtn" aria-expanded="false" class="lg:hidden w-10 h-10 flex items-center justify-center rounded-xl bg-slate-800 text-slate-400 hover:text-white transition-colors" type="button">
