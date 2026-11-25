@@ -1020,242 +1020,282 @@ function stepTitle(n, title, sub = "") {
     </div>`;
 }
 
+const AREAS_NEGOCIO = [
+  ["PROJ", "Projeto de Eletrificação"],
+  ["MANUT", "Manutenção Preventiva / Corretiva"],
+  ["VENDA", "Venda de Produtos"],
+  ["OUT", "Outros"],
+];
+
+function inferAreaFromProject(p) {
+  const t = String(p?.projectType || "").toUpperCase();
+  if (!t) return "";
+  if (t.includes("MANUT")) return "MANUT";
+  if (t.includes("VENDA") || t.includes("PROD")) return "VENDA";
+  if (t.includes("ELETR") || t.includes("PROJ") || t.includes("OBRA") || t.includes("TENSAO") || t.includes("TENSÃO")) return "PROJ";
+  return "OUT";
+}
+
+function daysBetweenDates(fromKey, toKeyStr) {
+  if (!fromKey || !toKeyStr) return "";
+  const a = new Date(`${fromKey}T00:00:00Z`);
+  const b = new Date(`${toKeyStr}T00:00:00Z`);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return "";
+  return Math.round((b - a) / 86400000);
+}
+
 async function openInvoiceModal(invoice, { file = null } = {}) {
   const isEdit = Boolean(invoice);
   const hasDoc = invoiceHasDocument(invoice);
   const aiReady = state.ai.configured;
   lastScan = null;
   const today = toDateKey(new Date());
+  const initDocDate = invoice?.docDate ? toDateKey(invoice.docDate) : today;
+  const initDueDate = invoice?.dueDate ? toDateKey(invoice.dueDate) : addDays(initDocDate, 30);
+  const initDias = daysBetweenDates(initDocDate, initDueDate);
+  const initProj = projectById(invoice?.projectId || "");
+  const initArea = inferAreaFromProject(initProj);
+  const initRetPct = isEdit ? pctValue(invoice.withholdingAmount, invoice.grossAmount) : "";
+  const initRetSim = isEdit ? (Number(invoice.withholdingAmount) > 0.005 ? "Sim" : "Não") : "";
 
   const content = `
-    <div class="inv-form">
-      <div class="inv-form-main">
+    <div class="fte-wrap">
+      <div class="fte-head-sub">Registo da fatura emitida no programa de faturação certificado</div>
 
-        <section class="inv-section">
-          ${stepTitle(1, "Identificação", "Obra, terceiro e auto de medição a faturar")}
-          <div class="finance-form-grid finance-form-grid--2">
-            <div class="finance-field finance-field--full">
-              <div style="display:flex;justify-content:space-between;align-items:center">
-                <label class="finance-label" for="inv_project">Obra <span class="inv-req">*</span></label>
-                ${!isEdit ? `<span style="display:flex;gap:8px;font-size:12px"><a href="/registos/terceiros" target="_blank" rel="noopener" class="t3-lnk">+ Criar novo cliente</a> · <a href="/registos/obras" target="_blank" rel="noopener" class="t3-lnk">+ Nova obra / serviço</a> <button type="button" id="inv_refreshOpts" class="t3-lnk" style="border:0;background:none;cursor:pointer" title="Atualizar lista de obras e clientes">⟳</button></span>` : ""}
-              </div>
-              <select id="inv_project" class="finance-select" required ${isEdit ? "disabled" : ""}>
-                <option value="">Selecionar obra…</option>
-                ${state.projects
-                  .map((p) => `<option value="${esc(p.id)}" ${invoice?.projectId === p.id ? "selected" : ""}>${esc([p.referencia || p.code, p.name].filter(Boolean).join(" — "))}</option>`)
-                  .join("")}
-              </select>
-            </div>
-            <div class="finance-field">
-              <label class="finance-label" for="inv_client">Terceiro (cliente)</label>
-              <div class="inv-readonly">
-                <span class="material-symbols-outlined">link</span>
-                <input id="inv_client" type="text" value="${esc(invoice?.client?.name || "")}" readonly placeholder="Associado automaticamente à obra" />
-              </div>
-            </div>
-            <div class="finance-field">
-              <label class="finance-label">Moeda</label>
-              <div class="inv-readonly">
-                <span class="material-symbols-outlined">payments</span>
-                <input id="inv_currency" type="text" value="${esc(invoice?.project?.currency || "AOA")}" readonly />
-              </div>
-            </div>
-          </div>
-          <div id="inv_context" class="inv-context" hidden></div>
-          <div class="finance-field" style="margin-top:0.9rem">
-            <span class="finance-label">Auto de medição em aberto</span>
-            <input id="inv_measurement" type="hidden" value="" />
-            <div id="inv_amList" class="inv-am-list">
-              ${
-                isEdit
-                  ? `<div class="inv-am inv-am--static">
-                       <span class="material-symbols-outlined">${invoice.measurement ? "fact_check" : "remove"}</span>
-                       <span>${esc(invoice.measurement ? `${invoice.measurement.reportNumber || "AM"} · ${formatDateOnly(invoice.measurement.reportDate)}` : "Sem auto de medição associado")}</span>
-                     </div>`
-                  : `<p class="inv-am-empty">Escolha a obra para ver os autos de medição aprovados por faturar.</p>`
-              }
-            </div>
-          </div>
-        </section>
+      <section class="fte-scan" id="inv_scanPanel">
+        <input id="inv_docFileInput" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" hidden />
+        <button id="inv_pickBtn" type="button" class="finance-btn finance-btn--primary">📄 Ler a Fatura do PDF</button>
+        <button id="inv_scanBtn" type="button" class="finance-btn finance-btn--sm" ${aiReady ? "" : "disabled"} style="display:none">✨ Ler com IA</button>
+        <span class="fte-scan-txt" id="inv_docNote">${
+          aiReady
+            ? "Escolha o PDF da fatura (xSoft): o sistema lê o n.º, a data, o cliente, o NIF e os valores; só corrige o que não estiver certo."
+            : `${esc(aiUnavailableText())} Anexe o PDF da fatura e preencha os campos abaixo.`
+        }</span>
+        ${
+          hasDoc
+            ? `<button id="inv_viewDoc" type="button" class="finance-btn finance-btn--sm" title="Ver fatura física">👁 Ver PDF</button>
+               <button id="inv_removeDoc" type="button" class="finance-btn finance-btn--sm" title="Remover documento">✕</button>`
+            : ""
+        }
+      </section>
 
-        <section class="inv-section">
-          ${stepTitle(2, "Documento")}
-          <div class="finance-form-grid finance-form-grid--3">
-            <div class="finance-field">
-              <label class="finance-label" for="inv_type">Tipo de fatura</label>
-              <select id="inv_type" class="finance-select">
-                <option value="">—</option>
-                ${TIPOS.map(([k, l]) => `<option value="${k}"${(invoice?.invoiceType || "") === k ? " selected" : ""}>${k} — ${esc(l)}</option>`).join("")}
-              </select>
-            </div>
-            <div class="finance-field">
-              <label class="finance-label" for="inv_docNumber">Nº documento</label>
-              <input id="inv_docNumber" class="finance-input" type="text" placeholder="FT 2026/001" value="${esc(invoice?.docNumber || "")}" />
-            </div>
-            <div class="finance-field">
-              <label class="finance-label" for="inv_docDate">Data doc. <span class="inv-req">*</span></label>
-              <input id="inv_docDate" class="finance-input" type="date" required value="${invoice?.docDate ? esc(toDateKey(invoice.docDate)) : today}" />
-            </div>
-            <div class="finance-field">
-              <label class="finance-label" for="inv_dueDate">Vencimento</label>
-              <input id="inv_dueDate" class="finance-input" type="date" value="${invoice?.dueDate ? esc(toDateKey(invoice.dueDate)) : ""}" />
-              <div class="inv-quick" id="inv_dueQuick">
-                ${[30, 60, 90].map((d) => `<button type="button" data-days="${d}">+${d} dias</button>`).join("")}
-              </div>
-              <small class="pay-hint">Se ficar vazio, vence 30 dias após a data do documento.</small>
-            </div>
-          </div>
-        </section>
+      <section class="fxsec">
+        <div class="fxg">
+          <label class="w2">
+            <span>Área de negócio</span>
+            <select id="inv_areaNeg" class="finance-input">
+              <option value="">— escolher —</option>
+              ${AREAS_NEGOCIO.map(([k, l]) => `<option value="${k}"${initArea === k ? " selected" : ""}>${esc(l)}</option>`).join("")}
+            </select>
+          </label>
+          <label class="w2">
+            <span>Tipo de fatura</span>
+            <select id="inv_type" class="finance-input">
+              <option value="">— escolher —</option>
+              ${TIPOS.map(([k, l]) => `<option value="${k}"${(invoice?.invoiceType || "") === k ? " selected" : ""}>${k} — ${esc(l)}</option>`).join("")}
+            </select>
+          </label>
+        </div>
+        <div id="inv_tipoHint" class="fx2-mut t3-small">Autos de Medição (AM): a fatura inclui autos aprovados da obra. Fatura Única (FU): sem autos (manutenção, serviço, pagamento por % do serviço…).</div>
+      </section>
 
-        <section class="inv-section">
-          ${stepTitle(3, "Valores", "Retenção, IVA, seguro CAR e garantia são calculados a partir da configuração da obra")}
-          <div class="finance-field">
-            <label class="finance-label" for="inv_gross">Valor ilíquido <span class="inv-req">*</span></label>
-            <div class="inv-money-input">
-              <input id="inv_gross" class="finance-input" type="number" min="0" step="0.01" required placeholder="0,00" value="${invoice ? Number(invoice.grossAmount) : ""}" />
-              <span id="inv_grossCur">${esc(invoice?.project?.currency || "AOA")}</span>
-            </div>
-          </div>
-          <div class="inv-ded">
-            ${deductionRowHtml({ id: "inv_withholding", label: "Retenção na fonte", value: numOr(invoice?.withholdingPercent, ""), hint: "Automático · configuração da obra" })}
-            ${deductionRowHtml({
-              id: "inv_vat",
-              label: "IVA",
-              value: numOr(invoice?.vatPercent, ""),
-              hint: "Automático · não soma se for cativo",
-              sign: "+",
-              extra: `<label class="inv-switch" title="IVA cativo pelo cliente">
-                        <input id="inv_vatCativo" type="checkbox" ${invoice?.flagVatCativo ? "checked" : ""} />
-                        <span></span>Cativo
-                      </label>`,
-            })}
-            ${deductionRowHtml({ id: "inv_car", label: "Seguro CAR", value: numOr(invoice?.carPercent, ""), hint: "Automático · contrato da obra" })}
-            ${deductionRowHtml({ id: "inv_guarantee", label: "Garantia", value: numOr(invoice?.guaranteePercent, ""), hint: "Automático · contrato da obra" })}
-          </div>
-          <button id="inv_saveConfig" type="button" class="inv-link-btn">
-            <span class="material-symbols-outlined">save</span>Guardar estas percentagens na configuração da obra
-          </button>
-        </section>
+      <section class="fxsec">
+        <div class="fxg">
+          <label>
+            <span>N.º da fatura <b class="rq">*</b></span>
+            <input id="inv_docNumber" class="finance-input" type="text" placeholder="ex.: FT MBT2026/123" value="${esc(invoice?.docNumber || "")}" />
+          </label>
+          <label>
+            <span>Data de emissão <b class="rq">*</b></span>
+            <input id="inv_docDate" class="finance-input" type="date" required value="${esc(initDocDate)}" />
+          </label>
+          <label>
+            <span style="display:flex;justify-content:space-between;gap:6px">
+              <span>Cliente</span>
+              ${!isEdit ? `<a href="/registos/terceiros" target="_blank" rel="noopener" class="t3-lnk" style="font-weight:400">+ Criar novo cliente</a>` : ""}
+            </span>
+            <input id="inv_client" class="finance-input" type="text" value="${esc(invoice?.client?.name || initProj?.clientName || "")}" readonly placeholder="Associado à obra" style="background:#f8fafc" />
+          </label>
+          <label>
+            <span>NIF do cliente</span>
+            <input id="inv_nif" class="finance-input" type="text" placeholder="ex.: 5000123456" value="" />
+          </label>
+          <label class="w2">
+            <span style="display:flex;justify-content:space-between;gap:6px">
+              <span>Obra / Serviço <b class="rq">*</b></span>
+              ${!isEdit ? `<span style="display:flex;gap:8px;font-weight:400"><a href="/registos/obras" target="_blank" rel="noopener" class="t3-lnk">+ Nova obra / serviço</a> <button type="button" id="inv_refreshOpts" class="t3-lnk" style="border:0;background:none;cursor:pointer;padding:0" title="Atualizar lista de obras e clientes">⟳</button></span>` : ""}
+            </span>
+            <select id="inv_project" class="finance-select" required ${isEdit ? "disabled" : ""}>
+              <option value="">— escolher —</option>
+              ${state.projects
+                .map((p) => `<option value="${esc(p.id)}" ${invoice?.projectId === p.id ? "selected" : ""}>${esc([p.referencia || p.code, p.name].filter(Boolean).join(" · "))}</option>`)
+                .join("")}
+            </select>
+          </label>
+          <label class="w2">
+            <span>Descrição / auto</span>
+            <input id="inv_descAuto" class="finance-input" type="text" placeholder="ex.: Auto #1 ou descrição da fatura" value="${esc(invoice?.measurement ? `Auto ${invoice.measurement.reportNumber}` : "")}" />
+          </label>
+        </div>
 
-        <section class="inv-section">
-          ${stepTitle(4, "Recebimento do cliente", "Como entra esta fatura na tesouraria?")}
-          <div class="finance-choice-grid" id="rcv_choice" ${isEdit ? "hidden" : ""}>
-            <button type="button" class="finance-choice" data-mode="aberto">
-              <span class="finance-choice-icon"><span class="material-symbols-outlined">schedule</span></span>
-              <span>
-                <span class="finance-choice-title">Fica em aberto</span>
-                <span class="finance-choice-desc">Ainda não recebi. Entra nas contas a receber e na antiguidade.</span>
-              </span>
-            </button>
-            <button type="button" class="finance-choice" data-mode="recebido">
-              <span class="finance-choice-icon"><span class="material-symbols-outlined">savings</span></span>
-              <span>
-                <span class="finance-choice-title">Já recebi do cliente</span>
-                <span class="finance-choice-desc">Registo agora a entrada, total ou parcial.</span>
-              </span>
-            </button>
-          </div>
-          ${
-            isEdit
-              ? `<p class="finance-note">Os recebimentos desta fatura registam-se na lista, com o botão «Registar recebimento».</p>`
-              : ""
-          }
-          <div id="rcv_fields" class="finance-form-grid finance-form-grid--3" style="margin-top:0.75rem">
-            <div class="finance-field">
-              <label class="finance-label" for="inv_receivedDate">Data recebimento</label>
-              <input id="inv_receivedDate" class="finance-input" type="date" value="${invoice?.receivedDate ? esc(toDateKey(invoice.receivedDate)) : today}" ${isEdit ? "disabled" : ""} />
-            </div>
-            <div class="finance-field">
-              <label class="finance-label" for="inv_received">Valor recebido</label>
-              <input id="inv_received" class="finance-input" type="number" min="0" step="0.01" value="${invoice ? Number(invoice.receivedAmount) : 0}" ${isEdit ? "disabled" : ""} />
-            </div>
-            <div class="finance-field">
-              <label class="finance-label" for="inv_receivedMethod">Meio</label>
-              <select id="inv_receivedMethod" class="finance-select" ${isEdit ? "disabled" : ""}>
-                <option value="">—</option>
-                ${RECEIPT_METHODS.map((m) => `<option value="${m}">${m}</option>`).join("")}
-              </select>
-            </div>
-          </div>
-        </section>
-
-        <section class="inv-section">
-          ${stepTitle(5, "Notas do processo")}
-          <textarea id="inv_notes" class="finance-textarea" rows="3" placeholder="Referência ao auto de medição, condições de pagamento, observações do cliente…">${esc(invoice?.notes || "")}</textarea>
-        </section>
-      </div>
-
-      <aside class="inv-form-aside">
-        <div class="finance-scan" id="inv_scanPanel">
-          <div class="finance-scan-head">
-            <span class="finance-scan-icon"><span class="material-symbols-outlined">document_scanner</span></span>
-            <div style="min-width:0">
-              <p class="finance-scan-title">Fatura física</p>
-              <p class="finance-scan-file" id="inv_docFile">${hasDoc ? esc(invoice.documentName || "Documento anexado") : "PDF ou fotografia"}</p>
-            </div>
-          </div>
-          <input id="inv_docFileInput" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" hidden />
-          <div class="finance-scan-actions">
-            <button id="inv_pickBtn" type="button" class="finance-btn finance-btn--ghost">
-              <span class="material-symbols-outlined">upload_file</span>Escolher
-            </button>
-            <button id="inv_scanBtn" type="button" class="finance-btn finance-btn--primary" ${aiReady ? "" : "disabled"}>
-              <span class="material-symbols-outlined">auto_awesome</span>Ler com IA
-            </button>
+        <div id="inv_amWrap" style="margin-top:4px">
+          <input id="inv_measurement" type="hidden" value="${esc(invoice?.measurementId || "")}" />
+          <div id="inv_amList" class="inv-am-list">
             ${
-              hasDoc
-                ? `<button id="inv_viewDoc" type="button" class="finance-btn finance-btn--ghost" title="Ver fatura física">
-                     <span class="material-symbols-outlined">visibility</span>
-                   </button>
-                   <button id="inv_removeDoc" type="button" class="finance-btn finance-btn--ghost" title="Remover documento">
-                     <span class="material-symbols-outlined">delete</span>
-                   </button>`
-                : ""
+              isEdit
+                ? `<div class="inv-am inv-am--static">
+                     <span class="material-symbols-outlined">${invoice.measurement ? "fact_check" : "remove"}</span>
+                     <span>${esc(invoice.measurement ? `Auto ${invoice.measurement.reportNumber || "AM"} · ${formatDateOnly(invoice.measurement.reportDate)}` : "Sem auto de medição associado")}</span>
+                   </div>`
+                : `<p class="inv-am-empty" style="margin:0">Escolha a obra para ver os autos de medição aprovados por faturar.</p>`
             }
           </div>
-          <p class="finance-scan-status" id="inv_docNote">${
-            aiReady
-              ? '<span class="material-symbols-outlined">info</span>Escolha o ficheiro e use «Ler com IA» para preencher os campos. Confira sempre os valores.'
-              : `<span class="material-symbols-outlined">info</span>${esc(aiUnavailableText())} Anexe o ficheiro e preencha à mão.`
-          }</p>
+        </div>
+      </section>
+
+      <div class="fte-moe-bar">
+        <span>Fatura em <b id="inv_currencyLbl">${esc(invoice?.project?.currency || "AOA")}</b>.</span>
+        <div id="inv_context" class="fte-ctx-pills" hidden></div>
+      </div>
+
+      <section class="fxsec">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">
+          <h3>Valores</h3>
+          <span class="fx2-mut t3-small">Condições aplicadas pela obra (IVA cativo, retenção na fonte, seguro de construção e garantia).</span>
         </div>
 
-        <div class="inv-summary">
-          <p class="inv-summary-title">Resumo da fatura</p>
-          <dl class="inv-summary-lines">
-            <div><dt>V. Ilíquido</dt><dd id="pv_gross">—</dd></div>
-            <div><dt>IVA</dt><dd id="pv_vat">—</dd></div>
-            <div><dt>Seguro CAR</dt><dd id="pv_car" class="ov-neg">—</dd></div>
-            <div><dt>Garantia</dt><dd id="pv_guarantee" class="ov-neg">—</dd></div>
-            <div><dt>Total a Liquidar</dt><dd id="pv_liquidar"><strong>—</strong></dd></div>
-            <div><dt>Retenção na fonte</dt><dd id="pv_withholding" class="ov-neg">—</dd></div>
-          </dl>
-          <div class="inv-summary-net">
-            <span>V. Líquido a receber</span>
-            <strong id="pv_net">—</strong>
-          </div>
-          <div class="inv-summary-work">
-            <div class="inv-summary-work-head">
-              <span>% da obra</span>
-              <strong id="pv_work">—</strong>
-            </div>
-            <div id="pv_workBar"></div>
-            <p id="pv_workNote" class="inv-summary-note">Escolha a obra para comparar com a venda prevista.</p>
-          </div>
-          <div class="inv-summary-receipt">
-            <div><span>Recebido agora</span><strong id="rcv_sum_received" class="ov-pos">—</strong></div>
-            <div><span>Fica em falta</span><strong id="rcv_sum_missing" class="ov-warn">—</strong></div>
-          </div>
-          <p id="pv_warning" class="inv-summary-warning" hidden></p>
+        <div class="fxg">
+          <label>
+            <span>Valor s/ IVA (<span id="inv_grossCur">${esc(invoice?.project?.currency || "AOA")}</span>) <b class="rq">*</b></span>
+            <input id="inv_gross" class="finance-input" type="number" min="0" step="0.01" required placeholder="0,00" value="${invoice ? Number(invoice.grossAmount) : ""}" style="text-align:right;font-weight:600" />
+          </label>
+          <label>
+            <span>IVA %</span>
+            <input id="inv_vat" class="finance-input" type="number" min="0" max="100" step="0.01" value="${esc(isEdit ? pctValue(invoice.vatAmount, invoice.grossAmount) : 14)}" />
+          </label>
+          <label>
+            <span>Prazo de pagamento (dias)</span>
+            <input id="inv_dias" class="finance-input" type="number" min="0" step="1" value="${esc(initDias === "" ? 30 : initDias)}" />
+          </label>
+          <label>
+            <span>Vencimento / receção prevista <b class="rq">*</b></span>
+            <input id="inv_dueDate" class="finance-input" type="date" value="${esc(initDueDate)}" />
+          </label>
         </div>
-      </aside>
+
+        <div class="fxg">
+          <label>
+            <span>Tem retenção na fonte? <b class="rq">*</b></span>
+            <select id="inv_retSim" class="finance-input">
+              <option value=""${initRetSim === "" ? " selected" : ""}>— escolher —</option>
+              <option value="Sim"${initRetSim === "Sim" ? " selected" : ""}>Sim</option>
+              <option value="Não"${initRetSim === "Não" ? " selected" : ""}>Não</option>
+            </select>
+          </label>
+          <label id="inv_retPctWrap"${initRetSim === "Não" || initRetSim === "" ? ' style="display:none"' : ""}>
+            <span>Retenção na fonte %</span>
+            <input id="inv_withholding" class="finance-input" type="number" min="0" max="100" step="0.01" value="${esc(initRetPct === "" ? 6.5 : initRetPct)}" />
+          </label>
+          <label>
+            <span>IVA cativo</span>
+            <select id="inv_vatCativo" class="finance-input">
+              <option value="0"${!invoice?.flagVatCativo ? " selected" : ""}>Não</option>
+              <option value="100"${invoice?.flagVatCativo ? " selected" : ""}>Sim</option>
+            </select>
+          </label>
+          <label>
+            <span>Seguro de construção %</span>
+            <input id="inv_car" class="finance-input" type="number" min="0" max="100" step="0.01" value="${esc(isEdit ? pctValue(invoice.carInsuranceAmount, invoice.grossAmount) : 0)}" />
+          </label>
+          <label>
+            <span>Garantia retida %</span>
+            <input id="inv_guarantee" class="finance-input" type="number" min="0" max="100" step="0.01" value="${esc(isEdit ? pctValue(invoice.guaranteeAmount, invoice.grossAmount) : 0)}" />
+          </label>
+        </div>
+
+        <div class="fxg" id="inv_pctServRow">
+          <label>
+            <span>% desta fatura no serviço</span>
+            <input id="inv_pctServ" class="finance-input" type="number" min="0" max="100" step="any" placeholder="ex.: 60" value="" />
+            <small class="muted">ex.: 60% agora e 40% depois</small>
+          </label>
+          <div style="grid-column:span 3;display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap">
+            <div class="inv-quick" id="inv_dueQuick" style="margin:0">
+              ${[30, 60, 90].map((d) => `<button type="button" data-days="${d}">+${d} dias</button>`).join("")}
+            </div>
+            <button id="inv_saveConfig" type="button" class="inv-link-btn" style="margin:0">
+              <span class="material-symbols-outlined">save</span>Guardar estas % na obra
+            </button>
+          </div>
+        </div>
+
+        <div class="fxtot" id="fteTot">
+          <span>Total da fatura <b id="pv_totalFat">—</b></span>
+          <span class="fx2-mut" id="pv_vat">(IVA —)</span>
+          <span id="pv_carWrap" style="display:none">Seguro <b id="pv_car" class="ov-neg">—</b></span>
+          <span id="pv_garWrap" style="display:none">Garantia <b id="pv_guarantee" class="ov-neg">—</b></span>
+          <span id="pv_liqWrap" style="display:none">Total a liquidar <b id="pv_liquidar">—</b></span>
+          <span id="pv_retWrap" style="display:none">Retenção <b id="pv_withholding" class="ov-neg">—</b></span>
+          <span class="fte-tot-net">A receber <b id="pv_net">—</b></span>
+        </div>
+
+        <div class="fte-work-row">
+          <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:240px">
+            <span>% da obra: <strong id="pv_work">—</strong></span>
+            <div id="pv_workBar" style="flex:1;max-width:220px"></div>
+            <span id="pv_workNote" class="fx2-mut">Escolha a obra para comparar com a venda prevista.</span>
+          </div>
+          <span id="pv_warning" class="nvft-err" hidden></span>
+        </div>
+      </section>
+
+      <section class="fxsec">
+        <div class="fxslot">
+          <span><b>PDF da fatura</b></span>
+          <span class="fxslot-name" id="inv_docFile">${hasDoc ? esc(invoice.documentName || "Documento anexado") : "sem ficheiro"}</span>
+          <button type="button" class="finance-btn finance-btn--sm" id="inv_pickBtn2">Anexar</button>
+        </div>
+
+        ${
+          !isEdit
+            ? `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-top:2px">
+                <span class="t3-small"><b>Recebimento:</b></span>
+                <div class="finance-choice-grid" id="rcv_choice" style="display:flex;gap:8px;flex:1">
+                  <button type="button" class="finance-choice active" data-mode="aberto" style="padding:6px 10px">
+                    <span><span class="finance-choice-title" style="font-size:12.5px">Fica em aberto</span></span>
+                  </button>
+                  <button type="button" class="finance-choice" data-mode="recebido" style="padding:6px 10px">
+                    <span><span class="finance-choice-title" style="font-size:12.5px">Já recebi do cliente</span></span>
+                  </button>
+                </div>
+                <span class="t3-small fx2-mut">Recebido: <b id="rcv_sum_received">—</b> · Falta: <b id="rcv_sum_missing">—</b></span>
+              </div>
+              <div id="rcv_fields" class="fxg" hidden>
+                <label><span>Data recebimento</span><input id="inv_receivedDate" class="finance-input" type="date" value="${esc(today)}" /></label>
+                <label><span>Valor recebido</span><input id="inv_received" class="finance-input" type="number" min="0" step="0.01" value="0" /></label>
+                <label class="w2"><span>Meio de pagamento</span>
+                  <select id="inv_receivedMethod" class="finance-select">
+                    <option value="">—</option>
+                    ${RECEIPT_METHODS.map((m) => `<option value="${m}">${m}</option>`).join("")}
+                  </select>
+                </label>
+              </div>`
+            : `<p class="fx2-mut t3-small" style="margin:0">Os recebimentos desta fatura registam-se na lista, com o botão «Registar recebimento» (já recebido: <b>${esc(money(invoice.receivedAmount, invoice.project?.currency || "AOA"))}</b>).</p>`
+        }
+
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#334155;font-weight:500">
+          <span>Observações</span>
+          <textarea id="inv_notes" class="finance-textarea" rows="2" placeholder="Observações, referência ao auto de medição ou condições…">${esc(invoice?.notes || "")}</textarea>
+        </label>
+      </section>
     </div>`;
 
   openModal({
-    title: isEdit ? `Editar fatura ${invoice.docNumber || ""}` : "Registar fatura emitida",
+    title: isEdit ? `<span class="rg-kick">FATURA EMITIDA</span><br>Editar fatura ${esc(invoice.docNumber || "")}` : `<span class="rg-kick">NOVA FATURA EMITIDA</span><br>Registar fatura emitida`,
     contentHtml: content,
-    primaryLabel: isEdit ? "Guardar alterações" : "Guardar fatura",
-    width: 1120,
+    primaryLabel: isEdit ? "Guardar alterações" : "Gravar",
+    secondaryLabel: "Cancelar",
+    width: 980,
     onRender: ({ panel }) => {
       const $ = (id) => panel.querySelector(`#${id}`);
       const projectSel = $("inv_project");
@@ -1265,7 +1305,6 @@ async function openInvoiceModal(invoice, { file = null } = {}) {
 
       const cur = () => currentProject?.currency || invoice?.project?.currency || "AOA";
 
-      // ── Recebimento: as duas opções e o que cada uma implica ──
       const rcvChoice = $("rcv_choice");
       const rcvFields = $("rcv_fields");
       const rcvAmount = $("inv_received");
@@ -1273,61 +1312,67 @@ async function openInvoiceModal(invoice, { file = null } = {}) {
       const rcvMethod = $("inv_receivedMethod");
       let rcvMode = isEdit ? "recebido" : "aberto";
 
+      const isVatCativo = () => $("inv_vatCativo").value === "100";
+      const retPctEffective = () => ($("inv_retSim").value === "Sim" ? Number($("inv_withholding").value) || 0 : 0);
+
       const draftPreview = () =>
         buildPreview({
           grossAmount: $("inv_gross").value,
           vatPercent: $("inv_vat").value,
-          withholdingPercent: $("inv_withholding").value,
+          withholdingPercent: retPctEffective(),
           carPercent: $("inv_car").value,
           guaranteePercent: $("inv_guarantee").value,
-          flagVatCativo: $("inv_vatCativo").checked,
+          flagVatCativo: isVatCativo(),
           saleBudget: currentProject?.saleBudget ?? currentProject?.budgetTotal,
         });
 
       function refreshReceipt() {
+        if (isEdit) return;
         const pv = draftPreview();
         rcvChoice?.querySelectorAll(".finance-choice").forEach((btn) => {
-          btn.classList.toggle("active", !isEdit && btn.dataset.mode === rcvMode);
+          btn.classList.toggle("active", btn.dataset.mode === rcvMode);
         });
-        if (!isEdit) {
-          const paying = rcvMode === "recebido";
-          if (rcvFields) rcvFields.hidden = !paying;
-          if (rcvAmount) rcvAmount.disabled = !paying;
-          if (rcvDate) rcvDate.disabled = !paying;
-          if (rcvMethod) rcvMethod.disabled = !paying;
-          // Sugere o valor líquido quando o financeiro indica que já recebeu.
-          if (paying && Number(rcvAmount?.value || 0) === 0 && pv.net > 0) {
-            rcvAmount.value = pv.net.toFixed(2);
-          }
+        const paying = rcvMode === "recebido";
+        if (rcvFields) rcvFields.hidden = !paying;
+        if (rcvAmount) rcvAmount.disabled = !paying;
+        if (rcvDate) rcvDate.disabled = !paying;
+        if (rcvMethod) rcvMethod.disabled = !paying;
+        if (paying && Number(rcvAmount?.value || 0) === 0 && pv.net > 0) {
+          rcvAmount.value = pv.net.toFixed(2);
         }
-        const received = isEdit
-          ? Number(invoice.receivedAmount) || 0
-          : rcvMode === "recebido"
-            ? Number(rcvAmount?.value) || 0
-            : 0;
-        $("rcv_sum_received").textContent = money(received, cur());
-        $("rcv_sum_missing").textContent = money(Math.max(pv.net - received, 0), cur());
+        const received = rcvMode === "recebido" ? Number(rcvAmount?.value) || 0 : 0;
+        if ($("rcv_sum_received")) $("rcv_sum_received").textContent = money(received, cur());
+        if ($("rcv_sum_missing")) $("rcv_sum_missing").textContent = money(Math.max(pv.net - received, 0), cur());
       }
 
       const refreshPreview = () => {
         const pv = draftPreview();
         const c = cur();
-        const cativo = $("inv_vatCativo").checked;
-        $("pv_gross").textContent = money(pv.gross, c);
-        $("pv_vat").textContent = cativo ? "Cativo" : `+ ${money(pv.vat, c)}`;
-        $("pv_withholding").textContent = `− ${money(pv.withholding, c)}`;
-        $("pv_car").textContent = `− ${money(pv.car, c)}`;
-        $("pv_guarantee").textContent = `− ${money(pv.guarantee, c)}`;
-        if ($("pv_liquidar")) $("pv_liquidar").textContent = money(pv.totalLiquidar, c);
-        $("pv_net").textContent = money(pv.net, c);
-        $("inv_withholding_amount").textContent = `− ${money(pv.withholding, c)}`;
-        $("inv_vat_amount").textContent = cativo ? "Cativo" : `+ ${money(pv.vat, c)}`;
-        $("inv_car_amount").textContent = `− ${money(pv.car, c)}`;
-        $("inv_guarantee_amount").textContent = `− ${money(pv.guarantee, c)}`;
+        const cativo = isVatCativo();
+        const totalFat = pv.gross + pv.vat;
+
+        $("inv_retPctWrap").style.display = $("inv_retSim").value === "Sim" ? "" : "none";
         $("inv_vat").disabled = cativo;
         $("inv_grossCur").textContent = c;
+        $("inv_currencyLbl").textContent = c;
 
-        // % da obra: o que já foi faturado + esta fatura sobre a venda prevista.
+        $("pv_totalFat").textContent = money(totalFat, c);
+        $("pv_vat").textContent = cativo ? "(IVA cativo)" : `(IVA ${money(pv.vat, c)})`;
+
+        $("pv_carWrap").style.display = pv.car > 0.005 ? "" : "none";
+        $("pv_car").textContent = `−${money(pv.car, c)}`;
+
+        $("pv_garWrap").style.display = pv.guarantee > 0.005 ? "" : "none";
+        $("pv_guarantee").textContent = `−${money(pv.guarantee, c)}`;
+
+        $("pv_liqWrap").style.display = pv.car > 0.005 || pv.guarantee > 0.005 ? "" : "none";
+        $("pv_liquidar").textContent = money(pv.totalLiquidar, c);
+
+        $("pv_retWrap").style.display = pv.withholding > 0.005 ? "" : "none";
+        $("pv_withholding").textContent = `−${money(pv.withholding, c)}`;
+
+        $("pv_net").textContent = money(pv.net, c);
+
         const sale = Number(currentProject?.saleBudget ?? currentProject?.budgetTotal) || 0;
         const already = Math.max((Number(currentProject?.alreadyBilled) || 0) - (isEdit ? Number(invoice.grossAmount) || 0 : 0), 0);
         const warning = $("pv_warning");
@@ -1339,19 +1384,14 @@ async function openInvoiceModal(invoice, { file = null } = {}) {
             { value: alreadyPct, tone: "blue" },
             { value: thisPct, tone: "violet" },
           ]);
-          $("pv_workNote").innerHTML = `
-            <span class="ov-legend"><i class="ov-dot ov-dot--blue"></i>Já faturado ${esc(alreadyPct.toFixed(1))}%</span>
-            <span class="ov-legend"><i class="ov-dot ov-dot--violet"></i>Esta fatura</span>
-            <span class="ov-legend">Venda prevista ${esc(compact(sale))}</span>`;
+          $("pv_workNote").textContent = `Já faturado ${alreadyPct.toFixed(1)}% · Venda ${compact(sale)}`;
           const over = already + pv.gross - sale;
           warning.hidden = over <= 0.005;
-          if (over > 0.005) warning.textContent = `Com esta fatura o faturado excede a venda prevista em ${money(over, c)}.`;
+          if (over > 0.005) warning.textContent = `Excede a venda prevista em ${money(over, c)}.`;
         } else {
           $("pv_work").textContent = "—";
           $("pv_workBar").innerHTML = "";
-          $("pv_workNote").textContent = currentProject
-            ? "Esta obra não tem venda prevista: a % da obra não é calculada."
-            : "Escolha a obra para comparar com a venda prevista.";
+          $("pv_workNote").textContent = currentProject ? "Sem venda prevista na obra." : "Escolha a obra para comparar com a venda prevista.";
           warning.hidden = true;
         }
         refreshReceipt();
@@ -1366,7 +1406,6 @@ async function openInvoiceModal(invoice, { file = null } = {}) {
         });
       });
 
-      // Escrever um valor também passa a opção para «Já recebi do cliente».
       rcvAmount?.addEventListener("input", () => {
         if (Number(rcvAmount.value) > 0 && rcvMode !== "recebido") rcvMode = "recebido";
         refreshReceipt();
@@ -1374,10 +1413,14 @@ async function openInvoiceModal(invoice, { file = null } = {}) {
 
       const applyBillingConfig = (cfg) => {
         if (cfg.billingVatPercent !== null && cfg.billingVatPercent !== undefined) $("inv_vat").value = Number(cfg.billingVatPercent);
-        if (cfg.billingWithholdingPercent !== null && cfg.billingWithholdingPercent !== undefined) $("inv_withholding").value = Number(cfg.billingWithholdingPercent);
+        if (cfg.billingWithholdingPercent !== null && cfg.billingWithholdingPercent !== undefined) {
+          const wp = Number(cfg.billingWithholdingPercent);
+          $("inv_withholding").value = wp;
+          if (!$("inv_retSim").value) $("inv_retSim").value = wp > 0 ? "Sim" : "Não";
+        }
         if (cfg.billingCarPercent !== null && cfg.billingCarPercent !== undefined) $("inv_car").value = Number(cfg.billingCarPercent);
         if (cfg.billingGuaranteePercent !== null && cfg.billingGuaranteePercent !== undefined) $("inv_guarantee").value = Number(cfg.billingGuaranteePercent);
-        $("inv_vatCativo").checked = Boolean(cfg.billingVatCativo);
+        $("inv_vatCativo").value = cfg.billingVatCativo ? "100" : "0";
       };
 
       const renderContext = () => {
@@ -1390,9 +1433,9 @@ async function openInvoiceModal(invoice, { file = null } = {}) {
         const hasSale = Number(currentProject.saleBudget) > 0;
         ctx.hidden = false;
         ctx.innerHTML = `
-          <div><span>Venda prevista</span><strong class="${hasSale ? "" : "ov-warn"}">${hasSale ? esc(money(currentProject.saleBudget, c)) : "Sem venda prevista"}</strong></div>
-          <div><span>Já faturado</span><strong>${esc(money(currentProject.alreadyBilled, c))}</strong></div>
-          <div><span>Por faturar</span><strong class="ov-warn">${hasSale ? esc(money(currentProject.toInvoice, c)) : "—"}</strong></div>`;
+          <span>Venda prevista: <b class="${hasSale ? "" : "ov-warn"}">${hasSale ? esc(money(currentProject.saleBudget, c)) : "Sem venda prevista"}</b></span>
+          <span>Já faturado: <b>${esc(money(currentProject.alreadyBilled, c))}</b></span>
+          <span>Por faturar: <b class="ov-warn">${hasSale ? esc(money(currentProject.toInvoice, c)) : "—"}</b></span>`;
       };
 
       const selectAm = (id) => {
@@ -1402,7 +1445,7 @@ async function openInvoiceModal(invoice, { file = null } = {}) {
 
       const renderAmList = (reports) => {
         if (!reports.length) {
-          amList.innerHTML = `<p class="inv-am-empty">Esta obra não tem autos de medição aprovados por faturar. A fatura fica sem AM associado.</p>`;
+          amList.innerHTML = `<p class="inv-am-empty" style="margin:0">Esta obra não tem autos de medição aprovados por faturar. A fatura fica sem AM associado.</p>`;
           amHidden.value = "";
           return;
         }
@@ -1413,7 +1456,7 @@ async function openInvoiceModal(invoice, { file = null } = {}) {
            </button>`,
           ...reports.map(
             (r) => `
-            <button type="button" class="inv-am" data-am="${esc(r.id)}" data-total="${Number(r.periodValTotal) || 0}">
+            <button type="button" class="inv-am" data-am="${esc(r.id)}" data-num="${esc(r.reportNumber || "AM")}" data-total="${Number(r.periodValTotal) || 0}">
               <span class="material-symbols-outlined">fact_check</span>
               <span class="inv-am-text">
                 <strong>${esc(r.reportNumber || "AM")}</strong>
@@ -1428,6 +1471,10 @@ async function openInvoiceModal(invoice, { file = null } = {}) {
             selectAm(btn.dataset.am);
             const total = Number(btn.dataset.total || 0);
             if (total > 0) $("inv_gross").value = total;
+            if (btn.dataset.am) {
+              if (!$("inv_type").value) $("inv_type").value = "AM";
+              if (!$("inv_descAuto").value.trim()) $("inv_descAuto").value = `Auto ${btn.dataset.num}`;
+            }
             refreshPreview();
           });
         });
@@ -1438,10 +1485,13 @@ async function openInvoiceModal(invoice, { file = null } = {}) {
         const id = projectSel.value || invoice?.projectId;
         currentProject = projectById(id);
         $("inv_client").value = currentProject?.clientName || invoice?.client?.name || "";
-        $("inv_currency").value = cur();
+        if (currentProject && !$("inv_areaNeg").value) {
+          const inf = inferAreaFromProject(currentProject);
+          if (inf) $("inv_areaNeg").value = inf;
+        }
         if (!id) {
           if (!isEdit) {
-            amList.innerHTML = `<p class="inv-am-empty">Escolha a obra para ver os autos de medição aprovados por faturar.</p>`;
+            amList.innerHTML = `<p class="inv-am-empty" style="margin:0">Escolha a obra para ver os autos de medição aprovados por faturar.</p>`;
           }
           renderContext();
           refreshPreview();
@@ -1456,7 +1506,12 @@ async function openInvoiceModal(invoice, { file = null } = {}) {
           currentProject = { ...(currentProject || {}), ...(billing.project || {}) };
           if (billing.project?.client?.name) $("inv_client").value = billing.project.client.name;
           if (!$("inv_client").value) $("inv_client").placeholder = "Obra sem cliente associado";
-          if (open) renderAmList(open.items || []);
+          if (open) {
+            renderAmList(open.items || []);
+            if ((open.items || []).length && $("inv_tipoHint")) {
+              $("inv_tipoHint").innerHTML = `<b>Esta obra tem ${open.items.length} auto(s) de medição aprovado(s) por faturar.</b> Selecione-o abaixo ou escolha Fatura Única (FU).`;
+            }
+          }
         } catch (err) {
           toast(err.message || "Falha ao carregar dados da obra.", { type: "error" });
         }
@@ -1464,20 +1519,20 @@ async function openInvoiceModal(invoice, { file = null } = {}) {
         refreshPreview();
       };
 
-      // Pré-enche os campos com a fatura existente (modo edição).
       if (isEdit) {
         $("inv_withholding").value = pctValue(invoice.withholdingAmount, invoice.grossAmount);
         $("inv_vat").value = pctValue(invoice.vatAmount, invoice.grossAmount);
         $("inv_car").value = pctValue(invoice.carInsuranceAmount, invoice.grossAmount);
         $("inv_guarantee").value = pctValue(invoice.guaranteeAmount, invoice.grossAmount);
+        $("inv_retSim").value = Number(invoice.withholdingAmount) > 0.005 ? "Sim" : "Não";
       }
 
       $("inv_refreshOpts")?.addEventListener("click", async () => {
         const prev = projectSel.value;
         await loadOptions();
         projectSel.innerHTML =
-          `<option value="">Selecionar obra…</option>` +
-          state.projects.map((p) => `<option value="${esc(p.id)}"${p.id === prev ? " selected" : ""}>${esc([p.referencia || p.code, p.name].filter(Boolean).join(" — "))}</option>`).join("");
+          `<option value="">— escolher —</option>` +
+          state.projects.map((p) => `<option value="${esc(p.id)}"${p.id === prev ? " selected" : ""}>${esc([p.referencia || p.code, p.name].filter(Boolean).join(" · "))}</option>`).join("");
         toast("Lista de obras e clientes atualizada.", { type: "info" });
       });
 
@@ -1486,11 +1541,39 @@ async function openInvoiceModal(invoice, { file = null } = {}) {
         $(id).addEventListener("input", refreshPreview)
       );
       $("inv_vatCativo").addEventListener("change", refreshPreview);
+      $("inv_retSim").addEventListener("change", () => {
+        if ($("inv_retSim").value === "Sim" && Number($("inv_withholding").value) === 0) {
+          $("inv_withholding").value = 6.5;
+        }
+        refreshPreview();
+      });
+
+      // Sincronia bidirecional Prazo (dias) <-> Vencimento
+      $("inv_dias").addEventListener("input", () => {
+        const d = Number($("inv_dias").value);
+        const base = $("inv_docDate").value || today;
+        if (Number.isFinite(d) && d >= 0 && base) {
+          $("inv_dueDate").value = addDays(base, Math.round(d));
+        }
+      });
+      $("inv_docDate").addEventListener("change", () => {
+        const d = Number($("inv_dias").value);
+        const base = $("inv_docDate").value;
+        if (Number.isFinite(d) && d >= 0 && base) {
+          $("inv_dueDate").value = addDays(base, Math.round(d));
+        }
+      });
+      $("inv_dueDate").addEventListener("change", () => {
+        const diff = daysBetweenDates($("inv_docDate").value, $("inv_dueDate").value);
+        if (diff !== "" && diff >= 0) $("inv_dias").value = diff;
+      });
 
       $("inv_dueQuick").querySelectorAll("[data-days]").forEach((btn) => {
         btn.addEventListener("click", () => {
+          const days = Number(btn.dataset.days);
           const base = $("inv_docDate").value || today;
-          $("inv_dueDate").value = addDays(base, Number(btn.dataset.days));
+          $("inv_dias").value = days;
+          $("inv_dueDate").value = addDays(base, days);
         });
       });
 
@@ -1503,9 +1586,9 @@ async function openInvoiceModal(invoice, { file = null } = {}) {
           await apiRequest(`/finance/projects/${id}/billing`, {
             method: "PATCH",
             body: {
-              billingVatCativo: $("inv_vatCativo").checked,
+              billingVatCativo: isVatCativo(),
               billingVatPercent: numOrNull($("inv_vat").value),
-              billingWithholdingPercent: numOrNull($("inv_withholding").value),
+              billingWithholdingPercent: retPctEffective(),
               billingCarPercent: numOrNull($("inv_car").value),
               billingGuaranteePercent: numOrNull($("inv_guarantee").value),
             },
@@ -1518,7 +1601,6 @@ async function openInvoiceModal(invoice, { file = null } = {}) {
         }
       });
 
-      // ── Fatura física: escolha do ficheiro e leitura com IA ──
       const docFileInput = $("inv_docFileInput");
       const docFileName = $("inv_docFile");
       const docNote = $("inv_docNote");
@@ -1526,72 +1608,21 @@ async function openInvoiceModal(invoice, { file = null } = {}) {
       const scanPanel = $("inv_scanPanel");
 
       const setScanState = (mode, html) => {
-        if (scanPanel) {
-          scanPanel.classList.toggle("finance-scan--ready", mode === "ready");
-          scanPanel.classList.toggle("finance-scan--busy", mode === "busy");
-        }
+        if (scanPanel) scanPanel.classList.toggle("is-busy", mode === "busy");
         if (html !== undefined && docNote) docNote.innerHTML = html;
       };
 
-      $("inv_pickBtn")?.addEventListener("click", () => docFileInput?.click());
-
-      // Vindo de «Importar Faturas (PDF)»: o ficheiro já vem escolhido e, havendo IA, é lido logo.
-      if (file && docFileInput) {
-        setTimeout(() => {
-          try {
-            const dt = new DataTransfer();
-            dt.items.add(file);
-            docFileInput.files = dt.files;
-            docFileInput.dispatchEvent(new Event("change"));
-            if (aiReady) scanBtn?.click();
-          } catch {
-            toast("Escolha o ficheiro no formulário.", { type: "error" });
-          }
-        }, 0);
-      }
-
-      if (docFileInput) {
-        scanBtn.disabled = !aiReady;
-        docFileInput.addEventListener("change", () => {
-          const file = docFileInput.files?.[0] || null;
-          scanBtn.disabled = !file || !aiReady;
-          if (docFileName) {
-            docFileName.textContent = file
-              ? `${file.name} · ${Math.max(1, Math.round((file.size || 0) / 1024))} KB`
-              : "PDF ou fotografia";
-          }
-          if (file) {
-            setScanState(
-              aiReady ? "ready" : "idle",
-              aiReady
-                ? `<span class="material-symbols-outlined">task_alt</span>Ficheiro pronto. Use «Ler com IA» para preencher os campos automaticamente.`
-                : `<span class="material-symbols-outlined">info</span>${esc(aiUnavailableText())} O ficheiro é anexado ao guardar.`
-            );
-          }
-        });
-      }
-
-      scanBtn?.addEventListener("click", async () => {
-        const file = docFileInput?.files?.[0];
-        if (!file) return toast("Escolha primeiro o PDF ou a fotografia da fatura.", { type: "error" });
+      const runScan = async () => {
+        const f = docFileInput?.files?.[0];
+        if (!f || !aiReady) return;
         setButtonLoading(scanBtn, true);
-        setScanState(
-          "busy",
-          `<span class="material-symbols-outlined">hourglass_top</span>A ler a fatura com IA… os campos lidos são sugeridos e devem ser confirmados.`
-        );
+        setScanState("busy", `<b>A ler a fatura com IA…</b> os campos lidos são sugeridos e devem ser confirmados.`);
         try {
-          const { fields, warnings } = await scanInvoiceFile(file);
-
-          // Só preenche o que ainda está vazio (ou o que veio do próprio scan),
-          // para não apagar valores que o financeiro já tenha escrito à mão.
+          const { fields, warnings } = await scanInvoiceFile(f);
           const fill = (id, value, { onlyEmpty = true } = {}) => {
             const el = $(id);
             if (!el) return;
-            const isEmpty =
-              value === null ||
-              value === undefined ||
-              value === "" ||
-              (typeof value === "number" && !Number.isFinite(value));
+            const isEmpty = value === null || value === undefined || value === "" || (typeof value === "number" && !Number.isFinite(value));
             if (isEmpty) return;
             if (onlyEmpty && String(el.value ?? "").trim()) return;
             el.value = typeof value === "number" ? String(value) : value;
@@ -1600,12 +1631,14 @@ async function openInvoiceModal(invoice, { file = null } = {}) {
           fill("inv_docNumber", fields.docNumber);
           fill("inv_docDate", fields.docDate, { onlyEmpty: isEdit });
           fill("inv_dueDate", fields.dueDate);
+          fill("inv_nif", fields.clientNif || fields.supplierNif);
           fill("inv_gross", Number(fields.grossAmount) > 0 ? fields.grossAmount : null, { onlyEmpty: isEdit });
           fill("inv_vat", fields.vatPercent ?? pctValue(fields.vatAmount, fields.grossAmount));
-          fill(
-            "inv_withholding",
-            fields.withholdingPercent ?? pctValue(fields.withholdingAmount, fields.grossAmount)
-          );
+          const retP = fields.withholdingPercent ?? pctValue(fields.withholdingAmount, fields.grossAmount);
+          if (retP !== null && retP !== undefined && retP !== "") {
+            $("inv_withholding").value = retP;
+            $("inv_retSim").value = Number(retP) > 0 ? "Sim" : "Não";
+          }
           fill("inv_car", pctValue(fields.carInsuranceAmount, fields.grossAmount));
           fill("inv_guarantee", pctValue(fields.guaranteeAmount, fields.grossAmount));
           fill("inv_notes", fields.notes || fields.description, { onlyEmpty: false });
@@ -1614,28 +1647,54 @@ async function openInvoiceModal(invoice, { file = null } = {}) {
             projectSel.value = fields.suggestedProjectId;
             await loadProjectContext();
           }
-
           refreshPreview();
-          // Guarda a origem da leitura para ficar ligada à fatura criada.
           lastScan = { source: "IA", model: fields.model || null, raw: fields.raw || null };
           const scanSummary = buildScanSummary(fields, warnings);
-          setScanState("ready", `<span class="material-symbols-outlined">task_alt</span>${esc(scanSummary)}`);
+          setScanState("ready", `✓ ${esc(scanSummary)}`);
           toast("Fatura lida. Confirme os valores antes de guardar.", { type: "success" });
-          // The AGT portal can be slow, so its lookup runs after the form fields
-          // have been populated and does not keep the scan button spinning.
           void lookupScannedInvoiceNif(fields, docNote, scanSummary);
         } catch (err) {
-          setScanState(
-            "idle",
-            `<span class="material-symbols-outlined">error</span>${esc(err.message || "Falha ao ler a fatura.")}`
-          );
+          setScanState("idle", `⚠ ${esc(err.message || "Falha ao ler a fatura.")}`);
           toast(err.message || "Falha ao ler a fatura.", { type: "error" });
         } finally {
           setButtonLoading(scanBtn, false);
-          if (scanBtn && !docFileInput?.files?.length) scanBtn.disabled = true;
-          else if (scanBtn) scanBtn.disabled = !aiReady;
         }
-      });
+      };
+
+      $("inv_pickBtn")?.addEventListener("click", () => docFileInput?.click());
+      $("inv_pickBtn2")?.addEventListener("click", () => docFileInput?.click());
+      scanBtn?.addEventListener("click", runScan);
+
+      if (docFileInput) {
+        docFileInput.addEventListener("change", () => {
+          const picked = docFileInput.files?.[0] || null;
+          if (scanBtn) {
+            scanBtn.style.display = picked && aiReady ? "" : "none";
+            scanBtn.disabled = !picked || !aiReady;
+          }
+          if (docFileName) {
+            docFileName.textContent = picked ? `${picked.name} · ${Math.max(1, Math.round((picked.size || 0) / 1024))} KB` : "sem ficheiro";
+          }
+          if (picked && aiReady) {
+            void runScan();
+          } else if (picked) {
+            setScanState("ready", `📎 Ficheiro selecionado (${esc(picked.name)}). Preencha os valores e clique em Gravar.`);
+          }
+        });
+      }
+
+      if (file && docFileInput) {
+        setTimeout(() => {
+          try {
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            docFileInput.files = dt.files;
+            docFileInput.dispatchEvent(new Event("change"));
+          } catch {
+            toast("Escolha o ficheiro no formulário.", { type: "error" });
+          }
+        }, 0);
+      }
 
       $("inv_viewDoc")?.addEventListener("click", () =>
         openInvoiceDocumentModal(invoice, { context: { projectName: invoice?.project?.name } })
@@ -1651,7 +1710,7 @@ async function openInvoiceModal(invoice, { file = null } = {}) {
           btn.hidden = true;
           const viewBtn = $("inv_viewDoc");
           if (viewBtn) viewBtn.hidden = true;
-          docFileName.textContent = "PDF ou fotografia";
+          docFileName.textContent = "sem ficheiro";
           docNote.textContent = "Sem fatura física anexada.";
         } catch (err) {
           toast(err.message || "Falha ao remover o documento.", { type: "error" });
@@ -1665,27 +1724,43 @@ async function openInvoiceModal(invoice, { file = null } = {}) {
     },
     onPrimary: async ({ btn, close, panel }) => {
       const $ = (id) => panel.querySelector(`#${id}`);
+      const isVatCat = $("inv_vatCativo").value === "100";
+      const retSim = $("inv_retSim").value;
+      if (!isEdit && !retSim) {
+        $("inv_retSim").focus();
+        return toast("Indique se a fatura tem retenção na fonte (Sim ou Não).", { type: "error" });
+      }
+      const descAuto = $("inv_descAuto").value.trim();
+      const nif = $("inv_nif").value.trim();
+      const pctServ = $("inv_pctServ").value.trim();
+      const obsRaw = $("inv_notes").value.trim();
+      const extras = [
+        descAuto && !obsRaw.includes(descAuto) ? descAuto : "",
+        nif && !obsRaw.includes(nif) ? `NIF ${nif}` : "",
+        pctServ ? `${pctServ}% do serviço` : "",
+      ].filter(Boolean);
+      const notesCombined = [obsRaw, extras.join(" · ")].filter(Boolean).join(obsRaw && extras.length ? "\n" : "") || null;
+
       const raw = {
         docNumber: $("inv_docNumber").value.trim() || null,
         invoiceType: $("inv_type").value || null,
         docDate: $("inv_docDate").value,
-        // Sem vencimento indicado, aplica-se o prazo padrão de 30 dias.
         dueDate: $("inv_dueDate").value || ($("inv_docDate").value ? addDays($("inv_docDate").value, 30) || null : null),
         grossAmount: Number($("inv_gross").value),
-        vatPercent: numOrNull($("inv_vat").value),
-        withholdingPercent: numOrNull($("inv_withholding").value),
+        vatPercent: isVatCat ? 0 : numOrNull($("inv_vat").value),
+        withholdingPercent: retSim === "Sim" ? numOrNull($("inv_withholding").value) : 0,
         carPercent: numOrNull($("inv_car").value),
         guaranteePercent: numOrNull($("inv_guarantee").value),
-        flagVatCativo: $("inv_vatCativo").checked,
-        notes: $("inv_notes").value.trim() || null,
+        flagVatCativo: isVatCat,
+        notes: notesCombined,
       };
       if (!raw.grossAmount || raw.grossAmount <= 0) {
         $("inv_gross").focus();
-        return toast("Indique o valor ilíquido.", { type: "error" });
+        return toast("Indique o valor s/ IVA.", { type: "error" });
       }
       if (raw.dueDate && raw.docDate && raw.dueDate < raw.docDate) {
         $("inv_dueDate").focus();
-        return toast("O vencimento não pode ser anterior à data do documento.", { type: "error" });
+        return toast("O vencimento não pode ser anterior à data de emissão.", { type: "error" });
       }
 
       const percentageFields = [
@@ -1694,23 +1769,16 @@ async function openInvoiceModal(invoice, { file = null } = {}) {
         ["carPercent", "inv_car", "Seguro CAR"],
         ["guaranteePercent", "inv_guarantee", "garantia"],
       ];
-      const invalidPercent = percentageFields.find(([key]) =>
-        raw[key] !== null && (raw[key] < 0 || raw[key] > 100)
-      );
+      const invalidPercent = percentageFields.find(([key]) => raw[key] !== null && (raw[key] < 0 || raw[key] > 100));
       if (invalidPercent) {
-        const [key, inputId, label] = invalidPercent;
+        const [, inputId, label] = invalidPercent;
         $(inputId)?.focus();
-        toast(
-          `${label}: indique uma percentagem entre 0% e 100% (valor atual: ${raw[key]}%). Se pretendia indicar um valor em dinheiro, converta-o para percentagem do V. Ilíquido.`,
-          { type: "error" }
-        );
-        return;
+        return toast(`${label}: indique uma percentagem entre 0% e 100%.`, { type: "error" });
       }
 
       setButtonLoading(btn, true);
       try {
-        const file = $("inv_docFileInput")?.files?.[0] || null;
-        // Sem a opção «Já recebi», a fatura fica em aberto (nada entrou no caixa).
+        const pickedFile = $("inv_docFileInput")?.files?.[0] || null;
         const receivedAmount =
           $("rcv_choice")?.querySelector(".finance-choice.active")?.dataset.mode === "recebido"
             ? numOrNull($("inv_received")?.value) || 0
@@ -1720,12 +1788,12 @@ async function openInvoiceModal(invoice, { file = null } = {}) {
 
         if (isEdit) {
           result = await apiRequest(`/finance/invoices/${invoice.id}`, { method: "PATCH", body: raw });
-          toast("Fatura actualizada.", { type: "success" });
+          toast("Fatura atualizada.", { type: "success" });
         } else {
           const projectId = $("inv_project").value;
           if (!projectId) {
             setButtonLoading(btn, false);
-            return toast("Selecione a obra.", { type: "error" });
+            return toast("Selecione a obra / serviço.", { type: "error" });
           }
           result = await apiRequest("/finance/invoices", {
             method: "POST",
@@ -1746,10 +1814,9 @@ async function openInvoiceModal(invoice, { file = null } = {}) {
         }
         (result?.warnings || []).forEach((w) => toast(w.message, { type: "info", timeoutMs: 7000 }));
 
-        // Anexa a fatura física escolhida (PDF/fotografia).
-        if (file && targetId) {
+        if (pickedFile && targetId) {
           try {
-            await apiUpload(`/finance/invoices/${targetId}/document`, { file, fieldName: "file" });
+            await apiUpload(`/finance/invoices/${targetId}/document`, { file: pickedFile, fieldName: "file" });
           } catch (err) {
             toast(`Fatura guardada, mas o ficheiro não foi anexado: ${err.message}`, { type: "error" });
           }
