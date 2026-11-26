@@ -68,6 +68,17 @@ app.use((req, res, next) => {
   next();
 });
 
+// Compatibilidade: página antiga centroDeCompras -> /Financeiro/centro-pagamentos
+app.get("/Financeiro/centroDeCompras", (req, res) => {
+  const qs = req.originalUrl.includes("?") ? req.originalUrl.slice(req.originalUrl.indexOf("?")) : "";
+  return res.redirect(301, `/Financeiro/centro-pagamentos${qs}`);
+});
+
+// Evita 404 com CSP default-src 'none' quando o Chrome DevTools consulta /.well-known/appspecific/com.chrome.devtools.json
+app.get("/.well-known/appspecific/com.chrome.devtools.json", (_req, res) => {
+  return res.status(204).end();
+});
+
 // Serve os arquivos estáticos do frontend (HTML/JS/CSS/assets)
 app.use(express.static(pagesRoot, { extensions: ['html'] }));
 

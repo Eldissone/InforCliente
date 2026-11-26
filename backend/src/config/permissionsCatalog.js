@@ -248,7 +248,7 @@ const PERMISSION_GROUPS = [
       { id: "financeiro.tesourariaPagamentos", label: "Pagamentos a Fornecedor", route: "/Financeiro/tesouraria/pagamentos" },
       { id: "financeiro.centroPagamentos", label: "Centro de Pagamentos", route: "/Financeiro/centro-pagamentos" },
       { id: "financeiro.controlo", label: "Controlo Financeiro", route: "/Financeiro/controlo" },
-      { id: "financeiro.centrosGerais", label: "Compras e Pedidos e Pedidos Extra", route: "/Financeiro/centroDeCompras.html" },
+      { id: "financeiro.centrosGerais", label: "Compras e Pedidos e Pedidos Extra", route: "/Financeiro/centro-pagamentos" },
       { id: "financeiro.centrosCusto", label: "Registos: Centros de Custo", route: "/Financeiro/centros-custo" },
       { id: "financeiro.tipoCusto", label: "Registos: Tipo de Custo", route: "/registos/tipo-custo" },
       { id: "financeiro.categoriasCusto", label: "Registos: Categorias de Custo", route: "/registos/categorias-custo" },
@@ -343,14 +343,14 @@ const PERMISSION_GROUPS = [
     id: "fundoManeio",
     label: "Gestão de Cartões",
     icon: "credit_card",
-    pages: [{ id: "fundoManeio.main", label: "Gestão de Cartões", route: "/Financeiro/centroDeCompras.html" }],
+    pages: [{ id: "fundoManeio.main", label: "Gestão de Cartões", route: "/Financeiro/centro-pagamentos" }],
     actions: ["view", "create", "edit", "manage", "full_access"],
   },
   {
     id: "pedidosExtras",
     label: "Pedidos Extras",
     icon: "request_quote",
-    pages: [{ id: "pedidosExtras.main", label: "Compras e Pedidos e Pedidos Extra", route: "/Financeiro/centroDeCompras.html" }],
+    pages: [{ id: "pedidosExtras.main", label: "Compras e Pedidos e Pedidos Extra", route: "/Financeiro/centro-pagamentos" }],
     actions: ["view", "create", "edit", "approve", "pay", "delete", "reject", "cancel", "full_access"],
   },
   {
@@ -359,7 +359,7 @@ const PERMISSION_GROUPS = [
     icon: "local_shipping",
     pages: [
       { id: "fornecedores.list", label: "Gestão de fornecedores", route: "/fornecedores" },
-      { id: "fornecedores.main", label: "Fornecedores (Centro de Compras)", route: "/Financeiro/centroDeCompras.html" },
+      { id: "fornecedores.main", label: "Fornecedores (Centro de Compras)", route: "/Financeiro/centro-pagamentos" },
     ],
     actions: ["view", "create", "edit", "delete", "manage", "full_access"],
   },
@@ -389,7 +389,7 @@ const PERMISSION_GROUPS = [
       { id: "navlinks.cotacao", label: "Menu: Pedidos de Cotação", route: "/Projectos/Cotacao/index.html" },
       { id: "navlinks.comercial", label: "Menu: Comercial", route: "/comercial/orcamentos" },
       { id: "navlinks.financeiro", label: "Menu: Financeiro", route: "/Financeiro/overview" },
-      { id: "navlinks.centros_gerais", label: "Menu: Compras e Pedidos Extra", route: "/Financeiro/centroDeCompras.html" },
+      { id: "navlinks.centros_gerais", label: "Menu: Compras e Pedidos Extra", route: "/Financeiro/centro-pagamentos" },
       { id: "navlinks.users", label: "Menu: Gestão / Administração", route: "/Users/index.html" },
     ],
     actions: [

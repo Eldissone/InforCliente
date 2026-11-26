@@ -867,7 +867,7 @@ extraRequestRoutes.post(
         projectId: created.projectId || null,
         title: `Pedido extra para aprovar · ${created.project?.name || (created.type === "GERAL" ? "Geral" : "Obra")}`,
         body: [created.requestedBy, created.description, approvalMoney(created.amount, created.currency)].filter(Boolean).join(" · "),
-        link: `/Financeiro/centroDeCompras.html?${params}`,
+        link: `/Financeiro/centro-pagamentos?${params}`,
         urgent: created.priority === "URGENTE",
       });
     }

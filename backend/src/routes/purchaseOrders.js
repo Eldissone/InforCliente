@@ -105,7 +105,7 @@ function notifyOrderForApproval(req, order) {
     projectId: order.projectId || null,
     title: `Requisição para aprovar · ${order.number}`,
     body: [order.requestedByName, order.description, approvalMoney(order.totalValue, order.currency)].filter(Boolean).join(" · "),
-    link: "/Financeiro/centroDeCompras.html?tab=compras",
+    link: "/Financeiro/centro-pagamentos?tab=compras",
     urgent: order.priority === "URGENTE",
   });
 }
