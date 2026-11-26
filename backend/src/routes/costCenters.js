@@ -425,6 +425,30 @@ async function assertCanLiquidatePayment(req) {
   throw err;
 }
 
+async function requireCostPaymentEditAccess(req, res, next) {
+  const role = (req.user?.role || "").toLowerCase();
+  if (role === "admin" || role === "operador" || role === "financeiro") {
+    return next();
+  }
+  const userId = req.user?.sub;
+  if (!userId) return res.status(401).json({ error: "UNAUTHORIZED" });
+
+  try {
+    const perms = await getEffectivePermissionsForUser(userId);
+    const map = perms?.effectiveMap || {};
+    const finEdit = resolveAllowedFromMap(map, "financeiro", "edit");
+    const finView = resolveAllowedFromMap(map, "financeiro", "view");
+    const obrasEdit = resolveAllowedFromMap(map, "obras", "edit");
+    if (finEdit === "true" || finView === "true" || obrasEdit === "true") {
+      return next();
+    }
+    return res.status(403).json({ error: "FORBIDDEN" });
+  } catch (err) {
+    console.error("requireCostPaymentEditAccess error:", err);
+    return res.status(500).json({ error: "PERMISSION_CHECK_FAILED" });
+  }
+}
+
 // GET /cost-centers/payments/timeline — Cronograma agrupado (todas as obras)
 // Pagamentos visíveis 1 dia antes do vencimento.
 costCenterRoutes.get(
@@ -2137,7 +2161,7 @@ costCenterRoutes.post(
 // PATCH /cost-centers/:id/payments/:payId — Editar lançamento
 costCenterRoutes.patch(
   "/:id/payments/:payId",
-  requireRole(["admin", "operador"]),
+  requireCostPaymentEditAccess,
   upload.fields([{ name: "comprovativo", maxCount: 1 }, { name: "fatura", maxCount: 1 }, { name: "anexos", maxCount: 10 }]),
   asyncHandler(async (req, res) => {
     const payId = String(req.params.payId);
