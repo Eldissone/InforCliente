@@ -20,7 +20,7 @@ const W = require("../services/fleet/workshopCore");
 const fleetRoutes = express.Router();
 fleetRoutes.use(authRequired);
 
-const T = { s: "str", i: "int", d: "dec", t: "date", b: "bool", j: "json", a: "arr" };
+const T = { s: "str", i: "int", d: "dec", t: "date", b: "bool", j: "json", a: "arr", o: "obj" };
 
 /** Campos aceites por colecção: nome → tipo. `req`: obrigatórios na criação. */
 const COLECOES = {
@@ -31,7 +31,7 @@ const COLECOES = {
     campos: {
       plate: T.s, kind: T.s, brand: T.s, model: T.s, year: T.i, unit: T.s, fuel: T.s, tankCapacity: T.d, refConsumption: T.d,
       odometer: T.d, acquisitionValue: T.d, ownership: T.s, assignedTo: T.s, projectId: T.s, driverId: T.s, status: T.s,
-      active: T.b, notes: T.s, maintenancePlans: T.j,
+      active: T.b, notes: T.s, maintenancePlans: T.j, tipologia: T.s, company: T.s, details: T.o,
     },
     req: [["plate", "matrícula"], ["kind", "tipo"], ["brand", "marca"], ["model", "modelo"]],
     ordem: [{ plate: "asc" }],
@@ -50,9 +50,9 @@ const COLECOES = {
     porAno: true,
     campos: {
       date: T.t, vehicleId: T.s, driverId: T.s, odometer: T.d, liters: T.d, pricePerLiter: T.d, amount: T.d, fuelType: T.s, fullTank: T.b,
-      station: T.s, paymentMethod: T.s, receipt: T.s, projectId: T.s, justification: T.s, notes: T.s,
+      station: T.s, paymentMethod: T.s, receipt: T.s, projectId: T.s, justification: T.s, notes: T.s, time: T.s,
     },
-    req: [["date", "data"], ["vehicleId", "viatura"], ["liters", "litros"]],
+    req: [["date", "data"], ["vehicleId", "viatura"], ["odometer", "km"], ["liters", "litros"]],
     ordem: [{ date: "desc" }, { createdAt: "desc" }],
   },
   interventions: {
@@ -62,7 +62,7 @@ const COLECOES = {
     campos: {
       date: T.t, vehicleId: T.s, odometer: T.d, type: T.s, system: T.s, description: T.s, supplierId: T.s, workshop: T.s, technician: T.s,
       entryDate: T.t, exitDate: T.t, status: T.s, laborCost: T.d, partsCost: T.d, otherCost: T.d, warranty: T.s, nextAction: T.s,
-      nextDate: T.t, nextOdometer: T.d, planIds: T.a, incidentId: T.s, notes: T.s,
+      nextDate: T.t, nextOdometer: T.d, planIds: T.a, incidentId: T.s, notes: T.s, parts: T.j,
     },
     req: [["date", "data"], ["vehicleId", "viatura"], ["type", "tipo"], ["description", "descrição"]],
     ordem: [{ date: "desc" }, { createdAt: "desc" }],
@@ -74,6 +74,7 @@ const COLECOES = {
     campos: {
       date: T.t, vehicleId: T.s, driverId: T.s, type: T.s, severity: T.s, location: T.s, description: T.s, action: T.s, responsible: T.s,
       deadline: T.t, status: T.s, closedAt: T.t, estimatedCost: T.d, cost: T.d, insuranceClaim: T.b, injuries: T.b, notes: T.s,
+      time: T.s, immobilizes: T.b, reference: T.s, claimRef: T.s, thirdParties: T.s,
     },
     req: [["date", "data"], ["vehicleId", "viatura"], ["type", "tipo"], ["description", "descrição"]],
     ordem: [{ date: "desc" }, { createdAt: "desc" }],
@@ -101,7 +102,7 @@ function erro(status, mensagem) {
 
 function converter(tipo, v) {
   if (v === undefined) return undefined;
-  if (v === null || v === "") return tipo === T.a ? [] : tipo === T.b ? false : tipo === T.j ? [] : null;
+  if (v === null || v === "") return tipo === T.a ? [] : tipo === T.b ? false : tipo === T.j ? [] : tipo === T.o ? {} : null;
   switch (tipo) {
     case T.s: return String(v).trim() || null;
     case T.i: { const x = parseInt(v, 10); return Number.isFinite(x) ? x : null; }
@@ -109,6 +110,7 @@ function converter(tipo, v) {
     case T.t: { const s = String(v).slice(0, 10); if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) throw erro(400, `Data inválida: ${v}`); return new Date(`${s}T00:00:00Z`); }
     case T.b: return v === true || v === "true" || v === "1" || v === 1 || v === "Sim";
     case T.j: return Array.isArray(v) || typeof v === "object" ? v : [];
+    case T.o: return v && typeof v === "object" && !Array.isArray(v) ? v : {};
     case T.a: return (Array.isArray(v) ? v : [v]).map((x) => String(x).trim()).filter(Boolean);
     default: return v;
   }
@@ -218,7 +220,13 @@ async function preparar(colecao, data, { atual = null } = {}) {
       const outra = await prisma.fleetVehicle.findFirst({ where: { plate: data.plate, ...(atual ? { NOT: { id: atual.id } } : {}) } });
       if (outra) throw erro(409, `Já existe uma viatura com a matrícula ${data.plate} (${outra.code}).`);
     }
-    ["kind", "brand", "model"].forEach((k) => data[k] && (data[k] = data[k].toUpperCase()));
+    ["kind", "brand", "model", "company"].forEach((k) => data[k] && (data[k] = data[k].toUpperCase()));
+    if (data.tipologia !== undefined) {
+      data.tipologia = F.TIPOLOGIAS.some(([k]) => k === data.tipologia) ? data.tipologia : "VIATURA";
+      // Máquinas e equipamentos contam horas (como no protótipo), salvo indicação em contrário
+      if (!atual && !data.unit && ["MAQUINA", "EQUIPAMENTO"].includes(data.tipologia)) data.unit = "HORAS";
+    }
+    if (data.details !== undefined) data.details = F.limparFicha(data.details);
     if ("maintenancePlans" in data) data.maintenancePlans = normalizarPlanos(data.maintenancePlans);
     if ("odometer" in data && data.odometer !== null && (!atual || Number(atual.odometer) !== data.odometer)) data.odometerAt = new Date();
     if (data.status && ["Vendida", "Abatida"].includes(data.status)) data.active = false;
@@ -227,7 +235,29 @@ async function preparar(colecao, data, { atual = null } = {}) {
     if ((data.amount === null || data.amount === undefined) && data.liters && data.pricePerLiter) data.amount = Math.round(data.liters * data.pricePerLiter * 100) / 100;
     if (!atual && (data.amount === null || data.amount === undefined)) throw erro(400, "Indique o valor ou o preço por litro.");
     if (data.amount === null) throw erro(400, "Indique o valor ou o preço por litro.");
+    if (data.time !== undefined && data.time && !/^\d{1,2}:\d{2}$/.test(data.time)) data.time = null;
+    // Km abaixo do abastecimento anterior: só passa com justificação (como no protótipo)
+    const vid = data.vehicleId ?? atual?.vehicleId;
+    const km = data.odometer !== undefined ? data.odometer : atual?.odometer;
+    const dia = F.iso(data.date ?? atual?.date);
+    if (vid && km !== null && km !== undefined) {
+      const anteriores = await prisma.fleetFuel.findMany({
+        where: { vehicleId: vid, odometer: { not: null }, date: { lte: new Date(`${dia}T00:00:00Z`) }, ...(atual ? { NOT: { id: atual.id } } : {}) },
+        orderBy: [{ date: "desc" }, { odometer: "desc" }],
+        take: 1,
+      });
+      const prev = anteriores[0];
+      const just = String(data.justification ?? atual?.justification ?? "").trim();
+      if (prev && Number(km) < Number(prev.odometer) && !just) {
+        throw erro(400, `Os km (${km}) são inferiores aos do abastecimento anterior (${Number(prev.odometer)} em ${F.iso(prev.date)}). Escreva a justificação.`);
+      }
+    }
   }
+  if (colecao === "interventions" && data.parts !== undefined) {
+    data.parts = F.limparPecas(data.parts);
+    if (data.parts.length) data.partsCost = F.totalPecas(data.parts);
+  }
+  if (colecao === "incidents" && data.time !== undefined && data.time && !/^\d{1,2}:\d{2}$/.test(data.time)) data.time = null;
   if (colecao === "incidents") {
     const est = data.status ?? atual?.status;
     if (F.OCORRENCIA_FECHADA.includes(est) && !data.closedAt && !atual?.closedAt) data.closedAt = new Date(`${hojeIso()}T00:00:00Z`);
@@ -242,9 +272,28 @@ async function preparar(colecao, data, { atual = null } = {}) {
   return data;
 }
 
+/**
+ * Estado da viatura segundo as intervenções e ocorrências (o `after` dos
+ * formulários do protótipo): intervenção por concluir → «Em manutenção»;
+ * ocorrência aberta que imobiliza → «Avariada» / «Acidentada»; quando nada
+ * a prende, volta a «Operacional».
+ */
+async function sincronizarEstadoViatura(tx, vehicleId) {
+  if (!vehicleId) return;
+  const v = await tx.fleetVehicle.findUnique({ where: { id: vehicleId }, select: { status: true, active: true } });
+  if (!v || v.active === false || ["Vendida", "Abatida"].includes(v.status)) return;
+  const [ints, ocs] = await Promise.all([
+    tx.fleetIntervention.findMany({ where: { vehicleId }, select: { status: true, workOrderStatus: true } }),
+    tx.fleetIncident.findMany({ where: { vehicleId, immobilizes: true }, select: { status: true, type: true } }),
+  ]);
+  const novo = F.estadoPelosRegistos(v.status, { intervencoes: ints, ocorrencias: ocs });
+  if (novo && novo !== v.status) await tx.fleetVehicle.update({ where: { id: vehicleId }, data: { status: novo } });
+}
+
 async function depois(tx, colecao, row) {
   if (colecao === "fuel" || colecao === "interventions") await atualizarConta(tx, row.vehicleId, row.odometer, row.date);
   if (colecao === "interventions") await cumprirPlanos(tx, row);
+  if (colecao === "interventions" || colecao === "incidents") await sincronizarEstadoViatura(tx, row.vehicleId);
 }
 
 const verFrota = requirePermission("frota", "view");
@@ -636,7 +685,68 @@ fleetRoutes.delete(
       const segs = await prisma.fleetInsurance.findMany({ where: { vehicleIds: { has: atual.id } } });
       await Promise.all(segs.map((s) => prisma.fleetInsurance.update({ where: { id: s.id }, data: { vehicleIds: s.vehicleIds.filter((x) => x !== atual.id) } })));
     }
+    if (["interventions", "incidents"].includes(req.params.colecao)) await sincronizarEstadoViatura(prisma, atual.vehicleId);
     res.json({ ok: true });
+  })
+);
+
+// ─── Ficheiros (fotografias da viatura e do motorista, talões, digitalizações, apólices) ───
+
+const multer = require("multer");
+const path = require("path");
+const { uploadToSupabase } = require("../utils/storage");
+
+const enviar = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const TIPOS_FICHEIRO = /^(image\/(jpeg|png|webp|gif|heic|heif)|application\/pdf)$/i;
+const SLOTS_VIATURA = new Set(F.LISTAS.fotos.map(([k]) => k));
+
+/**
+ * POST /fleet/:colecao/:id/files  (campo `file`; `slot` opcional)
+ *   viatura + slot (tq, frente…) → fotografia dessa posição
+ *   motorista + slot=foto        → fotografia do motorista
+ *   senão                        → junta aos anexos do registo
+ */
+fleetRoutes.post(
+  "/:colecao/:id/files",
+  permPara("edit"),
+  enviar.single("file"),
+  asyncHandler(async (req, res) => {
+    const col = req.params.colecao;
+    const cfg = cfgDe(req);
+    const atual = await prisma[cfg.model].findUnique({ where: { id: req.params.id } });
+    if (!atual) return res.status(404).json({ error: "NOT_FOUND" });
+    if (!req.file) throw erro(400, "Escolha o ficheiro.");
+    if (!TIPOS_FICHEIRO.test(req.file.mimetype || "")) throw erro(400, "Só imagens (JPG, PNG, WEBP) ou PDF.");
+    const ext = (path.extname(req.file.originalname || "").toLowerCase() || (/pdf/i.test(req.file.mimetype) ? ".pdf" : ".jpg")).replace(/[^.a-z0-9]/g, "");
+    const slot = String(req.body?.slot || "");
+    const url = await uploadToSupabase(`frota/${col}/${atual.id}/${slot || "doc"}-${Date.now()}${ext}`, req.file.buffer, req.file.mimetype);
+    let data;
+    if (col === "vehicles" && SLOTS_VIATURA.has(slot)) data = { photos: { ...(atual.photos || {}), [slot]: url } };
+    else if (col === "drivers" && slot === "foto") data = { photo: url };
+    else {
+      const nome = String(req.file.originalname || "ficheiro").slice(0, 160);
+      data = { attachments: [...(Array.isArray(atual.attachments) ? atual.attachments : []), { nome, url, tipo: req.file.mimetype, d: new Date().toISOString(), por: req.user?.name || req.user?.email || "" }] };
+    }
+    const row = await prisma[cfg.model].update({ where: { id: atual.id }, data });
+    res.json(plano(row));
+  })
+);
+
+/** DELETE /fleet/:colecao/:id/files  { url } — tira o ficheiro do registo (o ficheiro fica no arquivo). */
+fleetRoutes.delete(
+  "/:colecao/:id/files",
+  permPara("edit"),
+  asyncHandler(async (req, res) => {
+    const cfg = cfgDe(req);
+    const atual = await prisma[cfg.model].findUnique({ where: { id: req.params.id } });
+    if (!atual) return res.status(404).json({ error: "NOT_FOUND" });
+    const url = String(req.body?.url || req.query.url || "");
+    const data = {};
+    if (Array.isArray(atual.attachments)) data.attachments = atual.attachments.filter((a) => a.url !== url);
+    if (atual.photos && typeof atual.photos === "object") data.photos = Object.fromEntries(Object.entries(atual.photos).filter(([, u]) => u !== url));
+    if (atual.photo === url) data.photo = null;
+    const row = await prisma[cfg.model].update({ where: { id: atual.id }, data });
+    res.json(plano(row));
   })
 );
 

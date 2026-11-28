@@ -11,7 +11,7 @@
  * mostram os botões (o backend volta a verificar).
  */
 
-import { apiRequest } from "../../services/api.js";
+import { apiRequest, apiUpload, getAssetUrl } from "../../services/api.js";
 import { openModal, toast } from "../ui.js";
 import { can } from "../permissions.js";
 import { esc, fmt, fmt0, fmtData, kpis, vazio, erro } from "../finance/f2Ui.js";
@@ -45,59 +45,201 @@ const obraLbl = (id) => {
 const ativa = (v) => v.active !== false && !["Vendida", "Abatida"].includes(v.status);
 
 // ─── Formulários ──────────────────────────────────────────────────────────────
+// Alinhados com o protótipo (v699): ENT.fmot / fab / fint / focr / fdoc, FXDRAW.frota e FXDRAW.seg.
+// Um campo é { k, l, t, opts, req, full, ph, hint, mostrar(v), reqSe(v) }; `{ sec }` abre uma secção;
+// `{ t: "calc", html(v) }` é um quadro calculado; `{ t: "html", html }` é conteúdo fixo.
 
 const optsViaturas = (cur) => [["", "— escolher viatura —"], ...S.d.viaturas.filter((v) => ativa(v) || v.id === cur).map((v) => [v.id, vLbl(v)])];
 const optsMotoristas = (cur) => [["", "— sem motorista —"], ...S.d.motoristas.filter((m) => m.status !== "Inativo" || m.id === cur).map((m) => [m.id, m.name])];
 const optsObras = () => [["", "— sem obra —"], ...S.d.obras.map((o) => [o.id, [o.code, o.name].filter(Boolean).join(" · ")])];
 const lista = (a) => a.map((x) => (Array.isArray(x) ? x : [x, x]));
+const simNao = [["Não", "Não"], ["Sim", "Sim"]];
+const nr = (x) => (x === "" || x === null || x === undefined ? null : Number(String(x).replace(",", ".")));
+const kz = (x) => fmt(x);
 
-/** Campo: { k, l, t: text|number|date|select|textarea|check|multi, opts, req, full, ph } */
+/** Valor de um campo, incluindo os da ficha (`details.cor`). */
+function valorDe(o, k) {
+  if (k.startsWith("details.")) return (o.details || {})[k.slice(8)];
+  return o[k];
+}
+
 function campoHtml(f, o) {
-  const id = `ff_${f.k}`;
-  const val = o[f.k] === null || o[f.k] === undefined ? "" : o[f.k];
-  const lab = `<label class="finance-label" for="${id}">${esc(f.l)}${f.req ? " *" : ""}</label>`;
+  if (f.t === "calc") return `<div class="finance-field finance-field--full" data-calc="${esc(f.k)}"></div>`;
+  if (f.t === "html") return `<div class="finance-field finance-field--full">${f.html}</div>`;
+  const id = `ff_${f.k.replace(".", "_")}`;
+  const raw = valorDe(o, f.k);
+  const val = raw === null || raw === undefined ? "" : raw;
+  const lab = `<label class="finance-label" for="${id}">${esc(f.l)}<b class="fr-req"${f.req ? "" : " hidden"}> *</b></label>`;
   let input;
-  if (f.t === "select") {
-    input = `<select id="${id}" class="finance-input">${f.opts.map(([v, l]) => `<option value="${esc(v)}"${String(val) === String(v) ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+  if (f.t === "select" || f.t === "sim") {
+    const opts = f.t === "sim" ? simNao : f.opts;
+    const cur = f.t === "sim" ? (val === true ? "Sim" : "Não") : String(val);
+    input = `<select id="${id}" class="finance-input">${opts.map(([v, l]) => `<option value="${esc(v)}"${cur === String(v) ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
   } else if (f.t === "textarea") {
     input = `<textarea id="${id}" class="finance-input" rows="2">${esc(val)}</textarea>`;
-  } else if (f.t === "check") {
-    input = `<label class="fx2-mut" style="display:flex;gap:.4rem;align-items:center"><input id="${id}" type="checkbox"${val === true ? " checked" : ""}> ${esc(f.ph || "Sim")}</label>`;
   } else if (f.t === "multi") {
     const sel = new Set(Array.isArray(val) ? val : []);
     input = `<div id="${id}" class="fr-multi">${f.opts.length ? f.opts.map(([v, l]) => `<label><input type="checkbox" value="${esc(v)}"${sel.has(v) ? " checked" : ""}> ${esc(l)}</label>`).join("") : `<span class="fx2-mut">${esc(f.vazio || "Sem opções.")}</span>`}</div>`;
   } else {
     const step = f.t === "number" ? ' step="any" min="0"' : "";
-    input = `<input id="${id}" class="finance-input" type="${f.t || "text"}"${step} value="${esc(val)}"${f.ph ? ` placeholder="${esc(f.ph)}"` : ""}>`;
+    input = `<input id="${id}" class="finance-input" type="${f.t || "text"}"${step} value="${esc(val)}"${f.ph ? ` placeholder="${esc(f.ph)}"` : ""}${f.list ? ` list="${esc(f.list)}"` : ""}>`;
   }
-  return `<div class="finance-field${f.full ? " finance-field--full" : ""}">${lab}${input}${f.hint ? `<small class="fx2-mut">${esc(f.hint)}</small>` : ""}</div>`;
+  return `<div class="finance-field${f.full ? " finance-field--full" : ""}" data-campo="${esc(f.k)}">${lab}${input}<small class="fx2-mut" data-hint="${esc(f.k)}">${esc(f.hint || "")}</small></div>`;
+}
+
+/** Desenha os campos por secções (as `fxsec` do protótipo). */
+function camposHtml(campos, o) {
+  let h = "";
+  let aberta = false;
+  const fecha = () => (aberta ? "</div></section>" : "");
+  if (!campos[0]?.sec) {
+    h += `<section class="fx2-blk fr-sec"><div class="finance-form-grid finance-form-grid--2">`;
+    aberta = true;
+  }
+  for (const f of campos) {
+    if (f.sec) {
+      h += fecha();
+      h += `<section class="fx2-blk fr-sec" data-secao="${esc(f.id || f.sec)}"><h3>${esc(f.sec)}</h3>${f.nota ? `<p class="fx2-mut" style="margin:-.25rem 0 .5rem">${esc(f.nota)}</p>` : ""}<div class="finance-form-grid finance-form-grid--2">`;
+      aberta = true;
+      continue;
+    }
+    h += campoHtml(f, o);
+  }
+  return h + fecha();
 }
 
 function lerCampos(panel, campos) {
   const body = {};
   for (const f of campos) {
-    const el = panel.querySelector(`#ff_${f.k}`);
+    if (!f.k || f.t === "calc" || f.t === "html") continue;
+    const el = panel.querySelector(`#ff_${f.k.replace(".", "_")}`);
     if (!el) continue;
-    if (f.t === "check") body[f.k] = el.checked;
+    if (f.t === "sim") body[f.k] = el.value === "Sim";
     else if (f.t === "multi") body[f.k] = [...el.querySelectorAll("input:checked")].map((i) => i.value);
     else body[f.k] = el.value.trim();
   }
   return body;
 }
 
-/** Abre o formulário de um registo. `col` é a colecção da API (vehicles, fuel…). */
-function formRegisto({ col, titulo, campos, o = {}, extraHtml = "", onRender, prepararCorpo, depois }) {
+/** Junta os campos `details.x` num objeto `details`. */
+function juntarFicha(body) {
+  const det = {};
+  Object.keys(body).forEach((k) => {
+    if (!k.startsWith("details.")) return;
+    det[k.slice(8)] = body[k];
+    delete body[k];
+  });
+  if (Object.keys(det).length) body.details = det;
+  return body;
+}
+
+// ─── Ficheiros (fotografias e anexos) ─────────────────────────────────────────
+
+const eImagem = (a) => /^image\//i.test(a?.tipo || "") || /\.(png|jpe?g|webp|gif)$/i.test(a?.url || a?.nome || "");
+
+function anexosHtml(titulo, ajuda, o) {
+  const L = Array.isArray(o.attachments) ? o.attachments : [];
+  return `<section class="fx2-blk fr-sec"><h3>${esc(titulo)}</h3>
+    <div class="fr-anexos">${L.map((a) => `<span class="fr-anexo">${eImagem(a) ? `<img src="${esc(getAssetUrl(a.url) || "")}" alt="">` : `<span class="material-symbols-outlined">description</span>`}<a href="${esc(getAssetUrl(a.url) || "#")}" target="_blank" rel="noopener">${esc(a.nome || "ficheiro")}</a>${o.id && pode("edit") ? `<button type="button" data-fr-anexo-rm="${esc(a.url)}" title="Tirar">✕</button>` : ""}</span>`).join("") || `<span class="fx2-mut">Sem ficheiros.</span>`}</div>
+    ${pode(o.id ? "edit" : "create") ? `<label class="fr-enviar"><span class="material-symbols-outlined">upload_file</span> ${esc(ajuda)}<input type="file" data-fr-anexos multiple accept="image/*,application/pdf" hidden></label><span class="fx2-mut" data-fr-anexos-pend></span>` : ""}
+  </section>`;
+}
+
+function fotosHtml(slots, o, { foto = false } = {}) {
+  const P = foto ? { foto: o.photo } : o.photos || {};
+  return `<section class="fx2-blk fr-sec"><h3>${foto ? "Fotografia" : "Fotografias (Estado da Viatura)"}</h3>
+    <div class="fr-fotos">${slots
+      .map(([k, l]) => `<label class="fr-foto" data-fr-slot="${esc(k)}">${P[k] ? `<img src="${esc(getAssetUrl(P[k]) || "")}" alt="">` : `<span class="fr-foto-vazio material-symbols-outlined">add_a_photo</span>`}<b>${esc(l)}</b>${pode(o.id ? "edit" : "create") ? `<input type="file" accept="image/*" hidden data-fr-foto="${esc(k)}"><span class="fx2-mut">${P[k] ? "Substituir" : "Carregar"}</span>` : ""}</label>`)
+      .join("")}</div>
+    ${foto ? "" : `<p class="fx2-mut" style="margin:.4rem 0 0">A fotografia 3/4 frente fica como imagem da viatura.</p>`}</section>`;
+}
+
+/** Liga os ficheiros escolhidos; devolve a função que os envia depois de gravar. */
+function ligarFicheiros(panel, col, o) {
+  const pend = [];
+  panel.addEventListener("change", (e) => {
+    const t = e.target;
+    if (t.matches("[data-fr-anexos]")) {
+      [...t.files].forEach((file) => pend.push({ file }));
+      const info = panel.querySelector("[data-fr-anexos-pend]");
+      if (info) info.textContent = `${pend.filter((p) => !p.slot).length} ficheiro(s) para enviar ao gravar`;
+    }
+    if (t.matches("[data-fr-foto]")) {
+      const file = t.files[0];
+      if (!file) return;
+      const slot = t.dataset.frFoto;
+      const i = pend.findIndex((p) => p.slot === slot);
+      if (i >= 0) pend.splice(i, 1);
+      pend.push({ file, slot });
+      const box = t.closest(".fr-foto");
+      const img = box.querySelector("img") || document.createElement("img");
+      img.src = URL.createObjectURL(file);
+      box.querySelector(".fr-foto-vazio")?.replaceWith(img);
+    }
+  });
+  panel.addEventListener("click", async (e) => {
+    const rm = e.target.closest("[data-fr-anexo-rm]");
+    if (!rm || !o.id) return;
+    e.preventDefault();
+    if (!confirm("Tirar este ficheiro do registo?")) return;
+    try {
+      await apiRequest(`/fleet/${col}/${o.id}/files`, { method: "DELETE", body: { url: rm.dataset.frAnexoRm } });
+      rm.closest(".fr-anexo").remove();
+      o.attachments = (o.attachments || []).filter((a) => a.url !== rm.dataset.frAnexoRm);
+    } catch (er) {
+      toast(er.message || "Não foi possível tirar o ficheiro.", { type: "error" });
+    }
+  });
+  return async (id) => {
+    for (const p of pend) {
+      await apiUpload(`/fleet/${col}/${id}/files`, { file: p.file, fieldName: "file", extraFields: p.slot ? { slot: p.slot } : undefined });
+    }
+    return pend.length;
+  };
+}
+
+/**
+ * Abre o formulário de um registo. `col` é a colecção da API (vehicles, fuel…).
+ * `extraAntes` / `extraHtml`: blocos antes e depois dos ficheiros; `ficheiros(o)`: HTML das fotos / anexos.
+ */
+function formRegisto({ col, titulo, campos, o = {}, extraHtml = "", ficheiros = null, botoes = "", onRender, prepararCorpo, depois }) {
   const novo = !o.id;
   const podeGravar = novo ? pode("create") : pode("edit");
   openModal({
     title: titulo,
-    width: 760,
-    primaryLabel: podeGravar ? "Guardar" : "",
+    width: 860,
+    primaryLabel: podeGravar ? "Gravar" : "",
     secondaryLabel: podeGravar ? "Cancelar" : "Fechar",
-    contentHtml: `<div class="finance-form-grid finance-form-grid--2">${campos.map((f) => campoHtml(f, o)).join("")}</div>${extraHtml}
-      ${!novo && pode("delete") ? `<div style="margin-top:1rem"><button type="button" class="finance-btn" data-fr-apagar>Apagar</button></div>` : ""}`,
+    contentHtml: `${camposHtml(campos, o)}${extraHtml}${ficheiros ? ficheiros(o) : ""}
+      <div class="fr-rodape">${!novo && pode("delete") ? `<button type="button" class="finance-btn fr-apagar" data-fr-apagar>Apagar</button>` : ""}${botoes}</div>`,
     onRender: ({ panel, close }) => {
+      let enviarFicheiros = async () => 0;
+      if (ficheiros) enviarFicheiros = ligarFicheiros(panel, col, o);
+      panel._enviarFicheiros = enviarFicheiros;
       if (!podeGravar) panel.querySelectorAll("input, select, textarea").forEach((el) => (el.disabled = true));
+      // campos que aparecem conforme os outros, quadros calculados e obrigatórios condicionais
+      const atualizar = () => {
+        const v = lerCampos(panel, campos);
+        for (const f of campos) {
+          if (!f.k) continue;
+          const box = panel.querySelector(`[data-campo="${f.k}"]`);
+          if (box && f.mostrar) box.hidden = !f.mostrar(v, o);
+          if (box && f.reqSe) box.querySelector(".fr-req").hidden = !(f.req || f.reqSe(v, o));
+          if (f.dica) {
+            const h = panel.querySelector(`[data-hint="${f.k}"]`);
+            if (h) h.textContent = f.dica(v, o) || f.hint || "";
+          }
+          if (f.t === "calc") panel.querySelector(`[data-calc="${f.k}"]`).innerHTML = f.html(v, o);
+        }
+        panel.querySelectorAll("[data-secao]").forEach((sec) => {
+          const def = campos.find((f) => f.sec && (f.id || f.sec) === sec.dataset.secao);
+          if (def?.mostrar) sec.hidden = !def.mostrar(v, o);
+        });
+      };
+      panel._atualizar = atualizar;
+      panel.addEventListener("input", atualizar);
+      panel.addEventListener("change", atualizar);
+      atualizar();
       panel.querySelector("[data-fr-apagar]")?.addEventListener("click", async () => {
         if (!confirm("Apagar este registo? Não se pode desfazer.")) return;
         try {
@@ -109,46 +251,140 @@ function formRegisto({ col, titulo, campos, o = {}, extraHtml = "", onRender, pr
           toast(e.message || "Não foi possível apagar.", { type: "error" });
         }
       });
-      onRender?.({ panel });
+      onRender?.({ panel, close, atualizar });
     },
     onPrimary: async ({ panel, close }) => {
       let body = lerCampos(panel, campos);
-      if (prepararCorpo) body = prepararCorpo(body, panel);
-      const falta = campos.filter((f) => f.req && (body[f.k] === "" || body[f.k] === undefined || (Array.isArray(body[f.k]) && !body[f.k].length))).map((f) => f.l);
+      const v = body;
+      const visiveis = campos.filter((f) => f.k && !(f.mostrar && !f.mostrar(v, o)) && !campos.some((s) => s.sec && s.mostrar && !s.mostrar(v, o) && secaoDe(campos, f) === s));
+      const falta = visiveis.filter((f) => (f.req || (f.reqSe && f.reqSe(v, o))) && (body[f.k] === "" || body[f.k] === undefined || (Array.isArray(body[f.k]) && !body[f.k].length))).map((f) => f.l);
       if (falta.length) return toast(`Falta preencher: ${falta.join(", ")}.`, { type: "error" });
+      // campos escondidos não são gravados (ex.: secção de acidente numa avaria)
+      campos.forEach((f) => {
+        if (f.k && !visiveis.includes(f) && f.t !== "calc" && f.limparEscondido) delete body[f.k];
+      });
+      body = juntarFicha(body);
+      if (prepararCorpo) body = prepararCorpo(body, panel);
       try {
         const r = await apiRequest(novo ? `/fleet/${col}` : `/fleet/${col}/${o.id}`, { method: novo ? "POST" : "PATCH", body });
+        const n = await panel._enviarFicheiros(r.id);
         close();
-        toast(novo ? `Registo ${r.code || ""} criado.` : "Alterações gravadas.");
+        toast(`${novo ? `Registo ${r.code || ""} criado` : "Alterações gravadas"}${n ? ` · ${n} ficheiro(s) enviado(s)` : ""}.`);
         await depois?.(r);
         carregar();
       } catch (e) {
-        toast(e.message || "Não foi possível guardar.", { type: "error" });
+        toast(e.message || "Não foi possível gravar.", { type: "error" });
       }
     },
   });
 }
 
+/** A secção a que pertence um campo (a última `{ sec }` antes dele). */
+function secaoDe(campos, f) {
+  let s = null;
+  for (const c of campos) {
+    if (c.sec) s = c;
+    if (c === f) return s;
+  }
+  return s;
+}
+
 const L = () => S.d.listas;
 
-function formViatura(o = { unit: "KM", ownership: "PROPRIA", status: "Operacional", active: true, maintenancePlans: [] }) {
+// ─── Viatura / máquina (FXDRAW.frota + v538 + v597 + v664 do protótipo) ──────
+
+function perfilViatura(v) {
+  const ano = S.d.hoje.slice(0, 4);
+  const linhas = [
+    ...S.d.abastecimentos.filter((a) => a.vehicleId === v.id).map((a) => [a.date, Number(a.amount) || 0]),
+    ...S.d.intervencoes.filter((i) => i.vehicleId === v.id).map((i) => [i.date, i._total || 0]),
+    ...S.d.ocorrencias.filter((x) => x.vehicleId === v.id).map((x) => [x.closedAt || x.date, Number(x.cost) || 0]),
+    ...S.d.documentos.filter((d) => d.vehicleId === v.id).map((d) => [d.issueDate || "", Number(d.cost) || 0]),
+  ];
+  const tot = linhas.reduce((s, x) => s + x[1], 0);
+  const tAno = linhas.filter((x) => String(x[0]).slice(0, 4) === ano).reduce((s, x) => s + x[1], 0);
+  const cons = S.d.abastecimentos.filter((a) => a.vehicleId === v.id).map((a) => a._calc?.cons).filter((x) => x > 0);
+  const nI = S.d.intervencoes.filter((i) => i.vehicleId === v.id).length;
+  const nO = S.d.ocorrencias.filter((x) => x.vehicleId === v.id).length;
+  const segs = S.d.seguros.filter((s) => (s.vehicleIds || []).includes(v.id));
+  return `<section class="fx2-blk fr-sec"><h3 style="display:flex;align-items:center;gap:.5rem">Perfil da Viatura <a class="finance-btn" style="margin-left:auto" href="/frota/custos?viatura=${esc(v.id)}">Custos e histórico</a></h3>
+      <div class="fr-perfil">
+        <div><span>Custo total</span><b>${kz(tot)}</b></div><div><span>Custo de ${ano}</span><b>${kz(tAno)}</b></div>
+        <div><span>Consumo médio</span><b>${cons.length ? `${(cons.reduce((s, x) => s + x, 0) / cons.length).toFixed(1)} L/100` : "—"}</b></div>
+        <div><span>Intervenções</span><b>${nI}</b></div><div><span>Ocorrências</span><b>${nO}</b></div>
+        <div><span>Manutenção</span><b>${pill(v._planos?.t || "—", v._planos?.k || "neu")}</b></div>
+      </div></section>
+    <section class="fx2-blk fr-sec"><h3>Seguro</h3>${
+      segs.length
+        ? `<div class="fx2-tw"><table class="fx2-t"><thead><tr><th>Apólice</th><th>Seguradora</th><th>Coberturas</th><th>Validade</th><th>Estado</th></tr></thead><tbody>${segs.map((s) => `<tr><td><b>${esc(s.policyNumber)}</b></td><td>${esc(s.insurer)}</td><td class="fx2-mut">${esc((s.coverages || []).join(", "))}</td><td>${fmtData(s.startDate)} – ${fmtData(s.endDate)}</td><td>${pill(s._estado[0], s._estado[1])}</td></tr>`).join("")}</tbody></table></div>`
+        : `<p class="fx2-mut">Nenhuma apólice cobre esta viatura.</p>`
+    }${pode("create") ? `<button type="button" class="finance-btn" data-fr-segnovo="${esc(v.id)}">+ Nova apólice para esta viatura</button>` : ""}</section>`;
+}
+
+function formViatura(o = { tipologia: "VIATURA", unit: "KM", ownership: "PROPRIA", status: "Operacional", active: true, maintenancePlans: [], details: {}, photos: {} }) {
+  const tipos = [...new Set(S.d.viaturas.map((v) => v.kind).filter(Boolean))].sort();
+  const tractores = S.d.viaturas.filter((v) => v.id !== o.id && ativa(v) && v.tipologia !== "TRAILER");
+  const T = (v) => v.tipologia || "VIATURA";
   const campos = [
-    { k: "kind", l: "Tipo", req: 1, ph: "LIGEIRA, PESADA, MÁQUINA, TRAILER…" },
-    { k: "plate", l: "Matrícula", req: 1, ph: "LD-12-34-AB" },
+    { sec: "Tipologia e Empresa" },
+    { k: "tipologia", l: "Tipologia", t: "select", req: 1, opts: L().tipologias, hint: "Decide a unidade (km ou horas) e o grupo nos filtros" },
+    { k: "company", l: "Empresa proprietária", t: "select", opts: lista(["", ...L().empresas]) },
+    { k: "details.dataMat", l: "Data da matrícula", t: "date" },
+    { k: "details.vendedor", l: "Vendedor / fornecedor" },
+    { sec: "Dados da Viatura / Máquina" },
+    { k: "kind", l: "Tipo", req: 1, ph: "LIGEIRA, PESADA, ESCAVADORA, GERADOR…", list: "frTipos" },
+    { k: "unit", l: "Unidade de utilização", t: "select", opts: L().unidades },
+    { k: "plate", l: "Matrícula", req: 1, ph: "ex.: LD-12-34-AB" },
     { k: "brand", l: "Marca", req: 1 },
     { k: "model", l: "Modelo", req: 1 },
     { k: "year", l: "Ano", t: "number" },
-    { k: "unit", l: "Unidade de utilização", t: "select", opts: L().unidades },
-    { k: "fuel", l: "Combustível", t: "select", opts: lista(["", ...L().combustiveis]) },
-    { k: "odometer", l: "Km / horas atuais", t: "number" },
     { k: "tankCapacity", l: "Capacidade do depósito (L)", t: "number" },
-    { k: "refConsumption", l: "Consumo de referência", t: "number", hint: "L/100 km (ou L/h nas máquinas)" },
+    { k: "refConsumption", l: "Consumo de referência", t: "number", dica: (v) => (v.unit === "HORAS" ? "L/h" : "L/100 km") },
+    { k: "odometer", l: "Km / horas atuais", t: "number", dica: (v) => (v.unit === "HORAS" ? "horas atuais" : "km atuais") },
     { k: "acquisitionValue", l: "Valor de aquisição (Kz)", t: "number" },
     { k: "ownership", l: "Propriedade", t: "select", opts: L().propriedades },
     { k: "assignedTo", l: "Atribuída a", ph: "SEDE, OBRA, DIRECÇÃO…" },
-    { k: "projectId", l: "Obra", t: "select", opts: optsObras() },
-    { k: "driverId", l: "Motorista / responsável", t: "select", opts: optsMotoristas(o.driverId) },
-    { k: "status", l: "Estado", t: "select", opts: lista(L().estadosViatura) },
+    { k: "projectId", l: "Obra", t: "select", opts: optsObras(), mostrar: (v) => /OBRA/i.test(v.assignedTo || "") || Boolean(v.projectId) },
+    { sec: "Estado, Identificação e Motorista" },
+    { k: "status", l: "Estado da viatura", t: "select", req: 1, opts: lista(L().estadosViatura) },
+    { k: "driverId", l: "Motorista habitual", t: "select", opts: optsMotoristas(o.driverId) },
+    { k: "fuel", l: "Combustível", t: "select", opts: lista(["", ...L().combustiveis]) },
+    { k: "details.caixa", l: "Caixa", t: "select", opts: lista(["", ...L().caixas]) },
+    { k: "details.cor", l: "Cor" },
+    { k: "details.vin", l: "N.º de chassis / VIN" },
+    { k: "details.motor", l: "N.º do motor" },
+    { k: "details.versao", l: "Versão" },
+    { k: "details.cilindrada", l: "Cilindrada (cc)", t: "number" },
+    { k: "details.potencia", l: "Potência (cv)", t: "number", mostrar: (v) => v.tipologia !== "TRAILER" },
+    { k: "details.dataEntrada", l: "Data de entrada na frota", t: "date" },
+    { k: "details.kmInicial", l: "Km inicial", t: "number" },
+    { k: "details.base", l: "Base / localização", ph: "ex.: POLIS, LUANDA" },
+    { k: "details.departamento", l: "Departamento", ph: "ex.: OPERAÇÕES" },
+    { sec: "Trailer, Eixos e Pneus" },
+    { k: "details.tractorId", l: "Atrelado a (tractor)", t: "select", opts: [["", "— nenhum —"], ...tractores.map((v) => [v.id, vLbl(v)])], mostrar: (v) => v.tipologia === "TRAILER" },
+    { k: "details.eixos", l: "Configuração de eixos", t: "select", full: 1, opts: [["", "Automático (pela tipologia)"], ...L().eixos] },
+    { k: "details.suplentes", l: "Pneus suplentes", t: "number", ph: "1" },
+    { sec: "Ficha Técnica Completa" },
+    { k: "details.tracao", l: "Tração", t: "select", opts: lista(["", ...L().tracao]), mostrar: (v) => v.tipologia !== "TRAILER" },
+    { k: "details.lugares", l: "Lugares", t: "number", mostrar: (v) => v.tipologia === "VIATURA" },
+    { k: "details.pbt", l: "Peso bruto (kg)", t: "number" },
+    { k: "details.tara", l: "Tara (kg)", t: "number" },
+    { k: "details.carga", l: "Carga útil (kg)", t: "number" },
+    { k: "details.capac", l: "Capacidade / equipamento", ph: "ex.: 3 t a 4 m, 250 kVA", mostrar: (v) => v.tipologia === "EQUIPAMENTO" || v.tipologia === "MAQUINA" },
+    { k: "details.dim", l: "Dimensões C × L × A (m)", ph: "ex.: 5,3 × 1,85 × 1,8" },
+    { sec: "Pneus e Jantes" },
+    { k: "details.pnF", l: "Medida pneus frente", ph: "ex.: 265/65 R17" },
+    { k: "details.pnT", l: "Medida pneus trás", ph: "ex.: 265/65 R17" },
+    { k: "details.pnMarca", l: "Marca dos pneus" },
+    { k: "details.jante", l: "Jante", t: "select", opts: lista(["", ...L().jantes]) },
+    { k: "details.janteMed", l: "Medida da jante", ph: "ex.: 17 × 7,5J" },
+    { k: "details.furos", l: "Fixação (furos / PCD)", ph: "ex.: 6 × 139,7" },
+    { k: "details.prF", l: "Pressão frente (bar)", ph: "ex.: 2,4" },
+    { k: "details.prT", l: "Pressão trás (bar)", ph: "ex.: 2,6" },
+    { sec: "Segurança e Equipamento" },
+    { k: "details.gps", l: "Rastreador / GPS", ph: "empresa e n.º" },
+    { k: "details.extintor", l: "Extintor — validade", t: "date" },
+    { k: "details.kit", l: "Kit de segurança", ph: "triângulo, colete, macaco, chave de rodas…", full: 1 },
     { k: "notes", l: "Observações", t: "textarea", full: 1 },
   ];
   const planos = (o.maintenancePlans || []).slice();
@@ -159,21 +395,34 @@ function formViatura(o = { unit: "KM", ownership: "PROPRIA", status: "Operaciona
       <td><input class="finance-input" data-p="ultKm" type="number" min="0" value="${esc(p.ultKm ?? "")}"></td>
       <td><input class="finance-input" data-p="ultData" type="date" value="${esc(p.ultData || "")}"></td>
       <td><button type="button" class="finance-btn" data-p-rm title="Remover">✕</button></td></tr>`;
-  const extraHtml = `<section class="fx2-blk" style="margin-top:1rem"><h3>Planos preventivos</h3>
+  const extraHtml = `<datalist id="frTipos">${tipos.map((t) => `<option value="${esc(t)}">`).join("")}</datalist>
+    <section class="fx2-blk fr-sec"><h3>Manutenção — Planos Preventivos</h3>
       <p class="fx2-mut" style="margin:0 0 .5rem">Ex.: revisão a cada 10 000 km ou 12 meses. A intervenção que cumpre o plano atualiza a última execução.</p>
-      <div class="fx2-tw"><table class="fx2-t"><thead><tr><th>Plano</th><th>Cada (${esc(un(o))})</th><th>Cada (meses)</th><th>Última (${esc(un(o))})</th><th>Última (data)</th><th></th></tr></thead>
+      <div class="fx2-tw"><table class="fx2-t"><thead><tr><th>Plano</th><th>Cada (km / h)</th><th>Cada (meses)</th><th>Última (km / h)</th><th>Última (data)</th><th></th></tr></thead>
       <tbody data-planos>${planos.map(linhaPlano).join("")}</tbody></table></div>
-      <button type="button" class="finance-btn" data-p-add style="margin-top:.5rem">+ Plano</button></section>`;
+      <button type="button" class="finance-btn" data-p-add style="margin-top:.5rem">+ Plano</button></section>
+    ${o.id ? perfilViatura(o) : `<section class="fx2-blk fr-sec"><h3>Seguro</h3><p class="fx2-mut">Grave a viatura e depois associe-a a uma apólice.</p></section>`}`;
   formRegisto({
     col: "vehicles",
-    titulo: o.id ? `${o.code} · ${vLbl(o)}` : "Nova viatura / equipamento",
+    titulo: o.id ? `${o.code} · ${vLbl(o)}` : "Nova Viatura / Equipamento",
     campos,
-    o,
+    o: { ...o, tipologia: T(o) },
     extraHtml,
-    onRender: ({ panel }) => {
+    ficheiros: (x) => fotosHtml(L().fotos, x) + anexosHtml("Documentos", "Juntar livrete, título, fotografias… (imagens ou PDF)", x),
+    onRender: ({ panel, close }) => {
       const tb = panel.querySelector("[data-planos]");
       panel.querySelector("[data-p-add]").addEventListener("click", () => tb.insertAdjacentHTML("beforeend", linhaPlano()));
       tb.addEventListener("click", (e) => e.target.closest("[data-p-rm]")?.closest("tr").remove());
+      // máquinas e equipamentos contam horas
+      const tip = panel.querySelector("#ff_tipologia");
+      tip.addEventListener("change", () => {
+        if (["MAQUINA", "EQUIPAMENTO"].includes(tip.value) && !o.id) panel.querySelector("#ff_unit").value = "HORAS";
+        if (!["MAQUINA", "EQUIPAMENTO"].includes(tip.value) && !o.id) panel.querySelector("#ff_unit").value = "KM";
+      });
+      panel.querySelector("[data-fr-segnovo]")?.addEventListener("click", () => {
+        close();
+        formSeguro(null, o.id);
+      });
     },
     prepararCorpo: (body, panel) => {
       body.maintenancePlans = [...panel.querySelectorAll("[data-plano]")].map((tr) => {
@@ -185,161 +434,322 @@ function formViatura(o = { unit: "KM", ownership: "PROPRIA", status: "Operaciona
   });
 }
 
+// ─── Motorista (ENT.fmot + v664 fotografia) ───────────────────────────────────
+
 function formMotorista(o = { status: "Ativo", licenseCategory: "B" }) {
+  const hist = () => {
+    if (!o.id) return "";
+    const A = S.d.abastecimentos.filter((x) => x.driverId === o.id);
+    const O = S.d.ocorrencias.filter((x) => x.driverId === o.id);
+    const V = S.d.viaturas.filter((v) => v.driverId === o.id).map((v) => v.plate);
+    return `<section class="fx2-blk fr-sec"><h3>Historial</h3><p style="margin:0">${A.length} abastecimento(s) · ${fmt0(A.reduce((s, a) => s + Number(a.liters || 0), 0))} L · ${O.length} ocorrência(s)${O.length ? `: ${O.slice(0, 6).map((x) => esc(`${x.type} ${fmtData(x.date)}`)).join(", ")}` : ""}${V.length ? ` · motorista habitual de ${esc(V.join(", "))}` : ""}</p></section>`;
+  };
   formRegisto({
     col: "drivers",
-    titulo: o.id ? `${o.code} · ${o.name}` : "Novo motorista",
+    titulo: o.id ? `${o.code} · ${o.name}` : "Novo Motorista",
     o,
     campos: [
+      { sec: "Motorista" },
       { k: "name", l: "Nome", req: 1, full: 1 },
-      { k: "licenseNumber", l: "N.º da carta" },
+      { k: "phone", l: "Telefone" },
+      { k: "status", l: "Estado", t: "select", opts: lista(["Ativo", "Inativo"]) },
+      { k: "licenseNumber", l: "N.º da carta de condução" },
       { k: "licenseCategory", l: "Categoria", t: "select", opts: lista(L().categoriasCarta) },
       { k: "licenseExpiry", l: "Validade da carta", t: "date" },
-      { k: "phone", l: "Telefone" },
       { k: "department", l: "Departamento" },
       { k: "projectId", l: "Obra", t: "select", opts: optsObras() },
-      { k: "status", l: "Estado", t: "select", opts: lista(["Ativo", "Inativo"]) },
       { k: "notes", l: "Observações", t: "textarea", full: 1 },
     ],
+    extraHtml: hist(),
+    ficheiros: (x) => fotosHtml([["foto", "Fotografia do motorista"]], x, { foto: true }) + anexosHtml("Documentos", "Cópia da carta, BI, outros", x),
   });
+}
+
+// ─── Abastecimento (ENT.fab) ──────────────────────────────────────────────────
+
+/** O abastecimento anterior da mesma viatura (pela data e hora). */
+function abastAnterior(v) {
+  if (!v.vehicleId) return null;
+  const chave = `${v.date || ""}${v.time || "~"}`;
+  return S.d.abastecimentos
+    .filter((a) => a.vehicleId === v.vehicleId && a.id !== v._id && a.odometer !== null && `${a.date}${a.time || ""}` <= chave)
+    .sort((a, b) => `${a.date}${a.time || ""}`.localeCompare(`${b.date}${b.time || ""}`) || a.odometer - b.odometer)
+    .slice(-1)[0];
+}
+
+function analiseAbast(v) {
+  const viat = vById(v.vehicleId);
+  const pr = abastAnterior(v);
+  const km = nr(v.odometer);
+  const lt = nr(v.liters);
+  const valor = nr(v.amount) ?? (lt && nr(v.pricePerLiter) ? lt * nr(v.pricePerLiter) : null);
+  const perc = pr && km !== null ? km - Number(pr.odometer) : null;
+  const cons = perc > 0 && lt ? (lt / perc) * 100 : null;
+  const W = [];
+  if (perc !== null && perc < 0) W.push(["bad", `Os km (${fmt0(km)}) são inferiores aos do abastecimento anterior (${fmt0(pr.odometer)} em ${fmtData(pr.date)}). Escreva a justificação.`]);
+  if (viat && Number(viat.tankCapacity) > 0 && lt > Number(viat.tankCapacity) * 1.05) W.push(["warn", `Litros acima da capacidade do depósito (${fmt0(viat.tankCapacity)} L).`]);
+  if (cons && viat && Number(viat.refConsumption) > 0 && (cons > viat.refConsumption * 1.3 || cons < viat.refConsumption * 0.7)) W.push(["warn", `Consumo de ${cons.toFixed(1)} L/100 km, fora da referência da viatura (${Number(viat.refConsumption).toFixed(1)}).`]);
+  return { pr, perc, cons, valor, W, mau: W.some((w) => w[0] === "bad") };
 }
 
 function formAbastecimento(o) {
   o = o || { date: S.d.hoje, vehicleId: S.v || "", fuelType: "Gasóleo", fullTank: true, paymentMethod: "Cartão de Combustível" };
-  const v = vById(o.vehicleId);
   formRegisto({
     col: "fuel",
-    titulo: o.id ? `${o.code} · ${vMat(o.vehicleId)}` : "Novo abastecimento",
+    titulo: o.id ? `${o.code} · ${vMat(o.vehicleId)}` : "Novo Abastecimento",
     o,
     campos: [
-      { k: "date", l: "Data", t: "date", req: 1 },
+      { sec: "Abastecimento" },
       { k: "vehicleId", l: "Viatura", t: "select", req: 1, opts: optsViaturas(o.vehicleId) },
       { k: "driverId", l: "Motorista", t: "select", opts: optsMotoristas(o.driverId) },
-      { k: "odometer", l: "Km / horas no abastecimento", t: "number", hint: v?.odometer ? `Último registo da viatura: ${fmt0(v.odometer)} ${un(v)}` : "" },
+      { k: "date", l: "Data", t: "date", req: 1 },
+      { k: "time", l: "Hora", t: "time" },
+      {
+        k: "odometer", l: "Km da viatura", t: "number", req: 1,
+        dica: (v) => {
+          const pr = abastAnterior({ ...v, _id: o.id });
+          const viat = vById(v.vehicleId);
+          return pr ? `anterior: ${fmt0(pr.odometer)} em ${fmtData(pr.date)}` : viat?.odometer !== null && viat?.odometer !== undefined ? `atual na ficha: ${fmt0(viat.odometer)}` : "";
+        },
+      },
       { k: "liters", l: "Litros", t: "number", req: 1 },
       { k: "pricePerLiter", l: "Preço por litro (Kz)", t: "number" },
-      { k: "amount", l: "Valor (Kz)", t: "number", hint: "Vazio: litros × preço por litro" },
+      { k: "amount", l: "Valor total (Kz)", t: "number", dica: (v) => (!v.amount && nr(v.liters) && nr(v.pricePerLiter) ? `= ${kz(nr(v.liters) * nr(v.pricePerLiter))} (litros × preço)` : "") },
       { k: "fuelType", l: "Combustível", t: "select", opts: lista(L().combustiveis) },
-      { k: "fullTank", l: "Depósito cheio", t: "check" },
+      { k: "fullTank", l: "Depósito cheio", t: "sim" },
       { k: "station", l: "Posto" },
       { k: "paymentMethod", l: "Pagamento", t: "select", opts: lista(L().pagamentos) },
       { k: "receipt", l: "N.º do recibo" },
       { k: "projectId", l: "Obra", t: "select", opts: optsObras() },
-      { k: "justification", l: "Justificação de anomalia", hint: "Ex.: conta-quilómetros substituído" },
-      { k: "notes", l: "Observações", t: "textarea", full: 1 },
+      { k: "notes", l: "Observações", full: 1 },
+      {
+        k: "_calc", t: "calc",
+        html: (v) => {
+          const a = analiseAbast({ ...v, _id: o.id });
+          const kpi = a.perc !== null || a.cons ? `<div class="fr-perfil"><div><span>Km percorridos</span><b>${a.perc !== null ? fmt0(a.perc) : "—"}</b></div><div><span>Consumo</span><b>${a.cons ? `${a.cons.toFixed(1)} L/100 km` : "—"}</b></div><div><span>Custo por km</span><b>${a.perc > 0 && a.valor ? kz(a.valor / a.perc) : "—"}</b></div></div>` : "";
+          const av = a.W.length ? `<div class="fr-avisos">${a.W.map(([t, x]) => `${pill(t === "bad" ? "Atenção" : "Aviso", t)} ${esc(x)}`).join("<br>")}</div>` : "";
+          return kpi + av;
+        },
+      },
+      { k: "justification", l: "Justificação", full: 1, mostrar: (v) => analiseAbast({ ...v, _id: o.id }).mau || Boolean(v.justification), reqSe: (v) => analiseAbast({ ...v, _id: o.id }).mau, hint: "ex.: conta-quilómetros substituído" },
     ],
-  });
-}
-
-function formIntervencao(o) {
-  o = o || { date: S.d.hoje, entryDate: S.d.hoje, vehicleId: S.v || "", type: "Manutenção Preventiva", status: "Concluída", planIds: [] };
-  const v = vById(o.vehicleId);
-  const planosOpts = (veh) => (veh?.maintenancePlans || []).map((p) => [p.id, p.nome]);
-  const campos = [
-    { k: "date", l: "Data", t: "date", req: 1 },
-    { k: "vehicleId", l: "Viatura", t: "select", req: 1, opts: optsViaturas(o.vehicleId) },
-    { k: "odometer", l: "Km / horas", t: "number" },
-    { k: "type", l: "Tipo", t: "select", req: 1, opts: lista(L().tiposIntervencao) },
-    { k: "system", l: "Sistema", t: "select", opts: lista(["", ...L().sistemas]) },
-    { k: "status", l: "Estado", t: "select", opts: lista(["Em curso", "Concluída"]) },
-    { k: "description", l: "Descrição", req: 1, full: 1 },
-    { k: "workshop", l: "Oficina" },
-    { k: "technician", l: "Técnico" },
-    { k: "entryDate", l: "Entrada", t: "date" },
-    { k: "exitDate", l: "Saída", t: "date" },
-    { k: "laborCost", l: "Mão de obra (Kz)", t: "number" },
-    { k: "partsCost", l: "Peças (Kz)", t: "number" },
-    { k: "otherCost", l: "Outros (Kz)", t: "number" },
-    { k: "warranty", l: "Garantia" },
-    { k: "nextAction", l: "Próxima acção" },
-    { k: "nextDate", l: "Próxima data", t: "date" },
-    { k: "planIds", l: "Planos preventivos cumpridos", t: "multi", full: 1, opts: planosOpts(v), vazio: "Escolha a viatura (e grave-a com planos) para os ver aqui." },
-    { k: "notes", l: "Observações", t: "textarea", full: 1 },
-  ];
-  formRegisto({
-    col: "interventions",
-    titulo: o.id ? `${o.code} · ${vMat(o.vehicleId)}` : "Nova manutenção / reparação",
-    o,
-    campos,
-    onRender: ({ panel }) => {
+    ficheiros: (x) => anexosHtml("Comprovativo", "Recibo / talão (imagem ou PDF)", x),
+    onRender: ({ panel, atualizar }) => {
+      // como no protótipo: a viatura sugere o combustível e o motorista habitual
       const sel = panel.querySelector("#ff_vehicleId");
       sel.addEventListener("change", () => {
-        const box = panel.querySelector("#ff_planIds");
-        const ops = planosOpts(vById(sel.value));
-        box.innerHTML = ops.length ? ops.map(([id, l]) => `<label><input type="checkbox" value="${esc(id)}"> ${esc(l)}</label>`).join("") : `<span class="fx2-mut">Esta viatura não tem planos preventivos.</span>`;
+        const v = vById(sel.value);
+        if (!v) return;
+        if (v.fuel) panel.querySelector("#ff_fuelType").value = v.fuel;
+        const m = panel.querySelector("#ff_driverId");
+        if (v.driverId && !m.value) m.value = v.driverId;
+        atualizar();
       });
     },
   });
 }
 
-function formOcorrencia(o) {
-  o = o || { date: S.d.hoje, vehicleId: S.v || "", type: "Avaria", severity: "Média", status: "Aberta" };
+// ─── Intervenção (ENT.fint) ───────────────────────────────────────────────────
+
+function formIntervencao(o) {
+  o = o || { date: S.d.hoje, entryDate: S.d.hoje, vehicleId: S.v || "", type: "Manutenção Preventiva", status: "Concluída", planIds: [], parts: [] };
+  const v0 = vById(o.vehicleId);
+  const planosOpts = (veh) => (veh?.maintenancePlans || []).map((p) => [p.id, `${p.nome} (${(veh._planosDet || []).find((x) => x.id === p.id)?.t || ""})`]);
+  const ocorrOpts = (vid) => [["", "— nenhuma —"], ...S.d.ocorrencias.filter((x) => x.vehicleId === vid && (!FECHADA.includes(x.status) || x.id === o.incidentId)).map((x) => [x.id, `${x.code} · ${x.type} · ${fmtData(x.date)}`])];
+  const linhaPeca = (l = {}) => `<tr data-peca><td><input class="finance-input" data-c="cod" value="${esc(l.cod || "")}" placeholder="código"></td><td><input class="finance-input" data-c="desc" value="${esc(l.desc || "")}" placeholder="peça / material"></td><td><input class="finance-input r" data-c="qtd" type="number" min="0" step="any" value="${esc(l.qtd ?? "")}"></td><td><input class="finance-input r" data-c="pu" type="number" min="0" step="any" value="${esc(l.pu ?? "")}"></td><td class="r" data-c-tot>${kz((Number(l.qtd) || 0) * (Number(l.pu) || 0))}</td><td><button type="button" class="finance-btn" data-peca-rm title="Remover">✕</button></td></tr>`;
+  const pecas = (panel) => [...panel.querySelectorAll("[data-peca]")].map((tr) => Object.fromEntries([...tr.querySelectorAll("[data-c]")].map((el) => [el.dataset.c, el.value.trim()])));
+  const totPecas = (panel) => pecas(panel).reduce((s, l) => s + (nr(l.qtd) || 0) * (nr(l.pu) || 0), 0);
+  let painelRef = null;
   formRegisto({
-    col: "incidents",
-    titulo: o.id ? `${o.code} · ${vMat(o.vehicleId)}` : "Nova ocorrência",
+    col: "interventions",
+    titulo: o.id ? `${o.code} · ${vMat(o.vehicleId)}` : "Nova Intervenção",
     o,
     campos: [
-      { k: "date", l: "Data", t: "date", req: 1 },
+      { sec: "Intervenção" },
       { k: "vehicleId", l: "Viatura", t: "select", req: 1, opts: optsViaturas(o.vehicleId) },
-      { k: "driverId", l: "Motorista", t: "select", opts: optsMotoristas(o.driverId) },
-      { k: "type", l: "Tipo", t: "select", req: 1, opts: lista(L().tiposOcorrencia) },
-      { k: "severity", l: "Gravidade", t: "select", opts: lista(L().gravidades) },
-      { k: "status", l: "Estado", t: "select", opts: lista(L().estadosOcorrencia) },
-      { k: "location", l: "Local" },
-      { k: "deadline", l: "Prazo", t: "date" },
-      { k: "description", l: "Descrição", req: 1, full: 1 },
-      { k: "action", l: "Acção tomada / a tomar", full: 1 },
-      { k: "responsible", l: "Responsável" },
-      { k: "closedAt", l: "Data de fecho", t: "date" },
-      { k: "estimatedCost", l: "Custo estimado (Kz)", t: "number" },
-      { k: "cost", l: "Custo real (Kz)", t: "number" },
-      { k: "insuranceClaim", l: "Participado ao seguro", t: "check" },
-      { k: "injuries", l: "Houve feridos", t: "check" },
+      { k: "date", l: "Data", t: "date", req: 1 },
+      { k: "odometer", l: "Km da viatura", t: "number", dica: (v) => (vById(v.vehicleId)?.odometer != null ? `atual na ficha: ${fmt0(vById(v.vehicleId).odometer)}` : "") },
+      { k: "type", l: "Tipo de intervenção", t: "select", req: 1, opts: lista(L().tiposIntervencao) },
+      { k: "system", l: "Sistema / componente", t: "select", opts: lista(["", ...L().sistemas]) },
+      { k: "status", l: "Estado", t: "select", opts: lista(["Aberta", "Em curso", "Concluída"]), hint: "Enquanto não estiver concluída, a viatura fica «Em manutenção»" },
+      { k: "description", l: "Descrição do serviço", t: "textarea", req: 1, full: 1 },
+      { k: "workshop", l: "Oficina / fornecedor", list: "frOficinas" },
+      { k: "technician", l: "Técnico responsável" },
+      { k: "entryDate", l: "Entrada na oficina", t: "date" },
+      {
+        k: "exitDate", l: "Saída da oficina", t: "date",
+        dica: (v) => (v.entryDate && v.exitDate ? `${Math.max(0, Math.round((Date.parse(v.exitDate) - Date.parse(v.entryDate)) / 864e5))} dia(s) parada` : ""),
+      },
+      { k: "incidentId", l: "Ocorrência associada", t: "select", opts: ocorrOpts(o.vehicleId) },
+      { sec: "Peças e Custos" },
+      { k: "_pecas", t: "html", html: `<div class="fx2-tw"><table class="fx2-t"><thead><tr><th style="width:16%">Código</th><th>Peça / material</th><th class="r" style="width:12%">Qtd</th><th class="r" style="width:16%">Preço un.</th><th class="r" style="width:16%">Total</th><th></th></tr></thead><tbody data-pecas>${(o.parts || []).map(linhaPeca).join("")}</tbody></table></div><button type="button" class="finance-btn" data-peca-add style="margin-top:.4rem">+ Peça</button>` },
+      { k: "laborCost", l: "Mão-de-obra (Kz)", t: "number" },
+      { k: "otherCost", l: "Outros custos / serviços (Kz)", t: "number" },
+      { k: "partsCost", l: "Peças (Kz)", t: "number", hint: "Preenchido pelas linhas de peças, quando as há", mostrar: () => !painelRef || !pecas(painelRef).some((l) => l.desc || l.qtd) },
+      { k: "warranty", l: "Garantia", ph: "ex.: 5 000 KM / 6 MESES" },
+      {
+        k: "_tot", t: "calc",
+        html: (v) => {
+          const p = painelRef && pecas(painelRef).some((l) => l.desc || l.qtd) ? totPecas(painelRef) : nr(v.partsCost) || 0;
+          return `<div class="fr-perfil"><div><span>Custo total</span><b style="font-size:1.15rem">${kz((nr(v.laborCost) || 0) + (nr(v.otherCost) || 0) + p)}</b></div></div>`;
+        },
+      },
+      { sec: "Planos Preventivos Cumpridos", nota: "Os planos marcados ficam com a última manutenção nesta data e nestes km." },
+      { k: "planIds", l: "Planos", t: "multi", full: 1, opts: planosOpts(v0), vazio: "Esta viatura não tem planos preventivos (defina-os na ficha da viatura)." },
+      { sec: "Próxima Acção" },
+      { k: "nextAction", l: "Próxima acção", full: 1 },
+      { k: "nextDate", l: "Próxima data", t: "date" },
+      { k: "nextOdometer", l: "Próximo km", t: "number" },
       { k: "notes", l: "Observações", t: "textarea", full: 1 },
     ],
+    extraHtml: `<datalist id="frOficinas"><option value="OFICINA MBT">${[...new Set(S.d.intervencoes.map((i) => i.workshop).filter(Boolean))].map((w) => `<option value="${esc(w)}">`).join("")}</datalist>`,
+    ficheiros: (x) => anexosHtml("Documentos", "Fatura, orçamento, fotografias", x),
+    onRender: ({ panel, atualizar }) => {
+      painelRef = panel;
+      const tb = panel.querySelector("[data-pecas]");
+      panel.querySelector("[data-peca-add]").addEventListener("click", () => {
+        tb.insertAdjacentHTML("beforeend", linhaPeca());
+        atualizar();
+      });
+      tb.addEventListener("click", (e) => {
+        if (!e.target.closest("[data-peca-rm]")) return;
+        e.target.closest("tr").remove();
+        atualizar();
+      });
+      tb.addEventListener("input", (e) => {
+        const tr = e.target.closest("[data-peca]");
+        if (!tr) return;
+        const q = nr(tr.querySelector('[data-c="qtd"]').value) || 0;
+        const p = nr(tr.querySelector('[data-c="pu"]').value) || 0;
+        tr.querySelector("[data-c-tot]").textContent = kz(q * p);
+      });
+      const sel = panel.querySelector("#ff_vehicleId");
+      sel.addEventListener("change", () => {
+        const veh = vById(sel.value);
+        const box = panel.querySelector("#ff_planIds");
+        const ops = planosOpts(veh);
+        box.innerHTML = ops.length ? ops.map(([id, l]) => `<label><input type="checkbox" value="${esc(id)}"> ${esc(l)}</label>`).join("") : `<span class="fx2-mut">Esta viatura não tem planos preventivos.</span>`;
+        panel.querySelector("#ff_incidentId").innerHTML = ocorrOpts(sel.value).map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join("");
+        if (veh?.odometer !== null && veh?.odometer !== undefined && !panel.querySelector("#ff_odometer").value) panel.querySelector("#ff_odometer").value = veh.odometer;
+      });
+      atualizar();
+    },
+    prepararCorpo: (body, panel) => {
+      body.parts = pecas(panel).filter((l) => l.cod || l.desc || l.qtd);
+      return body;
+    },
   });
 }
+
+// ─── Ocorrência (ENT.focr) ────────────────────────────────────────────────────
+
+const eAcidente = (v) => /acidente|furto|roubo|dano|vandal/i.test(v.type || "");
+
+function formOcorrencia(o) {
+  o = o || { date: S.d.hoje, vehicleId: S.v || "", type: "Avaria", severity: "Média", status: "Aberta", immobilizes: false };
+  formRegisto({
+    col: "incidents",
+    titulo: o.id ? `${o.code} · ${vMat(o.vehicleId)}` : "Nova Ocorrência",
+    o,
+    campos: [
+      { sec: "Ocorrência" },
+      { k: "vehicleId", l: "Viatura", t: "select", req: 1, opts: optsViaturas(o.vehicleId) },
+      {
+        k: "driverId", l: "Motorista envolvido", t: "select", opts: optsMotoristas(o.driverId),
+        dica: (v) => {
+          if (!v.driverId) return "";
+          const lim = new Date(Date.parse(`${v.date || S.d.hoje}T00:00:00Z`) - 365 * 864e5).toISOString().slice(0, 10);
+          const n = S.d.ocorrencias.filter((x) => x.id !== o.id && x.driverId === v.driverId && String(x.date) >= lim).length;
+          return n ? `⚠ ${n} outra(s) ocorrência(s) deste motorista nos últimos 12 meses` : "";
+        },
+      },
+      { k: "date", l: "Data", t: "date", req: 1 },
+      { k: "time", l: "Hora", t: "time" },
+      { k: "type", l: "Tipo de ocorrência", t: "select", req: 1, opts: lista(L().tiposOcorrencia) },
+      { k: "severity", l: "Gravidade", t: "select", req: 1, opts: lista(L().gravidades) },
+      { k: "location", l: "Local", full: 1 },
+      { k: "description", l: "O que aconteceu", t: "textarea", req: 1, full: 1 },
+      { k: "immobilizes", l: "Imobiliza a viatura", t: "sim", hint: "Se sim, a viatura fica «Avariada» ou «Acidentada» até a ocorrência ser resolvida" },
+      { k: "reference", l: "Ref. / n.º do auto / participação" },
+      { sec: "Acidente / Sinistro", id: "acidente", mostrar: eAcidente },
+      { k: "injuries", l: "Houve feridos", t: "sim" },
+      { k: "insuranceClaim", l: "Participado ao seguro", t: "sim" },
+      { k: "claimRef", l: "N.º da apólice / processo" },
+      { k: "thirdParties", l: "Terceiros envolvidos (nome, matrícula, contacto, seguradora)", t: "textarea", full: 1 },
+      { sec: "Tratamento" },
+      { k: "action", l: "Acção tomada / a tomar", t: "textarea", full: 1 },
+      { k: "responsible", l: "Responsável pelo tratamento" },
+      { k: "deadline", l: "Prazo", t: "date" },
+      { k: "status", l: "Estado", t: "select", opts: lista(L().estadosOcorrencia) },
+      { k: "closedAt", l: "Data de fecho", t: "date", mostrar: (v) => FECHADA.includes(v.status) },
+      { k: "estimatedCost", l: "Custo estimado (Kz)", t: "number" },
+      { k: "cost", l: "Custo real (Kz)", t: "number" },
+      { k: "notes", l: "Observações", full: 1 },
+    ],
+    ficheiros: (x) => anexosHtml("Fotografias e Documentos", "Fotografias, auto, participação, orçamento", x),
+  });
+}
+
+// ─── Documento (ENT.fdoc) ─────────────────────────────────────────────────────
 
 function formDocumento(o) {
   o = o || { vehicleId: S.v || "", type: "Inspecção Periódica", situation: "Em vigor" };
+  const est = o.id ? o._estado : null;
   formRegisto({
     col: "documents",
-    titulo: o.id ? `${o.type} · ${vMat(o.vehicleId)}` : "Novo documento",
+    titulo: o.id ? `${o.type} · ${vMat(o.vehicleId)}` : "Novo Documento",
     o,
     campos: [
+      { sec: est ? `Documento — ${est[0]}` : "Documento" },
       { k: "vehicleId", l: "Viatura", t: "select", req: 1, opts: optsViaturas(o.vehicleId) },
-      { k: "type", l: "Tipo", t: "select", req: 1, opts: lista(L().tiposDocumento) },
-      { k: "number", l: "Número" },
+      { k: "type", l: "Tipo de documento", t: "select", req: 1, opts: lista(L().tiposDocumento), dica: (v) => (v.type === "Seguro Automóvel" ? "Para apólices com várias viaturas e pagamentos, use Seguros." : "") },
+      { k: "number", l: "N.º do documento" },
       { k: "entity", l: "Entidade emissora" },
-      { k: "issueDate", l: "Emissão", t: "date" },
-      { k: "expiryDate", l: "Validade", t: "date" },
+      { k: "issueDate", l: "Data de emissão", t: "date" },
+      { k: "expiryDate", l: "Data de validade", t: "date" },
       { k: "cost", l: "Custo (Kz)", t: "number" },
       { k: "situation", l: "Situação", t: "select", opts: lista(L().situacoesDocumento) },
-      { k: "notes", l: "Observações", t: "textarea", full: 1 },
+      { k: "notes", l: "Observações", full: 1 },
     ],
+    ficheiros: (x) => anexosHtml("Ficheiro", "Digitalização do documento", x),
+    botoes: o.id && o.expiryDate && pode("create") ? `<button type="button" class="finance-btn" data-fr-renovar>Renovar (novo documento)</button>` : "",
+    onRender: ({ panel, close }) => {
+      panel.querySelector("[data-fr-renovar]")?.addEventListener("click", () => {
+        close();
+        // como no protótipo: o novo documento parte do anterior, com emissão hoje
+        formDocumento({ vehicleId: o.vehicleId, type: o.type, entity: o.entity, situation: "Em vigor", issueDate: S.d.hoje });
+      });
+    },
   });
 }
 
-function formSeguro(o) {
+// ─── Seguro / apólice (FXDRAW.seg) ────────────────────────────────────────────
+
+function formSeguro(o, vidPre = "") {
   const hoje = S.d.hoje;
   const fim = new Date(`${hoje}T00:00:00Z`);
   fim.setUTCFullYear(fim.getUTCFullYear() + 1);
-  o = o || { startDate: hoje, endDate: fim.toISOString().slice(0, 10), periodicity: "ANUAL", coverages: ["Responsabilidade Civil"], vehicleIds: S.v ? [S.v] : [] };
+  o = o || { startDate: hoje, endDate: fim.toISOString().slice(0, 10), periodicity: "ANUAL", coverages: ["Responsabilidade Civil"], vehicleIds: vidPre ? [vidPre] : S.v ? [S.v] : [] };
+  const seguradoras = [...new Set(S.d.seguros.map((s) => s.insurer).filter(Boolean))].sort();
   formRegisto({
     col: "insurances",
-    titulo: o.id ? `${o.code} · ${o.insurer} · ${o.policyNumber}` : "Nova apólice",
+    titulo: o.id ? `${o.code} · ${o.insurer} · ${o.policyNumber}` : "Nova Apólice",
     o,
     campos: [
-      { k: "insurer", l: "Seguradora", req: 1 },
+      { sec: o.id ? `Apólice — ${o._estado?.[0] || ""}` : "Apólice" },
+      { k: "insurer", l: "Seguradora", req: 1, list: "frSeguradoras" },
       { k: "policyNumber", l: "N.º da apólice", req: 1 },
+      { k: "periodicity", l: "Periodicidade do pagamento", t: "select", opts: lista(L().periodicidades) },
+      { k: "premium", l: "Prémio total (Kz)", t: "number", hint: "valor da apólice para o período" },
       { k: "startDate", l: "Início", t: "date", req: 1 },
       { k: "endDate", l: "Fim / renovação", t: "date", req: 1 },
-      { k: "premium", l: "Prémio total (Kz)", t: "number" },
-      { k: "periodicity", l: "Periodicidade do pagamento", t: "select", opts: lista(L().periodicidades) },
-      { k: "coverages", l: "Coberturas", t: "multi", full: 1, opts: lista(L().coberturas) },
-      { k: "vehicleIds", l: "Viaturas cobertas", t: "multi", req: 1, full: 1, opts: S.d.viaturas.filter((v) => ativa(v) || (o.vehicleIds || []).includes(v.id)).map((v) => [v.id, vLbl(v)]), vazio: "Ainda não há viaturas registadas." },
+      { k: "coverages", l: "Coberturas", t: "multi", full: 1, opts: lista([...new Set([...L().coberturas, ...(o.coverages || [])])]) },
+      { sec: "Viaturas Cobertas" },
+      { k: "vehicleIds", l: "Viaturas", t: "multi", req: 1, full: 1, opts: S.d.viaturas.filter((v) => ativa(v) || (o.vehicleIds || []).includes(v.id)).map((v) => [v.id, vLbl(v)]), vazio: "Ainda não há viaturas registadas. Crie-as primeiro em Frota." },
       { k: "notes", l: "Observações", t: "textarea", full: 1 },
     ],
+    extraHtml: `<datalist id="frSeguradoras">${seguradoras.map((s) => `<option value="${esc(s)}">`).join("")}</datalist>`,
+    ficheiros: (x) => anexosHtml("Documento", "Apólice (PDF)", x),
   });
 }
 
@@ -457,11 +867,13 @@ const PRIOR = { 1: ["Alta", "bad"], 2: ["Média", "warn"], 3: ["Informativo", "s
 
 // ─── Frota (o `V.frgal` do protótipo): as viaturas em cartões ─────────────────
 
-const GRUPOS_V = [["V", "Viaturas"], ["M", "Máquinas"], ["E", "Equipamentos"], ["R", "Reboques"]];
-const ICONE_G = { V: "airport_shuttle", M: "agriculture", E: "construction", R: "rv_hookup" };
-function grupoV(kind) {
-  const k = norm(kind);
-  if (/reboq|trailer|semi/.test(k)) return "R";
+const GRUPOS_V = [["V", "Viaturas"], ["M", "Máquinas"], ["E", "Equipamentos"]];
+const ICONE_G = { V: "airport_shuttle", M: "agriculture", E: "construction" };
+const TIPOL_LBL = { VIATURA: "Viatura", TRACTOR: "Tractor / Cabeça", TRAILER: "Trailer / Reboque", MAQUINA: "Máquina", EQUIPAMENTO: "Equipamento" };
+/** Grupo pela tipologia (o GRP do protótipo: Viaturas = viatura, tractor e trailer). */
+function grupoV(v) {
+  if (v?.tipologia) return v.tipologia === "MAQUINA" ? "M" : v.tipologia === "EQUIPAMENTO" ? "E" : "V";
+  const k = norm(v?.kind);
   if (/maquin|escavad|retro|cilindro|grua|empilhad|motoniv|bulldo|pa carreg/.test(k)) return "M";
   if (/equip|gerador|compressor|betoneir/.test(k)) return "E";
   return "V";
@@ -469,24 +881,24 @@ function grupoV(kind) {
 
 function vistaViaturas() {
   const A = S.d.viaturas.filter((v) => (S.so === "inativas" ? !ativa(v) : ativa(v)));
-  const Lx = A.filter((v) => (!S.g || grupoV(v.kind) === S.g) && filtroQ([v.code, v.plate, v.brand, v.model, v.kind, v.assignedTo, mById(v.driverId)?.name].join(" "))).sort((a, b) =>
+  const Lx = A.filter((v) => (!S.g || grupoV(v) === S.g) && filtroQ([v.code, v.plate, v.brand, v.model, v.kind, v.assignedTo, mById(v.driverId)?.name].join(" "))).sort((a, b) =>
     a.plate.localeCompare(b.plate)
   );
-  const n = (k) => A.filter((v) => grupoV(v.kind) === k).length;
+  const n = (k) => A.filter((v) => grupoV(v) === k).length;
   const ano = S.d.hoje.slice(0, 4);
   const cons = new Set(S.d.abastecimentos.filter((a) => (a._calc?.an || []).some(([t]) => t === "warn") && String(a.date).slice(0, 4) === ano).map((a) => a.vehicleId));
   const cartao = (v) => {
     const m = mById(v.driverId);
-    const g = grupoV(v.kind);
+    const g = grupoV(v);
     const avisos = [
       v._planos?.k === "bad" ? pill("manutenção", "bad") : v._planos?.k === "warn" ? pill("manutenção", "warn") : "",
       v._seguro?.[1] === "bad" ? pill("sem seguro", "bad") : "",
       cons.has(v.id) ? pill("consumo", "warn") : "",
     ].join("");
     return `<div class="fr-card" role="button" tabindex="0" data-frv="${esc(v.id)}">
-      <span class="fr-av fr-av--${g}"><span class="material-symbols-outlined">${ICONE_G[g]}</span></span>
+      <span class="fr-av fr-av--${g}">${v.photos?.tq ? `<img src="${esc(getAssetUrl(v.photos.tq) || "")}" alt="">` : `<span class="material-symbols-outlined">${ICONE_G[g]}</span>`}</span>
       <span class="fr-ci"><b>${esc(v.plate)}</b><span>${esc([v.brand, v.model].filter(Boolean).join(" "))}${v.year ? ` (${esc(v.year)})` : ""}</span>
-        <span class="fx2-mut">${esc(v.kind)} · ${esc(v.code)}</span>
+        <span class="fx2-mut">${esc(TIPOL_LBL[v.tipologia] || v.kind)} · ${esc(v.kind)} · ${esc(v.code)}</span>
         <span class="fx2-mut"><span class="material-symbols-outlined fr-ic">person</span> ${esc(m?.name || "Sem motorista")}</span>
         <span class="fr-pills">${pill(v.status, TOM_ESTADO[v.status] || "slate")}${avisos}</span></span>
     </div>`;
@@ -796,28 +1208,17 @@ const DOC_PARA = {
 const NIVEL = { gere: ["Gere a frota", "good"], regista: ["Regista", "blue"], consulta: ["Só consulta", "slate"], sem: ["Sem acesso", "bad"] };
 const PERFIL = { admin: "Admin", supervisor: "Supervisor", operador: "Operador", financeiro: "Financeiro", tecnico: "Técnico", leitura: "Leitura", cliente: "Cliente" };
 
-function grupoDe(kind) {
-  const k = norm(kind);
-  if (/maquin|escavad|retro|cilindro|grua|empilhad/.test(k)) return "Máquinas";
-  if (/equip|gerador|compressor/.test(k)) return "Equipamentos";
-  if (/reboq|trailer|semi/.test(k)) return "Reboques";
-  return "Viaturas";
-}
-
+/** Tipologias (o separador «Tipologias» do `V.frcfg`): as do protótipo, com quantas viaturas há de cada. */
 function cfgTipologias() {
-  const C = {};
-  S.d.viaturas.forEach((v) => {
-    const k = v.kind || "—";
-    const c = (C[k] = C[k] || { ativas: 0, total: 0, un: new Set() });
-    c.total += 1;
-    if (ativa(v)) c.ativas += 1;
-    c.un.add(un(v));
+  const GRUPO = { V: "Viaturas", M: "Máquinas", E: "Equipamentos" };
+  const linhas = L().tipologias.map(([k, l]) => {
+    const T = S.d.viaturas.filter((v) => (v.tipologia || "VIATURA") === k);
+    const tipos = [...new Set(T.map((v) => v.kind).filter(Boolean))].sort();
+    return `<tr><td><b>${esc(l)}</b></td><td class="fx2-mut">${esc(GRUPO[grupoV({ tipologia: k })])}</td><td class="fx2-mut">${["MAQUINA", "EQUIPAMENTO"].includes(k) ? "horas" : "km"}</td><td class="fx2-mut">${esc(tipos.join(", ") || "—")}</td><td class="r">${T.filter(ativa).length}</td><td class="r">${T.length}</td></tr>`;
   });
   return `<section class="fx2-blk"><h3>Tipologias</h3>
-    ${tabela(["Tipologia", "Grupo", "Unidade", ["Ativas", "r"], ["Registadas", "r"]],
-      Object.keys(C).sort().map((k) => `<tr><td><b>${esc(k)}</b></td><td class="fx2-mut">${esc(grupoDe(k))}</td><td class="fx2-mut">${esc([...C[k].un].join(" / "))}</td><td class="r">${C[k].ativas}</td><td class="r">${C[k].total}</td></tr>`),
-      "Ainda não há viaturas registadas.")}
-    <p class="fcal-nota">A tipologia escreve-se na ficha de cada viatura (ligeira, pesada, máquina, reboque, equipamento…) e define o grupo nos filtros. A unidade (km ou horas) escolhe-se na mesma ficha.</p></section>`;
+    ${tabela(["Tipologia", "Grupo", "Unidade", "Tipos registados", ["Ativas", "r"], ["Registadas", "r"]], linhas, "")}
+    <p class="fcal-nota">A tipologia escolhe-se na ficha de cada viatura (Viatura, Tractor, Trailer, Máquina, Equipamento) e decide a unidade (km ou horas) e o grupo nos filtros. O «tipo» (ligeira, pesada, escavadora…) é livre.</p></section>`;
 }
 
 function cfgDocumentos() {

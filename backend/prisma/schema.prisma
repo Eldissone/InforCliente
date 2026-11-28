@@ -3228,6 +3228,18 @@ model FleetVehicle {
   notes            String?
   /// Planos preventivos: [{ id, nome, km, meses, ultKm, ultData }]
   maintenancePlans Json      @default("[]")
+  /// VIATURA | TRACTOR | TRAILER | MAQUINA | EQUIPAMENTO (o TIPOL do protótipo)
+  tipologia        String    @default("VIATURA")
+  /// Empresa proprietária
+  company          String?
+  /// Identificação e ficha técnica: { caixa, cor, vin, motor, versao, cilindrada, potencia, dataEntrada, kmInicial,
+  ///   base, departamento, dataMat, vendedor, tractorId, eixos, suplentes, tracao, lugares, pbt, tara, carga, capac,
+  ///   dim, pnF, pnT, pnMarca, jante, janteMed, furos, prF, prT, gps, extintor, kit }
+  details          Json      @default("{}")
+  /// Fotografias por posição: { tq, frente, traseira, esq, dir, cima, interior, painel } → caminho do ficheiro
+  photos           Json      @default("{}")
+  /// Ficheiros: [{ nome, url, tipo, d, por }]
+  attachments      Json      @default("[]")
   createdById      String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
@@ -3258,6 +3270,9 @@ model FleetDriver {
   projectId       String?
   personnelId     String?
   notes           String?
+  photo           String?
+  /// Ficheiros: [{ nome, url, tipo, d, por }]
+  attachments     Json      @default("[]")
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -3287,6 +3302,10 @@ model FleetFuel {
   /// Justificação de uma anomalia (km abaixo do anterior…)
   justification String?
   notes         String?
+  /// HH:MM
+  time          String?
+  /// Ficheiros: [{ nome, url, tipo, d, por }]
+  attachments   Json     @default("[]")
   createdById   String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -3334,6 +3353,10 @@ model FleetIntervention {
   /// { origem, prio, dm, hm, de, tec, pedido:{d,por,porId,dp,hp,obs}, trab:[{desc,est,nota}], matMBT,
   ///   mat:[{desc,q,un,est,qR,qA}], horas:[{tec,d,ini,fim}], chat:[{d,por,t}], ext:{cli,mat,viat,tel} }
   workOrder       Json?
+  /// Peças e material: [{ cod, desc, qtd, pu }] — a soma vai para partsCost
+  parts           Json      @default("[]")
+  /// Ficheiros: [{ nome, url, tipo, d, por }]
+  attachments     Json      @default("[]")
   createdById     String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -3368,6 +3391,17 @@ model FleetIncident {
   insuranceClaim Boolean   @default(false)
   injuries       Boolean   @default(false)
   notes          String?
+  time           String?
+  /// A viatura fica Avariada / Acidentada enquanto a ocorrência está aberta
+  immobilizes    Boolean   @default(false)
+  /// Ref. / n.º do auto / participação
+  reference      String?
+  /// N.º da apólice / processo do sinistro
+  claimRef       String?
+  /// Terceiros envolvidos (nome, matrícula, contacto, seguradora)
+  thirdParties   String?
+  /// Ficheiros: [{ nome, url, tipo, d, por }]
+  attachments    Json      @default("[]")
   createdById    String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -3393,6 +3427,8 @@ model FleetDocument {
   /// Em vigor | Não se aplica | Arquivado
   situation   String    @default("Em vigor")
   notes       String?
+  /// Ficheiros: [{ nome, url, tipo, d, por }]
+  attachments Json      @default("[]")
   createdById String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -3418,6 +3454,8 @@ model FleetInsurance {
   /// ANUAL | SEMESTRAL | TRIMESTRAL | MENSAL
   periodicity  String   @default("ANUAL")
   notes        String?
+  /// Ficheiros: [{ nome, url, tipo, d, por }]
+  attachments  Json     @default("[]")
   createdById  String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

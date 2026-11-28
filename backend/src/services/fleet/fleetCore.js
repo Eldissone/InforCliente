@@ -322,15 +322,90 @@ function painel(dados, hoje) {
   };
 }
 
+
+/** Tipologias da viatura (o TIPOL do protótipo) e o grupo de cada uma nos filtros. */
+const TIPOLOGIAS = [["VIATURA", "Viatura"], ["TRACTOR", "Tractor / Cabeça"], ["TRAILER", "Trailer / Reboque"], ["MAQUINA", "Máquina"], ["EQUIPAMENTO", "Equipamento"]];
+const EMPRESAS = ["MBT ENERGIA, LDA", "TECNOLOGY", "QUAVI", "OUTRA (ALUGADA / TERCEIROS)"];
+const CAIXAS = ["Manual", "Automática"];
+const TRACAO = ["4x2", "4x4", "6x2", "6x4", "8x4", "Lagartas", "Outra"];
+const JANTES = ["Aço", "Liga leve", "Outra"];
+const EIXOS = [
+  ["S,S", "2 eixos simples — ligeiro, pick-up (4 pneus)"],
+  ["S,D", "2 eixos, traseiro duplo — camião / carrinha / autocarro 4x2 (6 pneus)"],
+  ["S,S,D", "3 eixos — 2 dianteiros + traseiro duplo, 6x2 (8 pneus)"],
+  ["S,D,D", "3 eixos — 2 traseiros duplos, 6x4 (10 pneus)"],
+  ["S,S,D,D", "4 eixos — 2 dianteiros + 2 traseiros duplos, 8x4 (12 pneus)"],
+  ["D,D", "Reboque — 2 eixos duplos (8 pneus)"],
+  ["D,D,D", "Semi-reboque — 3 eixos duplos (12 pneus)"],
+  ["S,S,S", "Semi-reboque — 3 eixos simples / super single (6 pneus)"],
+  ["S", "1 eixo simples — máquina / reboque ligeiro (2 pneus)"],
+];
+const FOTOS = [["tq", "3/4 Frente — Principal"], ["frente", "Frente"], ["traseira", "Traseira"], ["esq", "Lateral Esquerda"], ["dir", "Lateral Direita"], ["cima", "Cima / Tejadilho"], ["interior", "Interior"], ["painel", "Painel / Conta-km"]];
+
+/** Campos da ficha técnica e de identificação (guardados em FleetVehicle.details). */
+const FICHA = {
+  texto: ["caixa", "cor", "vin", "motor", "versao", "base", "departamento", "vendedor", "tractorId", "eixos", "tracao", "capac", "dim", "pnF", "pnT", "pnMarca", "jante", "janteMed", "furos", "prF", "prT", "gps", "kit"],
+  maiusculas: ["cor", "vin", "motor", "versao", "base", "departamento", "vendedor", "pnMarca"],
+  numero: ["cilindrada", "potencia", "kmInicial", "suplentes", "lugares", "pbt", "tara", "carga"],
+  data: ["dataEntrada", "dataMat", "extintor"],
+};
+
+function limparFicha(d) {
+  const o = {};
+  const src = d && typeof d === "object" ? d : {};
+  FICHA.texto.forEach((k) => {
+    const v = String(src[k] ?? "").trim().slice(0, 200);
+    if (v) o[k] = FICHA.maiusculas.includes(k) ? v.toUpperCase() : v;
+  });
+  FICHA.numero.forEach((k) => {
+    if (src[k] === "" || src[k] === null || src[k] === undefined) return;
+    const x = Number(String(src[k]).replace(",", "."));
+    if (Number.isFinite(x)) o[k] = x;
+  });
+  FICHA.data.forEach((k) => {
+    const v = String(src[k] || "").slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) o[k] = v;
+  });
+  return o;
+}
+
+/** Linhas de peças da intervenção: [{ cod, desc, qtd, pu }]. */
+function limparPecas(L) {
+  return (Array.isArray(L) ? L : [])
+    .slice(0, 100)
+    .map((l) => ({ cod: String(l?.cod || "").trim().slice(0, 60), desc: String(l?.desc || "").trim().toUpperCase().slice(0, 200), qtd: n(l?.qtd), pu: n(l?.pu) }))
+    .filter((l) => l.cod || l.desc || l.qtd);
+}
+const totalPecas = (L) => Math.round((L || []).reduce((s, l) => s + n(l.qtd) * n(l.pu), 0) * 100) / 100;
+
+/**
+ * Estado da viatura pelos registos (o `after` dos formulários do protótipo).
+ * intervencoes: [{ status, workOrderStatus }]; ocorrencias (só as que imobilizam): [{ status, type }].
+ * Devolve o novo estado, ou null quando não há nada a mudar.
+ */
+function estadoPelosRegistos(atual, { intervencoes = [], ocorrencias = [] }) {
+  const presa = ["Em manutenção", "Avariada", "Acidentada"];
+  const ocAbertas = ocorrencias.filter((o) => !OCORRENCIA_FECHADA.includes(o.status || "Aberta"));
+  if (ocAbertas.length) {
+    if (["Avariada", "Acidentada"].includes(atual)) return null;
+    return ocAbertas.some((o) => /acidente/i.test(o.type || "")) ? "Acidentada" : "Avariada";
+  }
+  const naOficina = intervencoes.some((i) => (i.workOrderStatus ? ["Recebida", "Em Trabalho"].includes(i.workOrderStatus) : !["Concluída", "Cancelada"].includes(i.status)));
+  if (naOficina) return presa.includes(atual) ? (atual === "Em manutenção" ? null : "Em manutenção") : "Em manutenção";
+  return presa.includes(atual) ? "Operacional" : null;
+}
+
 /** Grupo da tipologia, como os filtros Viaturas / Máquinas / Equipamentos do protótipo. */
-function grupoDe(kind) {
+function grupoDe(kindOuViatura) {
+  const t = kindOuViatura && typeof kindOuViatura === "object" ? kindOuViatura.tipologia : "";
+  if (t) return t === "MAQUINA" ? "M" : t === "EQUIPAMENTO" ? "E" : "V";
+  const kind = kindOuViatura && typeof kindOuViatura === "object" ? kindOuViatura.kind : kindOuViatura;
   const k = String(kind || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-  if (/reboq|trailer|semi/.test(k)) return "R";
   if (/maquin|escavad|retro|cilindro|grua|empilhad|motoniv|bulldo|pa carreg/.test(k)) return "M";
   if (/equip|gerador|compressor|betoneir/.test(k)) return "E";
   return "V";
 }
-const GRUPOS = [["V", "Viaturas"], ["M", "Máquinas"], ["E", "Equipamentos"], ["R", "Reboques"]];
+const GRUPOS = [["V", "Viaturas"], ["M", "Máquinas"], ["E", "Equipamentos"]];
 
 function mesesAte(mes, quantos) {
   const [a, m] = mes.split("-").map(Number);
@@ -357,7 +432,7 @@ function percursoMes(vid, dados, mes) {
 function painelGestao(dados, hoje, { mes = "", grupo = "", per = "mes" } = {}) {
   const M = /^\d{4}-\d{2}$/.test(mes) ? mes : iso(hoje).slice(0, 7);
   const keys = mesesAte(M, 12);
-  const VV = (dados.viaturas || []).filter((v) => ativa(v) && (!grupo || grupoDe(v.kind) === grupo));
+  const VV = (dados.viaturas || []).filter((v) => ativa(v) && (!grupo || grupoDe(v) === grupo));
   const ids = new Set(VV.map((v) => v.id));
   const L = linhasDeCusto(dados).filter((x) => ids.has(x.vid) && keys.includes(x.d.slice(0, 7)));
   const soma = (f) => L.filter(f).reduce((s, x) => s + x.v, 0);
@@ -382,7 +457,7 @@ function painelGestao(dados, hoje, { mes = "", grupo = "", per = "mes" } = {}) {
   return {
     mes: M,
     meses: keys.map((k) => ({ mes: k, valor: soma((x) => x.d.slice(0, 7) === k), porCategoria: Object.fromEntries(CATEGORIAS_CUSTO.map((c) => [c, soma((x) => x.cat === c && x.d.slice(0, 7) === k)])) })),
-    grupos: GRUPOS.map(([k, l]) => ({ k, l, n: todas.filter((v) => grupoDe(v.kind) === k).length })),
+    grupos: GRUPOS.map(([k, l]) => ({ k, l, n: todas.filter((v) => grupoDe(v) === k).length })),
     ativas: VV.length,
     custoMes,
     custo12: L.reduce((s, x) => s + x.v, 0),
@@ -440,6 +515,13 @@ const LISTAS = {
   unidades: UNIDADES,
   propriedades: PROPRIEDADES,
   categoriasCusto: CATEGORIAS_CUSTO,
+  tipologias: TIPOLOGIAS,
+  empresas: EMPRESAS,
+  caixas: CAIXAS,
+  tracao: TRACAO,
+  jantes: JANTES,
+  eixos: EIXOS,
+  fotos: FOTOS,
 };
 
 module.exports = {
@@ -461,6 +543,11 @@ module.exports = {
   painel,
   painelGestao,
   grupoDe,
+  TIPOLOGIAS,
+  limparFicha,
+  limparPecas,
+  totalPecas,
+  estadoPelosRegistos,
   GRUPOS,
   custosViatura,
   custosResumo,
