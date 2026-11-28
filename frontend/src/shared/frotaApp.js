@@ -8,8 +8,9 @@ import { initFinancePage, renderFinancePlaceholder } from "./financePage.js";
 const PAGES = {
   painel: { code: "", title: "Painel de Gestão da Frota", subtitle: "Quanto custa a frota, mês a mês, e o volume da operação — para a gestão, sem mexer no dia a dia." },
   alertas: { code: "V2", title: "Alertas da Frota", subtitle: "Tudo o que precisa de atenção: seguros, documentos, manutenção, cartas de condução, ocorrências e abastecimentos anómalos." },
-  viaturas: { code: "", title: "Viaturas e Equipamentos", subtitle: "Clique numa viatura para abrir a ficha: dados, motorista, planos preventivos e estado." },
-  motoristas: { code: "V4", title: "Motoristas", subtitle: "Motoristas e operadores, com a carta de condução e a validade." },
+  viatura: { code: "", title: "Viatura", subtitle: "Tudo o que diz respeito a esta viatura: painel, novos registos, histórico e ficha." },
+  viaturas: { code: "", title: "Viaturas e Equipamentos", subtitle: "Clique numa viatura para ver tudo o que lhe diz respeito: painel, abastecimentos, manutenções, ocorrências, documentos, custos, fotografias e motoristas." },
+  motoristas: { code: "V4", title: "Motoristas", subtitle: "Condutores e operadores, com fotografia. A carta fica a laranja 60 dias antes de caducar." },
   abastecimentos: { code: "V5", title: "Abastecimentos", subtitle: "Combustível por viatura, com o percurso, o consumo e as anomalias (km abaixo do anterior, consumo fora da referência)." },
   manutencoes: { code: "V6", title: "Manutenções e Reparações", subtitle: "Intervenções nas viaturas: preventivas, correctivas e reparações, com o custo." },
   planos: { code: "V7", title: "Planos Preventivos", subtitle: "Os planos de manutenção de cada viatura, por km / horas ou por meses, e quando vence o próximo." },

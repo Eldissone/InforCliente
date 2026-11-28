@@ -540,6 +540,8 @@ function isSidebarLinkActive(link) {
   const href = (link.getAttribute("href") || "").replace(/\/+$/, "").toLowerCase();
   if (href === "/orcamentacao") return current.startsWith("/orcamentacao/");
   // Frota: os registos (abastecimentos, documentos…) abrem-se a partir do Painel de Gestão
+  // Frota: a página de uma viatura acende «Frota»
+  if (href === "/frota/viaturas") return ["/frota/viaturas", "/frota/viatura"].includes(current.replace(/\/+$/, ""));
   if (href === "/frota/painel") {
     const registos = ["painel", "alertas", "abastecimentos", "manutencoes", "planos", "ocorrencias", "documentos", "seguros", "motoristas", "custos"];
     return registos.some((r) => current.replace(/\/+$/, "") === `/frota/${r}`);

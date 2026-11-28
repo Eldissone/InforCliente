@@ -538,6 +538,9 @@ export async function render(meta) {
   });
   desenhar();
   await carregar();
+  // «Oficina» na página da viatura: abre o pedido à oficina já com a viatura
+  const pedido = new URLSearchParams(window.location.search).get("pedido");
+  if (pedido && podeCriar()) formNovo({ modo: "frota", vehicleId: pedido });
   const id = new URLSearchParams(window.location.search).get("ot");
   if (id && otById(id)) fichaOT(otById(id));
 }

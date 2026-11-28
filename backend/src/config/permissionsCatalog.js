@@ -491,6 +491,7 @@ const PAGE_ROUTE_GUARDS = [
   { route: "/frota/painel", module: "frota", action: "view" },
   { route: "/frota/alertas", module: "frota", action: "view" },
   { route: "/frota/viaturas", module: "frota", action: "view" },
+  { route: "/frota/viatura", module: "frota", action: "view" },
   { route: "/frota/motoristas", module: "frota", action: "view" },
   { route: "/frota/abastecimentos", module: "frota", action: "view" },
   { route: "/frota/manutencoes", module: "frota", action: "view" },

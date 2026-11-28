@@ -945,21 +945,37 @@ function vistaMotoristas() {
     ])}
     <div class="fcal-filtros">${pesquisa(S, "nome, carta, telefone…")}${select("e", S.e, lista(["Ativo", "Inativo"]), "Todos")}</div>
     ${tabela(
-      ["Código", "Nome", "Carta", "Categoria", "Validade", "Telefone", "Viaturas", "Estado"],
+      ["", "Nome", "Código", "Carta", "Categoria", "Validade", "Telefone", "Viatura Atribuída", "Estado", ""],
       Lx.map((m) =>
         linha("frm", m.id, [
-          `<td class="fx2-mut">${esc(m.code)}</td>`,
+          `<td style="width:46px">${avM(m, 36)}</td>`,
           `<td><b>${esc(m.name)}</b>${m.department ? `<div class="fx2-mut">${esc(m.department)}</div>` : ""}</td>`,
+          `<td class="fx2-mut">${esc(m.code)}</td>`,
           `<td class="fx2-mut">${esc(m.licenseNumber || "—")}</td>`,
           `<td>${esc(m.licenseCategory || "—")}</td>`,
           `<td>${m.licenseExpiry ? fmtData(m.licenseExpiry) : "—"} ${pill(m._carta[0], m._carta[1])}</td>`,
           `<td class="fx2-mut">${esc(m.phone || "")}</td>`,
           `<td class="fx2-mut">${esc(viatDe(m.id) || "—")}</td>`,
           `<td>${pill(m.status, m.status === "Ativo" ? "good" : "slate")}</td>`,
+          `<td>${pode("edit") ? `<label class="finance-btn fr-foto-btn" data-frm-stop title="Carregar ou trocar a fotografia"><span class="material-symbols-outlined">photo_camera</span> ${m.photo ? "Trocar" : "Fotografia"}<input type="file" accept="image/*" hidden data-frmfoto="${esc(m.id)}"></label>` : ""}</td>`,
         ])
       ),
       A.length ? "Nenhum motorista com estes filtros." : "Ainda não há motoristas registados."
     )}`;
+}
+
+/** Fotografia do motorista escolhida diretamente na tabela (o `data-frmfup` do protótipo). */
+async function fotoMotorista(e) {
+  const t = e.target;
+  const file = t.files?.[0];
+  if (!file) return;
+  try {
+    await apiUpload(`/fleet/drivers/${t.dataset.frmfoto}/files`, { file, fieldName: "file", extraFields: { slot: "foto" } });
+    toast("Fotografia do motorista atualizada.");
+    await carregar();
+  } catch (er) {
+    toast(er.message || "Não foi possível enviar a fotografia.", { type: "error" });
+  }
 }
 
 function vistaAbastecimentos() {
@@ -1276,7 +1292,344 @@ function vistaConfiguracoes() {
     ${corpo}`;
 }
 
+// ─── Página da viatura (o `V.frv` do protótipo) ───────────────────────────────
+// Clicar numa viatura abre esta página: cabeçalho com a fotografia, Painel,
+// Novos Registos, Histórico e Ficha da Viatura.
+
+const FOTO_PADRAO = (v) => v?.photos?.tq || "";
+function avV(v, px = 48) {
+  const u = FOTO_PADRAO(v);
+  const g = grupoV(v);
+  return `<span class="fr-av fr-av--${g}" style="width:${px}px;height:${px}px">${u ? `<img src="${esc(getAssetUrl(u) || "")}" alt="">` : `<span class="material-symbols-outlined" style="font-size:${Math.round(px / 2)}px">${ICONE_G[g]}</span>`}</span>`;
+}
+function avM(m, px = 32) {
+  if (!m) return "";
+  if (m.photo) return `<span class="fr-avm" style="width:${px}px;height:${px}px"><img src="${esc(getAssetUrl(m.photo) || "")}" alt=""></span>`;
+  const ini = String(m.name || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((x) => x[0]).join("");
+  return `<span class="fr-avm" style="width:${px}px;height:${px}px;font-size:${Math.round(px / 2.6)}px">${esc(ini)}</span>`;
+}
+
+/** Linhas de custo de uma viatura (as mesmas regras do `custosLin` do servidor). */
+function custosDe(vid) {
+  const L = [];
+  const add = (d, cat, v, desc, tipo, id) => Number(v) && L.push({ d: String(d || "").slice(0, 10), cat, v: Number(v), desc, tipo, id });
+  S.d.abastecimentos.filter((a) => a.vehicleId === vid).forEach((a) => add(a.date, "Combustível", a.amount, `${fmt0(a.liters)} L${a.station ? ` · ${a.station}` : ""}`, "frab", a.id));
+  S.d.intervencoes.filter((i) => i.vehicleId === vid).forEach((i) => add(i.date, /pneu/i.test(i.type || "") ? "Pneus" : "Manutenção e Reparação", i._total, `${i.type} · ${i.description}`, "frint", i.id));
+  S.d.ocorrencias.filter((o) => o.vehicleId === vid).forEach((o) => add(o.closedAt || o.date, /multa|infrac|velocid/i.test(o.type || "") ? "Multas" : "Ocorrências e Sinistros", o.cost, `${o.type} · ${o.description}`, "frocr", o.id));
+  S.d.documentos.filter((d) => d.vehicleId === vid).forEach((d) => add(d.issueDate, "Documentos e Taxas", d.cost, d.type, "frdoc", d.id));
+  return L.sort((a, b) => b.d.localeCompare(a.d));
+}
+
+const mesesAteHoje = (n) => {
+  const [a, m] = S.d.hoje.split("-").map(Number);
+  return Array.from({ length: n }, (_, i) => new Date(Date.UTC(a, m - 1 - (n - 1 - i), 1)).toISOString().slice(0, 7));
+};
+const somaDias = (d, k) => new Date(Date.parse(`${d}T00:00:00Z`) + k * 864e5).toISOString().slice(0, 10);
+
+/** Dias na oficina nos últimos 30 (disponibilidade). */
+function diasParada(vid) {
+  const ini = somaDias(S.d.hoje, -30);
+  const dias = new Set();
+  S.d.intervencoes
+    .filter((i) => i.vehicleId === vid && (i.entryDate || i.date))
+    .forEach((i) => {
+      let d = String(i.entryDate || i.date);
+      const fim = String(i.exitDate || (["Concluída", "Cancelada"].includes(i.status) ? i.entryDate || i.date : S.d.hoje));
+      for (let k = 0; d <= fim && k < 400; k++, d = somaDias(d, 1)) if (d >= ini && d <= S.d.hoje) dias.add(d);
+    });
+  return dias.size;
+}
+
+function kmNoPeriodo(vid, desde) {
+  const kms = S.d.abastecimentos.filter((a) => a.vehicleId === vid && a.odometer !== null && String(a.date) >= desde).map((a) => Number(a.odometer));
+  return kms.length > 1 ? Math.max(...kms) - Math.min(...kms) : 0;
+}
+
+/** Alertas da viatura: os do servidor (V2) e os da própria ficha. */
+function alertasDe(v) {
+  const A = (S.ov?.alertas || []).filter((a) => a.vid === v.id).map((a) => ({ s: a.p === 1 ? "bad" : a.p === 2 ? "warn" : "neu", t: `<b>${esc(a.area)}</b> · ${esc(a.problema)} <span class="fx2-mut">${esc(a.detalhe)}</span>`, link: a.link }));
+  if (!v.driverId) A.push({ s: "neu", t: "<b>Motorista</b> · Sem motorista atribuído" });
+  return A;
+}
+
+function proximaManutencao(v) {
+  const P = (v._planosDet || []).filter((p) => p.nome);
+  const ordem = { bad: 0, warn: 1, good: 2, neu: 3 };
+  P.sort((a, b) => ordem[a.k] - ordem[b.k]);
+  if (P[0]) return { o: P[0].nome, t: P[0].t, k: P[0].k };
+  const I = S.d.intervencoes.filter((i) => i.vehicleId === v.id && (i.nextDate || i.nextOdometer)).sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+  if (I) return { o: I.nextAction || "Próxima intervenção", t: [I.nextDate ? fmtData(I.nextDate) : "", I.nextOdometer ? `${fmt0(I.nextOdometer)} ${un(v)}` : ""].filter(Boolean).join(" · "), k: "neu" };
+  return null;
+}
+
+function vpPainel(v) {
+  const A = alertasDe(v);
+  const sem = A.some((a) => a.s === "bad") ? "bad" : A.some((a) => a.s === "warn") ? "warn" : "good";
+  const m = mById(v.driverId);
+  const ab = S.d.abastecimentos.filter((a) => a.vehicleId === v.id).sort((a, b) => `${a.date}${a.time || ""}`.localeCompare(`${b.date}${b.time || ""}`));
+  const cons = ab.map((a) => a._calc?.cons).filter((x) => x > 0);
+  const cmed = cons.length ? cons.reduce((s, x) => s + x, 0) / cons.length : null;
+  const ref = Number(v.refConsumption) || null;
+  const dev = ref && cmed ? (cmed - ref) / ref : 0;
+  const C = custosDe(v.id);
+  const mes = S.d.hoje.slice(0, 7);
+  const cm = C.filter((x) => x.d.slice(0, 7) === mes);
+  const cMes = cm.reduce((s, x) => s + x.v, 0);
+  const cComb = cm.filter((x) => x.cat === "Combustível").reduce((s, x) => s + x.v, 0);
+  const keys = mesesAteHoje(12);
+  const c12 = C.filter((x) => keys.includes(x.d.slice(0, 7))).reduce((s, x) => s + x.v, 0);
+  const k30 = kmNoPeriodo(v.id, somaDias(S.d.hoje, -30));
+  const k365 = kmNoPeriodo(v.id, somaDias(S.d.hoje, -365));
+  const cpk = k30 > 0 ? cMes / k30 : 0;
+  const cpk12 = k365 > 0 ? c12 / k365 : 0;
+  const parado = diasParada(v.id);
+  const disp = Math.round(((30 - parado) / 30) * 100);
+  const pm = proximaManutencao(v);
+  const unid = un(v);
+  // gráfico do consumo: os últimos 12 abastecimentos com consumo
+  const ult = ab.filter((a) => a._calc?.cons > 0).slice(-12);
+  const mxC = Math.max(1, ...ult.map((a) => a._calc.cons), ref ? ref * 1.1 : 0);
+  const graf1 = ult.length
+    ? `<div class="fx2-meses">${ult.map((a) => {
+        const c = a._calc.cons;
+        const fora = ref && Math.abs(c - ref) / ref > 0.1;
+        return `<div class="fx2-mes" title="${esc(fmtData(a.date))}: ${c.toFixed(1)} L/100"><span class="fx2-mes-b"><i style="width:60%;height:${((c / mxC) * 100).toFixed(1)}%;background:${fora ? "#c96b3a" : "#1f7a42"}"></i></span><span class="fx2-mes-l">${esc(String(a.date).slice(8, 10))}/${esc(String(a.date).slice(5, 7))}</span></div>`;
+      }).join("")}</div>${ref ? `<p class="fx2-mut" style="margin:.4rem 0 0">Referência da ficha: ${ref.toFixed(1)} ${unid === "h" ? "L/h" : "L/100 km"} · a laranja, fora da faixa ±10%.</p>` : ""}`
+    : `<p class="fx2-mut">Ainda não há abastecimentos com km suficientes para calcular o consumo.</p>`;
+  const porMes = keys.map((k) => ({ k, cat: Object.fromEntries(L().categoriasCusto.map((c) => [c, C.filter((x) => x.d.slice(0, 7) === k && x.cat === c).reduce((s, x) => s + x.v, 0)])) }));
+  const mxM = Math.max(1, ...porMes.map((p) => Object.values(p.cat).reduce((s, x) => s + x, 0)));
+  const graf2 = `<div class="fx2-meses">${porMes.map((p) => `<div class="fx2-mes" title="${esc(p.k)}: ${fmt(Object.values(p.cat).reduce((s, x) => s + x, 0))}"><span class="fx2-mes-b fr-pilha">${L().categoriasCusto.map((c) => (p.cat[c] ? `<i style="height:${((p.cat[c] / mxM) * 100).toFixed(1)}%;background:${COR_CAT[c]}"></i>` : "")).join("")}</span><span class="fx2-mes-l${p.k === mes ? " on" : ""}">${MES_CURTO[Number(p.k.slice(5)) - 1]}</span></div>`).join("")}</div>
+    <div class="fr-legenda">${L().categoriasCusto.map((c) => `<span><i style="background:${COR_CAT[c]}"></i>${esc(CAT_CURTA[c])}</span>`).join("")}</div>`;
+  const ev = vpEventos(v).slice(0, 12);
+  return `
+    <section class="fx2-blk fr-sem fr-sem--${sem}">
+      <div class="fr-sem-l"><span class="fr-sem-luz"></span><div><b>${sem === "bad" ? "Requer ação" : sem === "warn" ? "Atenção" : "Tudo em ordem"}</b><div class="fx2-mut">${A.length ? `${A.length} ponto(s) a ver` : "sem alertas"}</div></div></div>
+      <div class="fr-sem-i"><span class="fx2-mut">Estado</span>${pill(v.status, TOM_ESTADO[v.status] || "slate")}</div>
+      <div class="fr-sem-i"><span class="fx2-mut">Motorista</span>${m ? `<span class="fr-mot">${avM(m, 22)}<b>${esc(m.name)}</b></span>` : `<span>Sem motorista</span>`}</div>
+      <div class="fr-sem-i"><span class="fx2-mut">${unid === "h" ? "Horas" : "Quilómetros"}</span><b>${v.odometer !== null && v.odometer !== undefined ? `${fmt0(v.odometer)} ${unid}` : "—"}</b>${v.odometerAt ? `<span class="fx2-mut">leitura ${fmtData(v.odometerAt)}</span>` : ""}</div>
+    </section>
+    ${A.length ? `<section class="fx2-blk"><h3>O Que Precisa de Atenção</h3>${A.map((a) => `<div class="fr-al fr-al--${a.s}"><span>${a.t}</span>${a.link ? `<a href="${esc(a.link)}">abrir</a>` : ""}</div>`).join("")}</section>` : ""}
+    ${kpis([
+      { tom: disp >= 90 ? "good" : disp >= 75 ? "warn" : "bad", titulo: "Disponibilidade (30 dias)", valor: `${disp} %`, nota: parado ? `${parado} dia(s) na oficina` : "sem paragens registadas" },
+      { tom: ref && Math.abs(dev) > 0.1 ? "bad" : ref && cmed ? "good" : "neu", titulo: "Consumo Médio", valor: cmed ? `${cmed.toFixed(1)} ${unid === "h" ? "L/h" : "L/100"}` : "—", nota: ref && cmed ? `${dev > 0 ? "↑" : "↓"} ${Math.abs(dev * 100).toFixed(0)}% vs normal ${ref.toFixed(1)}` : "sem referência na ficha" },
+      { tom: cpk && cpk12 && cpk > cpk12 * 1.2 ? "warn" : "neu", titulo: `Custo por ${unid}`, valor: cpk ? fmt(cpk) : cpk12 ? fmt(cpk12) : "—", nota: cpk && cpk12 ? `este mês · média 12 meses ${fmt(cpk12)}` : cpk12 ? "média 12 meses" : "faltam leituras de km" },
+      { tom: "neu", titulo: "Custo do Mês", valor: fmt(cMes), nota: `combustível ${fmt(cComb)} · outros ${fmt(cMes - cComb)}` },
+      { tom: pm ? pm.k : "neu", titulo: "Próxima Manutenção", valor: pm ? esc(String(pm.o).slice(0, 24)) : "—", nota: pm ? esc(pm.t) : "defina planos na ficha da viatura" },
+    ])}
+    <div class="fx2-cols">
+      <section class="fx2-blk"><h3>Consumo nos Últimos Abastecimentos</h3>${graf1}</section>
+      <section class="fx2-blk"><h3>Custos dos Últimos 12 Meses</h3>${graf2}</section>
+    </div>
+    <section class="fx2-blk"><h3>Últimos Eventos</h3>${ev.length ? ev.map((e) => `<div class="fr-ev"${e.abre ? ` data-${e.abre[0]}="${esc(e.abre[1])}"` : ""}><span class="material-symbols-outlined">${e.ic}</span><span class="fx2-mut">${fmtData(e.d)}</span><b>${esc(e.t)}</b><span class="fx2-mut">${esc(e.x)}</span>${e.v ? `<b class="r">${fmt(e.v)}</b>` : ""}</div>`).join("") : `<p class="fx2-mut">Ainda não há registos desta viatura.</p>`}</section>`;
+}
+
+/** Todos os registos da viatura numa linha do tempo (o «Histórico Completo»). */
+function vpEventos(v) {
+  const E = [];
+  S.d.abastecimentos.filter((a) => a.vehicleId === v.id).forEach((a) => E.push({ d: a.date, ic: "local_gas_station", t: "Abastecimento", x: `${fmt0(a.liters)} L${a.odometer !== null ? ` · ${fmt0(a.odometer)} ${un(v)}` : ""}${a.station ? ` · ${a.station}` : ""}`, v: a.amount, abre: ["frab", a.id] }));
+  S.d.intervencoes.filter((i) => i.vehicleId === v.id).forEach((i) => E.push({ d: i.date, ic: i.workOrderStatus ? "car_repair" : "build", t: i.workOrderStatus ? `Oficina · ${i.workOrderStatus}` : i.type, x: `${i.code} · ${i.description}`, v: i._total, abre: i.workOrderStatus ? null : ["frint", i.id] }));
+  S.d.ocorrencias.filter((o) => o.vehicleId === v.id).forEach((o) => E.push({ d: o.date, ic: "car_crash", t: o.type, x: `${o.code} · ${o.description} · ${o.status}`, v: o.cost, abre: ["frocr", o.id] }));
+  S.d.documentos.filter((d) => d.vehicleId === v.id).forEach((d) => E.push({ d: d.issueDate || d.expiryDate, ic: "description", t: d.type, x: `${d.number || ""}${d.expiryDate ? ` · válido até ${fmtData(d.expiryDate)}` : ""}`, v: d.cost, abre: ["frdoc", d.id] }));
+  S.d.seguros.filter((s) => (s.vehicleIds || []).includes(v.id)).forEach((s) => E.push({ d: s.startDate, ic: "verified_user", t: "Seguro", x: `${s.insurer} · ${s.policyNumber} · até ${fmtData(s.endDate)}`, v: 0, abre: ["frseg", s.id] }));
+  return E.filter((e) => e.d).sort((a, b) => String(b.d).localeCompare(String(a.d)));
+}
+
+function vpNovos(v) {
+  const B = (ic, l, s, at) => `<button type="button" class="fr-nb" ${at}><span class="material-symbols-outlined">${ic}</span><b>${esc(l)}</b><span>${esc(s)}</span></button>`;
+  const G = (t, s, L) => `<section class="fx2-blk"><h3>${esc(t)}</h3><p class="fx2-mut" style="margin:-.3rem 0 .6rem">${esc(s)}</p><div class="fr-nbg">${L.join("")}</div></section>`;
+  return (
+    G("Dia a Dia", "o que acontece todos os dias com a viatura", [
+      B("local_gas_station", "Abastecimento", "litros, km, data, hora, valor e posto", `data-frnovo="fab"`),
+      B("description", "Documento", "inspecção, taxa de circulação, livrete…", `data-frnovo="fdoc"`),
+      B("verified_user", "Seguro", "apólice para esta viatura", `data-frnovo="seg"`),
+    ]) +
+    G("Oficina", "as nossas necessidades para a oficina — marcação, reparação, lavagem", [
+      B("outbox", "Pedido à Oficina", "marcação, manutenção, reparação ou lavagem", `data-frnovo="ofi"`),
+      B("build", "Manutenção / Intervenção", "relatório da oficina", `data-frnovo="fint"`),
+    ]) +
+    G("Incidentes", "avarias, acidentes, multas e danos", [
+      B("car_crash", "Ocorrência / Acidente", "avaria, barulho, batida, com fotografias", `data-frnovo="focr"`),
+      B("local_police", "Multa", "auto, valor e prazo", `data-frnovo="multa"`),
+    ])
+  );
+}
+
+const HSUB = [["tudo", "Tudo"], ["fab", "Abastecimentos"], ["fint", "Manutenções"], ["focr", "Ocorrências e Multas"], ["ofi", "Oficina"], ["fdoc", "Documentos"], ["cus", "Custos"], ["mot", "Motoristas"]];
+
+function vpHistorico(v, sub) {
+  const unid = un(v);
+  if (sub === "fab") {
+    const A = S.d.abastecimentos.filter((a) => a.vehicleId === v.id);
+    const cons = A.map((a) => a._calc?.cons).filter((x) => x > 0);
+    return `<section class="fx2-blk"><h3>Abastecimentos</h3>${tabela(["Data", "Motorista", ["Km", "r"], ["Litros", "r"], ["Preço/L", "r"], ["Valor", "r"], "Posto", ["L/100 km", "r"]],
+      A.map((a) => linha("frab", a.id, [`<td>${fmtData(a.date)}${a.time ? ` <span class="fx2-mut">${esc(a.time)}</span>` : ""}</td>`, `<td class="fx2-mut">${esc(mById(a.driverId)?.name || "—")}</td>`, `<td class="r">${num(a.odometer)}</td>`, `<td class="r">${fmt(a.liters)}</td>`, `<td class="r">${a.pricePerLiter ? fmt(a.pricePerLiter) : "—"}</td>`, `<td class="r">${fmt(a.amount)}</td>`, `<td class="fx2-mut">${esc(a.station || "")}</td>`, `<td class="r">${a._calc?.cons ? a._calc.cons.toFixed(1) : "—"}${(a._calc?.an || []).length ? ` ${pill("!", a._calc.an[0][0])}` : ""}</td>`])),
+      "Sem abastecimentos registados.")}<p class="fcal-nota">Consumo médio: <b>${cons.length ? `${(cons.reduce((s, x) => s + x, 0) / cons.length).toFixed(1)} L/100 km` : "—"}</b>.</p></section>`;
+  }
+  if (sub === "fint") {
+    const I = S.d.intervencoes.filter((i) => i.vehicleId === v.id && !i.workOrderStatus);
+    return `<section class="fx2-blk"><h3>Manutenções e Reparações</h3>${tabela(["Data", "Tipo", "Descrição", "Oficina", ["Km", "r"], ["Total", "r"], "Estado"],
+      I.map((i) => linha("frint", i.id, [`<td>${fmtData(i.date)}</td>`, `<td>${esc(i.type)}</td>`, `<td class="fx2-mut">${esc(i.description)}</td>`, `<td class="fx2-mut">${esc(i.workshop || "")}</td>`, `<td class="r">${num(i.odometer)}</td>`, `<td class="r">${fmt(i._total)}</td>`, `<td>${pill(i.status, i.status === "Concluída" ? "good" : "warn")}</td>`])),
+      "Sem manutenções registadas.")}</section>
+      ${(v._planosDet || []).length ? `<section class="fx2-blk"><h3>Planos Preventivos</h3>${tabela(["Plano", "A cada", "Última", "Situação"], v._planosDet.map((p) => `<tr><td><b>${esc(p.nome)}</b></td><td class="fx2-mut">${[p.km ? `${fmt0(p.km)} ${unid}` : "", p.meses ? `${p.meses} meses` : ""].filter(Boolean).join(" / ")}</td><td class="fx2-mut">${[p.ultData ? fmtData(p.ultData) : "", p.ultKm !== null && p.ultKm !== undefined ? `${fmt0(p.ultKm)} ${unid}` : ""].filter(Boolean).join(" · ") || "—"}</td><td>${pill(p.t, p.k)}</td></tr>`), "")}</section>` : ""}`;
+  }
+  if (sub === "focr") {
+    const O = S.d.ocorrencias.filter((o) => o.vehicleId === v.id);
+    return `<section class="fx2-blk"><h3>Ocorrências, Acidentes e Multas</h3>${tabela(["Data", "Tipo", "Descrição", "Motorista", "Gravidade", ["Custo", "r"], "Estado"],
+      O.map((o) => linha("frocr", o.id, [`<td>${fmtData(o.date)}</td>`, `<td>${esc(o.type)}</td>`, `<td class="fx2-mut">${esc(o.description)}</td>`, `<td class="fx2-mut">${esc(mById(o.driverId)?.name || "")}</td>`, `<td>${pill(o.severity, TOM_GRAV[o.severity] || "slate")}</td>`, `<td class="r">${o.cost !== null ? fmt(o.cost) : o.estimatedCost !== null ? `≈ ${fmt(o.estimatedCost)}` : "—"}</td>`, `<td>${pill(o.status, FECHADA.includes(o.status) ? "good" : "warn")}</td>`])),
+      "Sem ocorrências registadas.")}</section>`;
+  }
+  if (sub === "ofi") {
+    const T = S.d.intervencoes.filter((i) => i.vehicleId === v.id && i.workOrderStatus);
+    return `<section class="fx2-blk"><h3>Agenda da Oficina</h3>${tabela(["N.º", "Data", "Serviço", "Oficina", "Estado", ["Custo", "r"]],
+      T.map((x) => `<tr style="cursor:pointer" data-frot="${esc(x.id)}"><td><b>${esc(x.code)}</b></td><td>${fmtData(x.workOrder?.dm || x.date)}</td><td class="fx2-mut">${esc(x.type)}</td><td class="fx2-mut">${esc(x.workshop || "")}</td><td>${pill(x.workOrderStatus, ["Concluído", "Entregue"].includes(x.workOrderStatus) ? "good" : x.workOrderStatus === "Cancelado" ? "slate" : "blue")}</td><td class="r">${fmt(x._total)}</td></tr>`),
+      "Sem pedidos à oficina para esta viatura.")}</section>`;
+  }
+  if (sub === "fdoc") {
+    const D = S.d.documentos.filter((d) => d.vehicleId === v.id);
+    const SG = S.d.seguros.filter((s) => (s.vehicleIds || []).includes(v.id));
+    return `<section class="fx2-blk"><h3>Documentos</h3>${tabela(["Tipo", "Número", "Entidade", "Emissão", "Validade", "Estado"],
+      D.map((d) => linha("frdoc", d.id, [`<td>${esc(d.type)}</td>`, `<td class="fx2-mut">${esc(d.number || "")}</td>`, `<td class="fx2-mut">${esc(d.entity || "")}</td>`, `<td>${d.issueDate ? fmtData(d.issueDate) : "—"}</td>`, `<td>${d.expiryDate ? fmtData(d.expiryDate) : "—"}</td>`, `<td>${pill(d._estado[0], d._estado[1])}</td>`])),
+      "Sem documentos registados.")}</section>
+      <section class="fx2-blk"><h3>Seguros</h3>${tabela(["Apólice", "Seguradora", "Validade", "Estado"], SG.map((s) => linha("frseg", s.id, [`<td><b>${esc(s.policyNumber)}</b></td>`, `<td>${esc(s.insurer)}</td>`, `<td>${fmtData(s.startDate)} – ${fmtData(s.endDate)}</td>`, `<td>${pill(s._estado[0], s._estado[1])}</td>`])), "Nenhuma apólice cobre esta viatura.")}</section>`;
+  }
+  if (sub === "cus") {
+    const C = custosDe(v.id);
+    const tot = C.reduce((s, x) => s + x.v, 0);
+    return `${kpis([{ tom: "blue", titulo: "Custo Total", valor: fmt(tot), nota: `${C.length} registo(s)` }, ...L().categoriasCusto.map((c) => ({ c, v: C.filter((x) => x.cat === c).reduce((s, x) => s + x.v, 0) })).filter((x) => x.v).map((x) => ({ tom: "neu", titulo: x.c, valor: fmt(x.v), nota: tot ? `${((x.v / tot) * 100).toFixed(0)}%` : "" }))])}
+      <section class="fx2-blk"><h3>Custos</h3>${tabela(["Data", "Categoria", "Descrição", ["Valor", "r"]], C.map((x) => linha(x.tipo, x.id, [`<td>${fmtData(x.d)}</td>`, `<td>${esc(x.cat)}</td>`, `<td class="fx2-mut">${esc(x.desc)}</td>`, `<td class="r">${fmt(x.v)}</td>`])), "Sem custos registados.", C.length ? `<tfoot><tr><td colspan="3">Total</td><td class="r">${fmt(tot)}</td></tr></tfoot>` : "")}</section>`;
+  }
+  if (sub === "mot") {
+    const ids = new Set([v.driverId, ...S.d.abastecimentos.filter((a) => a.vehicleId === v.id).map((a) => a.driverId), ...S.d.ocorrencias.filter((o) => o.vehicleId === v.id).map((o) => o.driverId)].filter(Boolean));
+    const M = [...ids].map(mById).filter(Boolean);
+    return `<section class="fx2-blk"><h3>Motoristas e Operadores desta Viatura</h3>${tabela(["", "Nome", "Carta", "Categoria", "Validade", "Telefone", "Relação"],
+      M.map((m) => linha("frm", m.id, [`<td>${avM(m, 30)}</td>`, `<td><b>${esc(m.name)}</b></td>`, `<td class="fx2-mut">${esc(m.licenseNumber || "")}</td>`, `<td>${esc(m.licenseCategory || "")}</td>`, `<td>${m.licenseExpiry ? fmtData(m.licenseExpiry) : "—"} ${pill(m._carta[0], m._carta[1])}</td>`, `<td class="fx2-mut">${esc(m.phone || "")}</td>`, `<td class="fx2-mut">${m.id === v.driverId ? "Motorista atribuído" : "Já conduziu / abasteceu"}</td>`])),
+      "Ainda não há motoristas ligados a esta viatura.")}</section>`;
+  }
+  const E = vpEventos(v);
+  return `<section class="fx2-blk"><h3>Histórico Completo</h3>${tabela(["Data", "", "Registo", "Detalhe", ["Valor", "r"]],
+    E.map((e) => `<tr${e.abre ? ` style="cursor:pointer" data-${e.abre[0]}="${esc(e.abre[1])}"` : ""}><td>${fmtData(e.d)}</td><td><span class="material-symbols-outlined fr-ic">${e.ic}</span></td><td>${esc(e.t)}</td><td class="fx2-mut">${esc(e.x)}</td><td class="r">${e.v ? fmt(e.v) : ""}</td></tr>`),
+    "Ainda não há registos desta viatura.")}</section>`;
+}
+
+function vpFicha(v, sub) {
+  const d = v.details || {};
+  if (sub === "fot") return `<div class="fr-fotos-pag">${fotosHtml(L().fotos, v)}</div><p class="fcal-nota">Clique numa posição para carregar ou substituir a fotografia. A 3/4 frente é a imagem da viatura em todas as listas.</p>`;
+  if (sub === "doc") return `<div class="fr-docs-pag">${anexosHtml("Documentos da Viatura", "Juntar livrete, título, fotografias… (imagens ou PDF)", v)}</div>`;
+  const R = (l, x) => (x !== null && x !== undefined && x !== "" ? `<tr><td class="fx2-mut">${esc(l)}</td><td>${esc(String(x))}</td></tr>` : "");
+  const tip = (L().tipologias.find(([k]) => k === v.tipologia) || [0, v.tipologia])[1];
+  const prop = (L().propriedades.find(([k]) => k === v.ownership) || [0, v.ownership])[1];
+  const eixo = (L().eixos.find(([k]) => k === d.eixos) || [0, d.eixos])[1];
+  const t1 = [R("Tipologia", tip), R("Empresa proprietária", v.company), R("Código", v.code), R("Matrícula", v.plate), R("Marca", v.brand), R("Modelo", v.model), R("Versão", d.versao), R("Tipo", v.kind), R("Ano", v.year), R("Data da matrícula", d.dataMat && fmtData(d.dataMat)), R("Cor", d.cor), R("N.º de chassis (VIN)", d.vin), R("N.º de motor", d.motor), R("Data de entrada", d.dataEntrada && fmtData(d.dataEntrada)), R("Km inicial", d.kmInicial !== undefined ? fmt0(d.kmInicial) : ""), R("Valor de aquisição", v.acquisitionValue ? fmt(v.acquisitionValue) : ""), R("Vendedor", d.vendedor), R("Propriedade", prop), R("Atribuída a", v.assignedTo), R("Base", d.base), R("Departamento", d.departamento)].join("");
+  const t2 = [R("Combustível", v.fuel), R("Cilindrada (cc)", d.cilindrada), R("Potência (cv)", d.potencia), R("Caixa", d.caixa), R("Tração", d.tracao), R("Lugares", d.lugares), R("Peso bruto (kg)", d.pbt), R("Tara (kg)", d.tara), R("Carga útil (kg)", d.carga), R("Depósito (L)", v.tankCapacity), R(`Consumo de referência (${un(v) === "h" ? "L/h" : "L/100"})`, v.refConsumption), R("Eixos", eixo), R("Pneus suplentes", d.suplentes), R("Pneus frente", d.pnF), R("Pneus trás", d.pnT), R("Jante", [d.jante, d.janteMed].filter(Boolean).join(" ")), R("Fixação da roda", d.furos), R("Pressão frente / trás", [d.prF, d.prT].filter(Boolean).join(" / ")), R("Marca dos pneus", d.pnMarca), R("Rastreador / GPS", d.gps), R("Extintor (validade)", d.extintor && fmtData(d.extintor)), R("Kit de segurança", d.kit), R("Capacidade / equipamento", d.capac), R("Dimensões", d.dim), R("Utilização", v.odometer !== null && v.odometer !== undefined ? `${fmt0(v.odometer)} ${un(v)}` : "")].join("");
+  return `<section class="fx2-blk"><h3 style="display:flex;align-items:center">Ficha Técnica ${pode("edit") ? `<button type="button" class="finance-btn finance-btn--primary" style="margin-left:auto" data-frficha>✎ Editar Ficha</button>` : ""}</h3>
+    <div class="fx2-cols"><table class="fx2-t fr-kv">${t1}</table><table class="fx2-t fr-kv">${t2}</table></div></section>`;
+}
+
+function vistaViatura() {
+  const v = vById(S.vid);
+  if (!v) return vazio("Viatura não encontrada. Volte à lista em Frota.");
+  const m = mById(v.driverId);
+  const tip = (L().tipologias.find(([k]) => k === v.tipologia) || [0, v.tipologia])[1];
+  const sub1 = [v.kind, v.year, v.details?.cor, v.fuel].filter(Boolean).join(" · ");
+  const MAIN = S.main || "res";
+  const abas = [["res", "insights", "Painel"], ["novo", "add_circle", "Novos Registos"], ["hist", "history", "Histórico"], ["ficha", "folder_open", "Ficha da Viatura"]];
+  const subH = S.subh || "tudo";
+  const subF = S.subf || "ft";
+  const C = pode("create");
+  return `
+    <a class="fcal-todos" href="/frota/viaturas" style="display:inline-block;margin-bottom:.6rem">← Todas as viaturas</a>
+    <section class="fr-vh">
+      <label class="fr-vh-av" title="Fotografia principal — adicionar ou substituir">${avV(v, 96)}${pode("edit") ? `<input type="file" accept="image/*" hidden data-frfotoprin><span class="fr-vh-avt">${FOTO_PADRAO(v) ? "Trocar" : "+ Fotografia"}</span>` : ""}</label>
+      <div class="fr-vh-i">
+        <div class="fx2-mut">${esc(v.code)} · ${esc(tip)}</div>
+        <h2>${esc(v.plate)} <span>${esc([v.brand, v.model].filter(Boolean).join(" "))}</span></h2>
+        <div class="fx2-mut">${esc(sub1)}${v.company ? ` · ${esc(v.company)}` : ""}</div>
+        <div class="fr-vh-p">${pill(v.status, TOM_ESTADO[v.status] || "slate")}${m ? `<span class="fr-mot">${avM(m, 26)}${esc(m.name)}</span>` : `<span class="fx2-mut">Sem motorista atribuído</span>`}${v.odometer !== null && v.odometer !== undefined ? `<span>${fmt0(v.odometer)} ${un(v)}</span>` : ""}</div>
+      </div>
+      <div class="fr-vh-a">
+        ${C ? `<button type="button" class="finance-btn finance-btn--primary" data-frnovo="fab"><span class="material-symbols-outlined">local_gas_station</span> Abastecimento</button>
+        <button type="button" class="finance-btn" data-frnovo="fint"><span class="material-symbols-outlined">build</span> Manutenção</button>
+        <button type="button" class="finance-btn" data-frnovo="focr"><span class="material-symbols-outlined">car_crash</span> Ocorrência</button>
+        <button type="button" class="finance-btn" data-frnovo="fdoc"><span class="material-symbols-outlined">description</span> Documento</button>
+        <button type="button" class="finance-btn" data-frnovo="ofi"><span class="material-symbols-outlined">outbox</span> Oficina</button>` : ""}
+        <button type="button" class="finance-btn" data-frficha><span class="material-symbols-outlined">edit</span> Ficha</button>
+      </div>
+    </section>
+    <div class="fr-tabs">${abas.map(([k, ic, l]) => `<button type="button" class="fr-tab${MAIN === k ? " on" : ""}" data-frmain="${k}"><span class="material-symbols-outlined">${ic}</span>${esc(l)}</button>`).join("")}</div>
+    ${MAIN === "hist" ? `<div class="fr-tabs fr-tabs--sub">${HSUB.map(([k, l]) => `<button type="button" class="fr-tab${subH === k ? " on" : ""}" data-frsubh="${k}">${esc(l)}</button>`).join("")}</div>` : ""}
+    ${MAIN === "ficha" ? `<div class="fr-tabs fr-tabs--sub">${[["ft", "Ficha Técnica"], ["fot", "Fotografias"], ["doc", "Documentos"]].map(([k, l]) => `<button type="button" class="fr-tab${subF === k ? " on" : ""}" data-frsubf="${k}">${esc(l)}</button>`).join("")}</div>` : ""}
+    ${MAIN === "novo" ? vpNovos(v) : MAIN === "hist" ? vpHistorico(v, subH) : MAIN === "ficha" ? vpFicha(v, subF) : vpPainel(v)}`;
+}
+
+/** Ações da página da viatura (botões, separadores e fotografias). */
+async function acaoViatura(e) {
+  const t = e.target;
+  const v = vById(S.vid);
+  if (!v) return false;
+  const mm = t.closest("[data-frmain]");
+  if (mm) {
+    S.main = mm.dataset.frmain;
+    desenhar();
+    return true;
+  }
+  const sh = t.closest("[data-frsubh]");
+  if (sh) {
+    S.subh = sh.dataset.frsubh;
+    desenhar();
+    return true;
+  }
+  const sf = t.closest("[data-frsubf]");
+  if (sf) {
+    S.subf = sf.dataset.frsubf;
+    desenhar();
+    return true;
+  }
+  if (t.closest("[data-frficha]")) {
+    formViatura(v);
+    return true;
+  }
+  const nv = t.closest("[data-frnovo]");
+  if (nv) {
+    const k = nv.dataset.frnovo;
+    if (k === "fab") formAbastecimento({ date: S.d.hoje, vehicleId: v.id, driverId: v.driverId || "", fuelType: v.fuel || "Gasóleo", fullTank: true, paymentMethod: "Cartão de Combustível" });
+    if (k === "fint") formIntervencao({ date: S.d.hoje, entryDate: S.d.hoje, vehicleId: v.id, odometer: v.odometer ?? "", type: "Manutenção Preventiva", status: "Concluída", planIds: [], parts: [] });
+    if (k === "focr") formOcorrencia({ date: S.d.hoje, vehicleId: v.id, driverId: v.driverId || "", type: "Avaria", severity: "Média", status: "Aberta", immobilizes: false });
+    if (k === "multa") formOcorrencia({ date: S.d.hoje, vehicleId: v.id, driverId: v.driverId || "", type: "Multa", severity: "Baixa", status: "Aberta", immobilizes: false });
+    if (k === "fdoc") formDocumento({ vehicleId: v.id, type: "Inspecção Periódica", situation: "Em vigor" });
+    if (k === "seg") formSeguro(null, v.id);
+    if (k === "ofi") window.location.href = `/frota/oficina?pedido=${encodeURIComponent(v.id)}`;
+    return true;
+  }
+  const ot = t.closest("[data-frot]");
+  if (ot) {
+    window.location.href = `/frota/ordens?ot=${encodeURIComponent(ot.dataset.frot)}`;
+    return true;
+  }
+  return false;
+}
+
+/** Fotografias e anexos tratados diretamente na página (sem abrir o formulário). */
+async function ficheiroViatura(e) {
+  const t = e.target;
+  const v = vById(S.vid);
+  if (!v || t.type !== "file" || !t.files?.length) return;
+  try {
+    if (t.matches("[data-frfotoprin]")) {
+      await apiUpload(`/fleet/vehicles/${v.id}/files`, { file: t.files[0], fieldName: "file", extraFields: { slot: "tq" } });
+    } else if (t.matches("[data-fr-foto]")) {
+      await apiUpload(`/fleet/vehicles/${v.id}/files`, { file: t.files[0], fieldName: "file", extraFields: { slot: t.dataset.frFoto } });
+    } else if (t.matches("[data-fr-anexos]")) {
+      for (const f of t.files) await apiUpload(`/fleet/vehicles/${v.id}/files`, { file: f, fieldName: "file" });
+    } else return;
+    toast("Ficheiro enviado.");
+    await carregar();
+  } catch (er) {
+    toast(er.message || "Não foi possível enviar o ficheiro.", { type: "error" });
+  }
+}
+
 const VISTAS = {
+  viatura: vistaViatura,
   configuracoes: vistaConfiguracoes,
   painel: vistaPainel,
   alertas: vistaAlertas,
@@ -1327,7 +1680,7 @@ async function carregarCustos() {
 
 async function carregar() {
   try {
-    const precisaOv = S.vista === "painel" || S.vista === "alertas";
+    const precisaOv = S.vista === "painel" || S.vista === "alertas" || S.vista === "viatura";
     const [d, ov] = await Promise.all([apiRequest("/fleet/bootstrap"), precisaOv ? apiRequest(urlOverview()) : null]);
     S.d = d;
     if (ov) S.ov = ov;
@@ -1355,6 +1708,7 @@ export async function render(meta) {
   S.vista = meta?.vista || "painel";
   const qs = new URLSearchParams(window.location.search);
   S.v = qs.get("viatura") || "";
+  S.vid = qs.get("id") || "";
   S.tab = CFG_TABS.some(([k]) => k === qs.get("tab")) ? qs.get("tab") : "mot";
 
   const acts = document.getElementById("financePageActions");
@@ -1371,6 +1725,8 @@ export async function render(meta) {
     desenhar();
   });
   el.addEventListener("change", async (e) => {
+    if (S.vista === "viatura" && e.target.type === "file") return ficheiroViatura(e);
+    if (e.target.matches("[data-frmfoto]")) return fotoMotorista(e);
     const k = e.target.dataset.f;
     if (!k) return;
     S[k] = e.target.value;
@@ -1391,10 +1747,24 @@ export async function render(meta) {
     const c = e.target.closest?.(".fr-card[data-frv]");
     if (!c) return;
     e.preventDefault();
-    formViatura(vById(c.dataset.frv));
+    window.location.href = `/frota/viatura?id=${encodeURIComponent(c.dataset.frv)}`;
   });
   el.addEventListener("click", async (e) => {
     const t = e.target;
+    if (t.closest("[data-frm-stop]")) return; // o botão da fotografia só abre a escolha do ficheiro
+    if (S.vista === "viatura" && (await acaoViatura(e))) return;
+    const rmA = t.closest("[data-fr-anexo-rm]");
+    if (rmA && S.vista === "viatura") {
+      e.preventDefault();
+      if (!confirm("Tirar este ficheiro do registo?")) return;
+      try {
+        await apiRequest(`/fleet/vehicles/${S.vid}/files`, { method: "DELETE", body: { url: rmA.dataset.frAnexoRm } });
+        await carregar();
+      } catch (er) {
+        toast(er.message || "Não foi possível tirar o ficheiro.", { type: "error" });
+      }
+      return;
+    }
     const c = t.closest("[data-chip]");
     if (c) {
       const [k, v] = c.dataset.chip.split("|");
@@ -1454,7 +1824,7 @@ export async function render(meta) {
     }
     if (t.closest("a[href]") && !t.closest("[data-frv]")) return;
     const abrir = [
-      ["frv", (id) => formViatura(vById(id))],
+      ["frv", (id) => (window.location.href = `/frota/viatura?id=${encodeURIComponent(id)}`)],
       ["frm", (id) => formMotorista(mById(id))],
       ["frab", (id) => formAbastecimento(S.d.abastecimentos.find((x) => x.id === id))],
       ["frint", (id) => formIntervencao(S.d.intervencoes.find((x) => x.id === id))],
