@@ -1,0 +1,24 @@
+{
+  "_nota": "Apólices da frota (tabela de 2026-11). A coluna «Fim» da tabela não trazia datas: o fim é o início + 1 ano (decisão do utilizador). LD-30-80-IF → HLU-30-80-IF e LD-15-75-FO → LD-75-15-FO (matrículas da frota). HLU-12-65 não existe na frota: fica de fora.",
+  "corrigirMatricula": { "LD-30-80-IF": "HLU-30-80-IF", "LD-15-75-FO": "LD-75-15-FO" },
+  "apolices": [
+    { "policyNumber": "90/00301080SG-004", "insurer": "NOSSA-NOVA SOCIEDADE DE SEGUROS DE ANGOLA, S.A", "plate": "HLU-12-65", "coverages": ["Responsabilidade Civil Obrigatória"], "startDate": "2026-10-20", "premium": 23262.59, "periodicity": "SEMESTRAL" },
+    { "policyNumber": "90/1445906SG-010", "insurer": "NOSSA-NOVA SOCIEDADE DE SEGUROS DE ANGOLA, S.A", "plate": "LDA-22-82-AA", "coverages": [], "startDate": "2026-08-25", "premium": 114885.30, "periodicity": "ANUAL" },
+    { "policyNumber": "90/00422595SG-022", "insurer": "NOSSA-NOVA SOCIEDADE DE SEGUROS DE ANGOLA, S.A", "plate": "LDA-22-81-AA", "coverages": [], "startDate": "2026-08-24", "premium": 114885.30, "periodicity": "ANUAL" },
+    { "policyNumber": "90/00297512SG-005", "insurer": "NOSSA-NOVA SOCIEDADE DE SEGUROS DE ANGOLA, S.A", "plate": "LD-03-98-ID", "coverages": [], "startDate": "2026-09-03", "premium": 11638.79, "periodicity": "TRIMESTRAL" },
+    { "policyNumber": "51-00822160SG-021", "insurer": "FIDELIDADE", "plate": "LD-94-63-HQ", "coverages": [], "startDate": "2026-09-26", "premium": 479192.28, "periodicity": "SEMESTRAL" },
+    { "policyNumber": "51-00822152SG-020", "insurer": "FIDELIDADE", "plate": "LD-86-05-HP", "coverages": [], "startDate": "2026-09-26", "premium": 319578.82, "periodicity": "SEMESTRAL" },
+    { "policyNumber": "51-00822159SG-013", "insurer": "FIDELIDADE", "plate": "LD-64-09-HP", "coverages": [], "startDate": "2026-09-26", "premium": null, "periodicity": "SEMESTRAL" },
+    { "policyNumber": "51-00822160SG-016", "insurer": "FIDELIDADE", "plate": "LD-09-64-HI", "coverages": [], "startDate": "2026-09-26", "premium": null, "periodicity": "SEMESTRAL" },
+    { "policyNumber": "51 00822155SG-008", "insurer": "FIDELIDADE", "plate": "LD-86-04-HP", "coverages": [], "startDate": "2026-09-26", "premium": null, "periodicity": "SEMESTRAL" },
+    { "policyNumber": "90/00303505SG-006", "insurer": "NOSSA-NOVA SOCIEDADE DE SEGUROS DE ANGOLA, S.A", "plate": "LD-30-80-IF", "coverages": ["Todos os Riscos"], "startDate": "2026-11-19", "premium": 19197.52, "periodicity": "TRIMESTRAL" },
+    { "policyNumber": "90/00236998SG-007", "insurer": "NOSSA-NOVA SOCIEDADE DE SEGUROS DE ANGOLA, S.A", "plate": "LD-15-75-FO", "coverages": [], "startDate": "2026-11-04", "premium": 15601.72, "periodicity": "SEMESTRAL" },
+    { "policyNumber": "90/298699SG-014", "insurer": "NOSSA-NOVA SOCIEDADE DE SEGUROS DE ANGOLA, S.A", "plate": "LD-71-96-HZ", "coverages": [], "startDate": "2026-09-16", "premium": 15070.48, "periodicity": "TRIMESTRAL" },
+    { "policyNumber": "90/386386SG-019", "insurer": "NOSSA-NOVA SOCIEDADE DE SEGUROS DE ANGOLA, S.A", "plate": "NBF-14-14", "coverages": [], "startDate": "2026-09-15", "premium": 42823.30, "periodicity": "TRIMESTRAL" },
+    { "policyNumber": "90/386432SG-012", "insurer": "NOSSA-NOVA SOCIEDADE DE SEGUROS DE ANGOLA, S.A", "plate": "HLU-12-80", "coverages": ["Responsabilidade Civil Obrigatória"], "startDate": "2026-09-15", "premium": null, "periodicity": "TRIMESTRAL" },
+    { "policyNumber": "90/00386384SG-023", "insurer": "NOSSA-NOVA SOCIEDADE DE SEGUROS DE ANGOLA, S.A", "plate": "LD-80-83-EI", "coverages": [], "startDate": "2026-09-15", "premium": 42823.30, "periodicity": "TRIMESTRAL" },
+    { "policyNumber": "90/386338SG-018", "insurer": "NOSSA-NOVA SOCIEDADE DE SEGUROS DE ANGOLA, S.A", "plate": "LD-71-99-HZ", "coverages": [], "startDate": "2026-09-15", "premium": 7672.00, "periodicity": "TRIMESTRAL" },
+    { "policyNumber": "90/386403SG-015", "insurer": "NOSSA-NOVA SOCIEDADE DE SEGUROS DE ANGOLA, S.A", "plate": "LD-71-97-HZ", "coverages": ["Responsabilidade Civil Obrigatória"], "startDate": "2026-09-15", "premium": 9500.34, "periodicity": "TRIMESTRAL" },
+    { "policyNumber": "90/386405SG-017", "insurer": "NOSSA-NOVA SOCIEDADE DE SEGUROS DE ANGOLA, S.A", "plate": "LD-71-98-HZ", "coverages": [], "startDate": "2026-09-15", "premium": 11638.79, "periodicity": "TRIMESTRAL" }
+  ]
+}

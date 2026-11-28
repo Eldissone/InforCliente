@@ -24,7 +24,7 @@ const SITUACOES_DOCUMENTO = ["Em vigor", "Não se aplica", "Arquivado"];
 const COMBUSTIVEIS = ["Gasóleo", "Gasolina", "Eléctrico", "Híbrido"];
 const PAGAMENTOS = ["Cartão de Combustível", "Numerário", "Fundo de Maneio", "Transferência", "Crédito no Posto", "Outro"];
 const CATEGORIAS_CARTA = ["A", "B", "B/C", "C", "C/CE", "C + E", "D", "D/E"];
-const COBERTURAS = ["Responsabilidade Civil", "Danos Próprios", "Quebra de Vidros", "Furto / Roubo", "Incêndio", "Ocupantes", "Assistência em Viagem"];
+const COBERTURAS = ["Responsabilidade Civil Obrigatória", "Todos os Riscos", "Responsabilidade Civil", "Danos Próprios", "Quebra de Vidros", "Furto / Roubo", "Incêndio", "Ocupantes", "Assistência em Viagem"];
 const PERIODICIDADES = ["ANUAL", "SEMESTRAL", "TRIMESTRAL", "MENSAL"];
 const UNIDADES = [["KM", "Quilómetros"], ["HORAS", "Horas"], ["KM_HORAS", "Quilómetros / horas"]];
 const PROPRIEDADES = [["PROPRIA", "Própria"], ["ALUGADA", "Alugada"], ["LEASING", "Leasing"]];
@@ -344,8 +344,8 @@ const FOTOS = [["tq", "3/4 Frente — Principal"], ["frente", "Frente"], ["trase
 
 /** Campos da ficha técnica e de identificação (guardados em FleetVehicle.details). */
 const FICHA = {
-  texto: ["caixa", "cor", "vin", "motor", "versao", "base", "departamento", "vendedor", "tractorId", "eixos", "tracao", "capac", "dim", "pnF", "pnT", "pnMarca", "jante", "janteMed", "furos", "prF", "prT", "gps", "kit"],
-  maiusculas: ["cor", "vin", "motor", "versao", "base", "departamento", "vendedor", "pnMarca"],
+  texto: ["categoria", "utilizacao", "caixa", "cor", "vin", "motor", "versao", "base", "departamento", "vendedor", "tractorId", "eixos", "tracao", "capac", "dim", "pnF", "pnT", "pnMarca", "jante", "janteMed", "furos", "prF", "prT", "gps", "kit"],
+  maiusculas: ["categoria", "utilizacao", "cor", "vin", "motor", "versao", "base", "departamento", "vendedor", "pnMarca"],
   numero: ["cilindrada", "potencia", "kmInicial", "suplentes", "lugares", "pbt", "tara", "carga"],
   data: ["dataEntrada", "dataMat", "extintor"],
 };

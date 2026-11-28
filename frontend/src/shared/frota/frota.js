@@ -334,7 +334,9 @@ function formViatura(o = { tipologia: "VIATURA", unit: "KM", ownership: "PROPRIA
     { k: "details.dataMat", l: "Data da matrícula", t: "date" },
     { k: "details.vendedor", l: "Vendedor / fornecedor" },
     { sec: "Dados da Viatura / Máquina" },
-    { k: "kind", l: "Tipo", req: 1, ph: "LIGEIRA, PESADA, ESCAVADORA, GERADOR…", list: "frTipos" },
+    { k: "kind", l: "Tipo de viatura", req: 1, ph: "PICK-UP, CAMIÃO, AUTOCARRO, FURGÃO…", list: "frTipos" },
+    { k: "details.categoria", l: "Categoria", ph: "LIGEIRO CARGA, PASSAGEIROS, PESADOS…", list: "frCategorias" },
+    { k: "details.utilizacao", l: "Tipo de utilização", ph: "CARGA GERAL, DISTRIBUIÇÃO, DIRECÇÃO / EXECUTIVO…", list: "frUtilizacoes" },
     { k: "unit", l: "Unidade de utilização", t: "select", opts: L().unidades },
     { k: "plate", l: "Matrícula", req: 1, ph: "ex.: LD-12-34-AB" },
     { k: "brand", l: "Marca", req: 1 },
@@ -398,6 +400,8 @@ function formViatura(o = { tipologia: "VIATURA", unit: "KM", ownership: "PROPRIA
       <td><input class="finance-input" data-p="ultData" type="date" value="${esc(p.ultData || "")}"></td>
       <td><button type="button" class="finance-btn" data-p-rm title="Remover">✕</button></td></tr>`;
   const extraHtml = `<datalist id="frTipos">${tipos.map((t) => `<option value="${esc(t)}">`).join("")}</datalist>
+    <datalist id="frCategorias">${[...new Set(S.d.viaturas.map((v) => v.details?.categoria).filter(Boolean))].sort().map((t) => `<option value="${esc(t)}">`).join("")}</datalist>
+    <datalist id="frUtilizacoes">${[...new Set(S.d.viaturas.map((v) => v.details?.utilizacao).filter(Boolean))].sort().map((t) => `<option value="${esc(t)}">`).join("")}</datalist>
     <section class="fx2-blk fr-sec"><h3>Manutenção — Planos Preventivos</h3>
       <p class="fx2-mut" style="margin:0 0 .5rem">Ex.: revisão a cada 10 000 km ou 12 meses. A intervenção que cumpre o plano atualiza a última execução.</p>
       <div class="fx2-tw"><table class="fx2-t"><thead><tr><th>Plano</th><th>Cada (km / h)</th><th>Cada (meses)</th><th>Última (km / h)</th><th>Última (data)</th><th></th></tr></thead>
@@ -1519,7 +1523,7 @@ function vpFicha(v, sub) {
   const tip = (L().tipologias.find(([k]) => k === v.tipologia) || [0, v.tipologia])[1];
   const prop = (L().propriedades.find(([k]) => k === v.ownership) || [0, v.ownership])[1];
   const eixo = (L().eixos.find(([k]) => k === d.eixos) || [0, d.eixos])[1];
-  const t1 = [R("Tipologia", tip), R("Empresa proprietária", v.company), R("Código", v.code), R("Matrícula", v.plate), R("Marca", v.brand), R("Modelo", v.model), R("Versão", d.versao), R("Tipo", v.kind), R("Ano", v.year), R("Data da matrícula", d.dataMat && fmtData(d.dataMat)), R("Cor", d.cor), R("N.º de chassis (VIN)", d.vin), R("N.º de motor", d.motor), R("Data de entrada", d.dataEntrada && fmtData(d.dataEntrada)), R("Km inicial", d.kmInicial !== undefined ? fmt0(d.kmInicial) : ""), R("Valor de aquisição", v.acquisitionValue ? fmt(v.acquisitionValue) : ""), R("Vendedor", d.vendedor), R("Propriedade", prop), R("Atribuída a", v.assignedTo), R("Base", d.base), R("Departamento", d.departamento)].join("");
+  const t1 = [R("Tipologia", tip), R("Empresa proprietária", v.company), R("Código", v.code), R("Matrícula", v.plate), R("Marca", v.brand), R("Modelo", v.model), R("Versão", d.versao), R("Tipo de viatura", v.kind), R("Categoria", d.categoria), R("Tipo de utilização", d.utilizacao), R("Ano", v.year), R("Data da matrícula", d.dataMat && fmtData(d.dataMat)), R("Cor", d.cor), R("N.º de chassis (VIN)", d.vin), R("N.º de motor", d.motor), R("Data de entrada", d.dataEntrada && fmtData(d.dataEntrada)), R("Km inicial", d.kmInicial !== undefined ? fmt0(d.kmInicial) : ""), R("Valor de aquisição", v.acquisitionValue ? fmt(v.acquisitionValue) : ""), R("Vendedor", d.vendedor), R("Propriedade", prop), R("Atribuída a", v.assignedTo), R("Base", d.base), R("Departamento", d.departamento)].join("");
   const t2 = [R("Combustível", v.fuel), R("Cilindrada (cc)", d.cilindrada), R("Potência (cv)", d.potencia), R("Caixa", d.caixa), R("Tração", d.tracao), R("Lugares", d.lugares), R("Peso bruto (kg)", d.pbt), R("Tara (kg)", d.tara), R("Carga útil (kg)", d.carga), R("Depósito (L)", v.tankCapacity), R(`Consumo de referência (${un(v) === "h" ? "L/h" : "L/100"})`, v.refConsumption), R("Eixos", eixo), R("Pneus suplentes", d.suplentes), R("Pneus frente", d.pnF), R("Pneus trás", d.pnT), R("Jante", [d.jante, d.janteMed].filter(Boolean).join(" ")), R("Fixação da roda", d.furos), R("Pressão frente / trás", [d.prF, d.prT].filter(Boolean).join(" / ")), R("Marca dos pneus", d.pnMarca), R("Rastreador / GPS", d.gps), R("Extintor (validade)", d.extintor && fmtData(d.extintor)), R("Kit de segurança", d.kit), R("Capacidade / equipamento", d.capac), R("Dimensões", d.dim), R("Utilização", v.odometer !== null && v.odometer !== undefined ? `${fmt0(v.odometer)} ${un(v)}` : "")].join("");
   return `<section class="fx2-blk"><h3 style="display:flex;align-items:center">Ficha Técnica ${pode("edit") ? `<button type="button" class="finance-btn finance-btn--primary" style="margin-left:auto" data-frficha>✎ Editar Ficha</button>` : ""}</h3>
     <div class="fx2-cols"><table class="fx2-t fr-kv">${t1}</table><table class="fx2-t fr-kv">${t2}</table></div></section>`;
