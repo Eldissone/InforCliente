@@ -50,8 +50,8 @@ export const APP_MENU = [
           },
         ],
       },
-      // Mesma lista que Compras › Produtos e Serviços; aqui só fica marcado no formulário de registo
-      { label: "Produtos e Serviços", icon: "inventory_2", href: "/produtos", activePath: "/registos/produtos", perm: "materiais:view" },
+      // Abre o formulário Novo Produto / Serviço (a lista fica em Compras › Produtos e Serviços)
+      { label: "Produtos e Serviços", icon: "inventory_2", href: "/registos/produtos", perm: "materiais:view" },
       { label: "Categorias de Produtos e Serviços", icon: "category", href: "/registos/categorias-produtos", perm: "materiais:view" },
       { label: "Equipamentos, Maquinarias e Viaturas", icon: "agriculture", href: "/registos/equipamentos", perm: "ferramentas:view" },
       { label: "Pessoal", icon: "badge", href: "/registos/pessoal", perm: "cadastros:view" },
