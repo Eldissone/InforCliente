@@ -61,7 +61,7 @@ export const APP_MENU = [
   {
     type: "group",
     label: "Comercial",
-    icon: "request_quote",
+    icon: "handshake",
     navPerm: "navlinks:nav_comercial",
     children: [
       {
