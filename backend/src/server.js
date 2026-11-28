@@ -39,6 +39,7 @@ const { helpTicketRoutes } = require("./routes/helpTickets");
 const { contactRoutes, sectorRoutes, personnelRoutes } = require("./routes/registry");
 const { financeRoutes } = require("./routes/finance");
 const { comprasStockRoutes } = require("./routes/comprasStock");
+const { fleetRoutes } = require("./routes/fleet");
 const { baremRoutes } = require("./routes/baremes");
 const { companySettingsRoutes } = require("./routes/companySettings");
 const { budgetRoutes } = require("./routes/budgets");
@@ -163,6 +164,7 @@ app.use("/requisitions", requisitionRoutes);
 app.use("/finance", financeRoutes);
 // Área Compras e Stock (base de preços, compromissos, conta corrente de fornecedores, stock)
 app.use("/compras-stock", comprasStockRoutes);
+app.use("/fleet", fleetRoutes);
 
 // Backups
 app.use("/backups", backupRoutes);

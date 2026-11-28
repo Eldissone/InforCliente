@@ -8,47 +8,47 @@ datasource db {
 }
 
 model User {
-  id                       String                    @id @default(cuid())
-  email                    String                    @unique
+  id                       String                      @id @default(cuid())
+  email                    String                      @unique
   name                     String?
   passwordHash             String
-  role                     Role                      @default(leitura)
-  createdAt                DateTime                  @default(now())
+  role                     Role                        @default(leitura)
+  createdAt                DateTime                    @default(now())
   clientId                 String?
   profilePic               String?
   items                    Item[]
-  client                   Client?                   @relation("PrimaryClient", fields: [clientId], references: [id])
+  client                   Client?                     @relation("PrimaryClient", fields: [clientId], references: [id])
   accounts                 UserClient[]
-  assignedProjects         Project[]                 @relation("AssignedUsers")
+  assignedProjects         Project[]                   @relation("AssignedUsers")
   dailyPlanTasks           DailyPlanTask[]
   permissions              UserPermission[]
   systemLogs               SystemLog[]
   profile                  UserProfile?
   presence                 UserPresence?
   conversationParticipants ConversationParticipant[]
-  sentMessages             Message[]                 @relation("MessageSender")
+  sentMessages             Message[]                   @relation("MessageSender")
   messageReads             MessageRead[]
-  mentionsReceived         Mention[]                 @relation("MentionsReceived")
+  mentionsReceived         Mention[]                   @relation("MentionsReceived")
   notifications            Notification[]
   notificationPreference   UserNotificationPreference?
   aiRequests               AiRequestLog[]
   aiConversations          AiConversation[]
   aiDigests                AiDigest[]
   permissionAuditLogs      PermissionAuditLog[]
-  helpTicketsCreated       HelpTicket[]              @relation("HelpTicketAuthor")
-  helpTicketsResolved      HelpTicket[]              @relation("HelpTicketResolver")
-  contactsCreated          Contact[]                 @relation("ContactCreatedBy")
-  sectorsCreated           Sector[]                  @relation("SectorCreatedBy")
-  personnelCreated         Personnel[]               @relation("PersonnelCreatedBy")
-  registryImportBatches    RegistryImportBatch[]     @relation("RegistryImportBatchCreatedBy")
-  budgetsCreated           Budget[]                  @relation("BudgetCreatedBy")
-  baremItemsCreated        BaremItem[]               @relation("BaremCreatedBy")
-  baremPriceChanges        BaremPriceHistory[]       @relation("BaremPriceChangedBy")
-  companySettingsUpdated   CompanySetting[]          @relation("CompanySettingUpdatedBy")
-  proposalsCreated         Proposal[]                @relation("ProposalCreatedBy")
-  proposalsSent            Proposal[]                @relation("ProposalSentBy")
-  requisitionsRequested    MaterialRequisition[]     @relation("RequisitionRequestedBy")
-  requisitionsApproved     MaterialRequisition[]     @relation("RequisitionApprovedBy")
+  helpTicketsCreated       HelpTicket[]                @relation("HelpTicketAuthor")
+  helpTicketsResolved      HelpTicket[]                @relation("HelpTicketResolver")
+  contactsCreated          Contact[]                   @relation("ContactCreatedBy")
+  sectorsCreated           Sector[]                    @relation("SectorCreatedBy")
+  personnelCreated         Personnel[]                 @relation("PersonnelCreatedBy")
+  registryImportBatches    RegistryImportBatch[]       @relation("RegistryImportBatchCreatedBy")
+  budgetsCreated           Budget[]                    @relation("BudgetCreatedBy")
+  baremItemsCreated        BaremItem[]                 @relation("BaremCreatedBy")
+  baremPriceChanges        BaremPriceHistory[]         @relation("BaremPriceChangedBy")
+  companySettingsUpdated   CompanySetting[]            @relation("CompanySettingUpdatedBy")
+  proposalsCreated         Proposal[]                  @relation("ProposalCreatedBy")
+  proposalsSent            Proposal[]                  @relation("ProposalSentBy")
+  requisitionsRequested    MaterialRequisition[]       @relation("RequisitionRequestedBy")
+  requisitionsApproved     MaterialRequisition[]       @relation("RequisitionApprovedBy")
 
   @@index([clientId])
 }
@@ -177,14 +177,14 @@ enum NotificationPriority {
 }
 
 model Notification {
-  id        String           @id @default(cuid())
-  userId    String
-  type      NotificationType
-  title     String
-  body      String?
-  link      String?
-  read      Boolean          @default(false)
-  metadata  Json?
+  id         String               @id @default(cuid())
+  userId     String
+  type       NotificationType
+  title      String
+  body       String?
+  link       String?
+  read       Boolean              @default(false)
+  metadata   Json?
   /// Prioridade define o som/destaque no frontend (URGENT = alarme).
   priority   NotificationPriority @default(NORMAL)
   /// Obra a que a notificação diz respeito (filtros e silenciar por obra).
@@ -193,9 +193,9 @@ model Notification {
   /// fundidas numa só (groupCount conta as ocorrências; createdAt = última).
   groupKey   String?
   groupCount Int                  @default(1)
-  createdAt DateTime         @default(now())
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  project   Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdAt  DateTime             @default(now())
+  user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project    Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   @@index([userId, read, createdAt])
   @@index([userId, groupKey])
@@ -281,88 +281,88 @@ model ClientTag {
 }
 
 model Project {
-  id                  String                   @id @default(cuid())
-  code                String                   @unique
-  name                String
-  location            String?
-  region              String?
-  status              ProjectStatus            @default(ACTIVE)
-  active              Boolean                  @default(true)
-  startDate           DateTime?
-  dueDate             DateTime?
-  launchDate          DateTime?
-  actualEndDate       DateTime?
-  budgetTotal         Decimal                  @db.Decimal(16, 2)
-  budgetAllocated     Decimal                  @db.Decimal(16, 2)
-  budgetConsumed      Decimal                  @db.Decimal(16, 2)
-  budgetCommitted     Decimal                  @db.Decimal(16, 2)
-  budgetAvailable     Decimal                  @db.Decimal(16, 2)
-  budgetVersion       Int                      @default(1)
-  physicalProgressPct Float                    @default(0)
-  currency            String?                  @default("AOA")
-  phaseLabel          String?
-  createdAt           DateTime                 @default(now())
-  updatedAt           DateTime                 @updatedAt
-  clientId            String?
-  contact             String?
-  projectType         String?
-  empreiteiro         String?
-  subempreiteiro      String?
-  directorObra        String?
-  directorPhoto       String?
-  directorPhone       String?
-  directorEmail       String?
-  technicians         Json?                    @default("[]")
-  referencia          String?
-  lastAccidentDate    DateTime?
-  activeStaffCount    Int?                     @default(0)
-  safetyHistory       Json?
-  maoDeObraIndireta   Json?
-  maoDeObraDireta     Json?
-  equipamentos        Json?
-  alerts              Alert[]
-  client              Client?                  @relation(fields: [clientId], references: [id])
-  budgetLines         ProjectBudgetLine[]
-  files               ProjectFile[]
-  folders             ProjectFolder[]
-  payments            ProjectPayment[]
-  photos              ProjectPhoto[]
-  safetyObservations  SafetyObservation[]
-  progressHistory     ProjectProgressHistory[]
-  progressTasks       ProjectProgressTask[]
-  measurementReports  MeasurementReport[]
-  plannedMeasurements PlannedMeasurement[]
-  cardAllocations CardAllocation[]
-  financings      Financing[]
-  transactions        ProjectTransaction[]
-  stockMovements      StockMovement[]
-  warehouses          Warehouse[]
-  assignedUsers       User[]                   @relation("AssignedUsers")
-  dailyPlans          DailyPlan[]
-  materialPlans       ProjectMaterialPlan[]
-  costCenters         CostCenter[]
-  workNeeds           WorkNeed[]
-  costPayments        CostPayment[]
-  pettyCashFunds      PettyCashFund[]
-  extraRequests       ExtraRequest[]
-  freightAllocations  FreightAllocation[]
-  purchaseOrders      PurchaseOrder[]
-  quoteSupplierOrders QuoteSupplierOrder[]
-  personnel           Personnel[]
+  id                   String                   @id @default(cuid())
+  code                 String                   @unique
+  name                 String
+  location             String?
+  region               String?
+  status               ProjectStatus            @default(ACTIVE)
+  active               Boolean                  @default(true)
+  startDate            DateTime?
+  dueDate              DateTime?
+  launchDate           DateTime?
+  actualEndDate        DateTime?
+  budgetTotal          Decimal                  @db.Decimal(16, 2)
+  budgetAllocated      Decimal                  @db.Decimal(16, 2)
+  budgetConsumed       Decimal                  @db.Decimal(16, 2)
+  budgetCommitted      Decimal                  @db.Decimal(16, 2)
+  budgetAvailable      Decimal                  @db.Decimal(16, 2)
+  budgetVersion        Int                      @default(1)
+  physicalProgressPct  Float                    @default(0)
+  currency             String?                  @default("AOA")
+  phaseLabel           String?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  clientId             String?
+  contact              String?
+  projectType          String?
+  empreiteiro          String?
+  subempreiteiro       String?
+  directorObra         String?
+  directorPhoto        String?
+  directorPhone        String?
+  directorEmail        String?
+  technicians          Json?                    @default("[]")
+  referencia           String?
+  lastAccidentDate     DateTime?
+  activeStaffCount     Int?                     @default(0)
+  safetyHistory        Json?
+  maoDeObraIndireta    Json?
+  maoDeObraDireta      Json?
+  equipamentos         Json?
+  alerts               Alert[]
+  client               Client?                  @relation(fields: [clientId], references: [id])
+  budgetLines          ProjectBudgetLine[]
+  files                ProjectFile[]
+  folders              ProjectFolder[]
+  payments             ProjectPayment[]
+  photos               ProjectPhoto[]
+  safetyObservations   SafetyObservation[]
+  progressHistory      ProjectProgressHistory[]
+  progressTasks        ProjectProgressTask[]
+  measurementReports   MeasurementReport[]
+  plannedMeasurements  PlannedMeasurement[]
+  cardAllocations      CardAllocation[]
+  financings           Financing[]
+  transactions         ProjectTransaction[]
+  stockMovements       StockMovement[]
+  warehouses           Warehouse[]
+  assignedUsers        User[]                   @relation("AssignedUsers")
+  dailyPlans           DailyPlan[]
+  materialPlans        ProjectMaterialPlan[]
+  costCenters          CostCenter[]
+  workNeeds            WorkNeed[]
+  costPayments         CostPayment[]
+  pettyCashFunds       PettyCashFund[]
+  extraRequests        ExtraRequest[]
+  freightAllocations   FreightAllocation[]
+  purchaseOrders       PurchaseOrder[]
+  quoteSupplierOrders  QuoteSupplierOrder[]
+  personnel            Personnel[]
   personnelAssignments PersonnelProject[]
-  pauses              ProjectPause[]
-  projectContacts     ProjectContact[]
-  invoices            Invoice[]
-  bankMovements       BankMovement[]
-  notifications       Notification[]
+  pauses               ProjectPause[]
+  projectContacts      ProjectContact[]
+  invoices             Invoice[]
+  bankMovements        BankMovement[]
+  notifications        Notification[]
   materialRequisitions MaterialRequisition[]
-  aiExclusion         AiDataExclusion?
-  aiConversations     AiConversation[]
+  aiExclusion          AiDataExclusion?
+  aiConversations      AiConversation[]
   /// Orçamento que originou esta obra (adjudicação)
-  sourceBudget        Budget?
+  sourceBudget         Budget?
 
   // ─── Configuração de faturação da obra (Área Financeira) ───
-  billingVatCativo          Boolean @default(false) // IVA cativo: recebimento não considera IVA
+  billingVatCativo          Boolean  @default(false) // IVA cativo: recebimento não considera IVA
   billingVatPercent         Decimal? @db.Decimal(5, 2) // % IVA aplicada
   billingWithholdingPercent Decimal? @db.Decimal(5, 2) // % Retenção na Fonte
   billingCarPercent         Decimal? @db.Decimal(5, 2) // % Seguro CAR
@@ -487,30 +487,30 @@ model InteractionEvent {
 }
 
 model Alert {
-  id        String        @id @default(cuid())
-  severity  AlertSeverity @default(MEDIUM)
-  status    AlertStatus   @default(OPEN)
-  title     String
-  body      String?
-  createdAt DateTime      @default(now())
-  clientId  String?
-  projectId String?
+  id               String        @id @default(cuid())
+  severity         AlertSeverity @default(MEDIUM)
+  status           AlertStatus   @default(OPEN)
+  title            String
+  body             String?
+  createdAt        DateTime      @default(now())
+  clientId         String?
+  projectId        String?
   /// Alertas da IA (Fase 3.2): CHAIN_DELAY | MATERIAL_SHORTAGE | STALLED_NEED | BUDGET_OVERRUN
-  kind          String?
+  kind             String?
   /// Identifica a situação (ex.: "MATERIAL_SHORTAGE:obra:produto") para não repetir o alerta.
-  fingerprint   String?   @unique
+  fingerprint      String?       @unique
   /// Factos do sistema que deram origem ao alerta.
-  metadata      Json?
+  metadata         Json?
   /// Explicação/sugestão escrita pela IA a partir dos factos (opcional).
-  aiExplanation String?
+  aiExplanation    String?
   /// Interno: nunca mostrado a utilizadores com perfil cliente.
-  internal      Boolean   @default(false)
-  lastSeenAt    DateTime?
-  resolvedAt    DateTime?
+  internal         Boolean       @default(false)
+  lastSeenAt       DateTime?
+  resolvedAt       DateTime?
   /// Gravidade com que o alerta já foi enviado como urgente (evita repetir).
   notifiedSeverity String?
-  client    Client?       @relation(fields: [clientId], references: [id])
-  project   Project?      @relation(fields: [projectId], references: [id])
+  client           Client?       @relation(fields: [clientId], references: [id])
+  project          Project?      @relation(fields: [projectId], references: [id])
 
   @@index([status, severity, createdAt])
   @@index([projectId, status])
@@ -612,19 +612,19 @@ model ProjectPayment {
 }
 
 model Warehouse {
-  id              String           @id @default(cuid())
-  name            String
-  type            WarehouseType    @default(CENTRAL)
-  active          Boolean          @default(true)
-  visibleToClient Boolean          @default(false)
-  projectId       String?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  items           Item[]
-  targetItems     Item[]           @relation("ItemTargetWarehouse")
-  movements       StockMovement[]
-  project         Project?         @relation(fields: [projectId], references: [id])
-  stock           WarehouseStock[]
+  id               String                @id @default(cuid())
+  name             String
+  type             WarehouseType         @default(CENTRAL)
+  active           Boolean               @default(true)
+  visibleToClient  Boolean               @default(false)
+  projectId        String?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  items            Item[]
+  targetItems      Item[]                @relation("ItemTargetWarehouse")
+  movements        StockMovement[]
+  project          Project?              @relation(fields: [projectId], references: [id])
+  stock            WarehouseStock[]
   requisitionsFrom MaterialRequisition[] @relation("RequisitionSourceWarehouse")
   requisitionsTo   MaterialRequisition[] @relation("RequisitionTargetWarehouse")
 
@@ -632,46 +632,46 @@ model Warehouse {
 }
 
 model Product {
-  id                 String                @id @default(cuid())
-  sku                String?               @unique
-  barcode            String?               @unique
-  name               String
-  description        String?
-  image              String?
-  category           ProductCategory       @default(MATERIAL)
-  unit               ProductUnit           @default(UN)
-  minStock           Decimal               @default(0) @db.Decimal(16, 4)
-  active             Boolean               @default(true)
+  id                   String                    @id @default(cuid())
+  sku                  String?                   @unique
+  barcode              String?                   @unique
+  name                 String
+  description          String?
+  image                String?
+  category             ProductCategory           @default(MATERIAL)
+  unit                 ProductUnit               @default(UN)
+  minStock             Decimal                   @default(0) @db.Decimal(16, 4)
+  active               Boolean                   @default(true)
   /// RG1 (protótipo): PRODUTO ou SERVICO
-  kind               String                @default("PRODUTO")
+  kind                 String                    @default("PRODUTO")
   /// Condição: COMERCIAL (orçamentos e propostas), COMPRA (compras e pedidos de pagamento) e outras
-  conditions         String[]              @default([])
-  vatPercent         Decimal?              @db.Decimal(5, 2)
-  withholdingPercent Decimal?              @db.Decimal(5, 2)
-  notes              String?
+  conditions           String[]                  @default([])
+  vatPercent           Decimal?                  @db.Decimal(5, 2)
+  withholdingPercent   Decimal?                  @db.Decimal(5, 2)
+  notes                String?
   catalogCategoryId    String?
   catalogSubcategoryId String?
-  createdAt          DateTime              @default(now())
-  updatedAt          DateTime              @updatedAt
-  catalogCategory    CatalogCategory?      @relation("ProdutoCategoria", fields: [catalogCategoryId], references: [id], onDelete: SetNull)
-  catalogSubcategory CatalogCategory?      @relation("ProdutoSubcategoria", fields: [catalogSubcategoryId], references: [id], onDelete: SetNull)
-  items              Item[]
-  movements          StockMovement[]
-  stock              WarehouseStock[]
-  dailyPlanMaterials DailyPlanMaterial[]
-  projectPlans       ProjectMaterialPlan[]
-  aliases            ProductAlias[]
-  supplierProducts   SupplierProduct[]
-  requisitionItems   MaterialRequisitionItem[]
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  catalogCategory      CatalogCategory?          @relation("ProdutoCategoria", fields: [catalogCategoryId], references: [id], onDelete: SetNull)
+  catalogSubcategory   CatalogCategory?          @relation("ProdutoSubcategoria", fields: [catalogSubcategoryId], references: [id], onDelete: SetNull)
+  items                Item[]
+  movements            StockMovement[]
+  stock                WarehouseStock[]
+  dailyPlanMaterials   DailyPlanMaterial[]
+  projectPlans         ProjectMaterialPlan[]
+  aliases              ProductAlias[]
+  supplierProducts     SupplierProduct[]
+  requisitionItems     MaterialRequisitionItem[]
 }
 
 model ProductAlias {
-  id          String   @id @default(cuid())
-  productId   String
-  alias       String
-  normalized  String   @unique
-  createdAt   DateTime @default(now())
-  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id         String   @id @default(cuid())
+  productId  String
+  alias      String
+  normalized String   @unique
+  createdAt  DateTime @default(now())
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([productId])
 }
@@ -720,12 +720,12 @@ model Item {
 }
 
 model StockMovement {
-  id              String         @id @default(cuid())
+  id              String               @id @default(cuid())
   projectId       String?
   type            MovementType
-  quantity        Decimal        @db.Decimal(16, 4)
+  quantity        Decimal              @db.Decimal(16, 4)
   notes           String?
-  createdAt       DateTime       @default(now())
+  createdAt       DateTime             @default(now())
   evidenceUrl     String?
   vehicleImageUrl String?
   ownerId         String?
@@ -742,16 +742,16 @@ model StockMovement {
   /// Custo unitario usado neste movimento (entrada: o de compra; saida: o custo medio
   /// do armazem no momento). Gravado quando o movimento e feito, para o custo da obra
   /// nao mudar quando o custo medio mudar depois.
-  unitCost        Decimal?       @db.Decimal(16, 4)
-  totalValue      Decimal?       @db.Decimal(16, 2)
+  unitCost        Decimal?             @db.Decimal(16, 4)
+  totalValue      Decimal?             @db.Decimal(16, 2)
   /// Requisicao de material que originou este movimento, quando ha.
   requisitionId   String?
   photos          ProjectPhoto[]
-  product         Product        @relation(fields: [productId], references: [id])
-  project         Project?       @relation(fields: [projectId], references: [id])
-  warehouse       Warehouse      @relation(fields: [warehouseId], references: [id])
-  sourceQuote     NeedQuote?     @relation(fields: [sourceQuoteId], references: [id], onDelete: SetNull)
-  dailyPlan       DailyPlan?     @relation(fields: [dailyPlanId], references: [id], onDelete: SetNull)
+  product         Product              @relation(fields: [productId], references: [id])
+  project         Project?             @relation(fields: [projectId], references: [id])
+  warehouse       Warehouse            @relation(fields: [warehouseId], references: [id])
+  sourceQuote     NeedQuote?           @relation(fields: [sourceQuoteId], references: [id], onDelete: SetNull)
+  dailyPlan       DailyPlan?           @relation(fields: [dailyPlanId], references: [id], onDelete: SetNull)
   requisition     MaterialRequisition? @relation(fields: [requisitionId], references: [id], onDelete: SetNull)
 
   @@index([sourceQuoteId])
@@ -760,47 +760,47 @@ model StockMovement {
 }
 
 model ProjectPhoto {
-  id          String         @id @default(cuid())
-  projectId   String
-  movementId  String?
-  path        String
-  lat         Decimal?       @db.Decimal(10, 8)
-  lng         Decimal?       @db.Decimal(11, 8)
-  takenAt     DateTime?
-  description String?
-  createdAt   DateTime       @default(now())
-  itemId      String?
+  id                 String              @id @default(cuid())
+  projectId          String
+  movementId         String?
+  path               String
+  lat                Decimal?            @db.Decimal(10, 8)
+  lng                Decimal?            @db.Decimal(11, 8)
+  takenAt            DateTime?
+  description        String?
+  createdAt          DateTime            @default(now())
+  itemId             String?
   /// Tarefa WBS a que a foto foi associada (sugerida pela IA e confirmada por uma pessoa).
-  progressTaskId String?
+  progressTaskId     String?
   /// Última análise da IA: { caption, taskId, taskConfidence, risks[], ppe, model }.
-  aiAnalysis     Json?
-  aiAnalyzedAt   DateTime?
-  movement    StockMovement? @relation(fields: [movementId], references: [id])
-  project     Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  aiAnalysis         Json?
+  aiAnalyzedAt       DateTime?
+  movement           StockMovement?      @relation(fields: [movementId], references: [id])
+  project            Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   safetyObservations SafetyObservation[]
 }
 
 /// Histórico de segurança da obra (Fase 3.5). Os riscos vistos pela IA nas fotos
 /// ficam SUGGESTED até uma pessoa os confirmar ou descartar.
 model SafetyObservation {
-  id          String        @id @default(cuid())
-  projectId   String
-  photoId     String?
+  id             String        @id @default(cuid())
+  projectId      String
+  photoId        String?
   /// AI_PHOTO | MANUAL
-  source      String        @default("AI_PHOTO")
+  source         String        @default("AI_PHOTO")
   /// PPE (EPI) | FALL (queda em altura) | HOUSEKEEPING (arrumação) | MACHINERY | ELECTRICAL | EXCAVATION | OTHER
-  category    String
-  severity    AlertSeverity @default(MEDIUM)
-  description String
+  category       String
+  severity       AlertSeverity @default(MEDIUM)
+  description    String
   /// SUGGESTED | CONFIRMED | DISMISSED | RESOLVED
-  status      String        @default("SUGGESTED")
+  status         String        @default("SUGGESTED")
   reviewedById   String?
   reviewedByName String?
-  reviewedAt  DateTime?
-  reviewNotes String?
-  createdAt   DateTime      @default(now())
-  project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  photo       ProjectPhoto? @relation(fields: [photoId], references: [id], onDelete: SetNull)
+  reviewedAt     DateTime?
+  reviewNotes    String?
+  createdAt      DateTime      @default(now())
+  project        Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  photo          ProjectPhoto? @relation(fields: [photoId], references: [id], onDelete: SetNull)
 
   @@index([projectId, status, createdAt])
   @@index([photoId])
@@ -1110,64 +1110,64 @@ model ProjectMaterialPlan {
 // =============================================
 
 model CostCenter {
-  id            String               @id @default(cuid())
-  projectId     String
-  code          String
-  name          String
-  currency      String               @default("AOA")
-  active        Boolean              @default(true)
-  requiresQuotation Boolean          @default(true)
-  createdAt     DateTime             @default(now())
-  project       Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  needs         WorkNeed[]
+  id                   String                @id @default(cuid())
+  projectId            String
+  code                 String
+  name                 String
+  currency             String                @default("AOA")
+  active               Boolean               @default(true)
+  requiresQuotation    Boolean               @default(true)
+  createdAt            DateTime              @default(now())
+  project              Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  needs                WorkNeed[]
   materialRequisitions MaterialRequisition[]
-  payments      CostPayment[]
-  transactions  ProjectTransaction[]
-  extraRequests ExtraRequest[]
-  freightAllocations FreightAllocation[]
-  purchaseOrders PurchaseOrder[]
+  payments             CostPayment[]
+  transactions         ProjectTransaction[]
+  extraRequests        ExtraRequest[]
+  freightAllocations   FreightAllocation[]
+  purchaseOrders       PurchaseOrder[]
 
   @@unique([projectId, code])
   @@index([projectId])
 }
 
 model WorkNeed {
-  id                String               @id @default(cuid())
-  projectId         String?
-  costCenterId      String?
-  budgetLineId      String?
-  date              DateTime             @default(now())
-  description       String
-  quantity          Decimal?             @db.Decimal(16, 4)
-  unit              String?
-  unitPrice         Decimal?             @db.Decimal(16, 4)
-  originalUnitPrice Decimal?             @db.Decimal(16, 4)
-  priceExceptionReason String?
-  priceExceptionBy     String?
-  priceExceptionAt     DateTime?
-  hours             Decimal?             @db.Decimal(16, 4)
-  priority          NeedPriority         @default(MEDIA)
-  status            NeedStatus           @default(PENDING)
-  scheduled         Boolean              @default(false)
-  siteReceivedAt    DateTime?
-  siteReceivedBy    String?
-  siteReceivedNotes String?
+  id                     String               @id @default(cuid())
+  projectId              String?
+  costCenterId           String?
+  budgetLineId           String?
+  date                   DateTime             @default(now())
+  description            String
+  quantity               Decimal?             @db.Decimal(16, 4)
+  unit                   String?
+  unitPrice              Decimal?             @db.Decimal(16, 4)
+  originalUnitPrice      Decimal?             @db.Decimal(16, 4)
+  priceExceptionReason   String?
+  priceExceptionBy       String?
+  priceExceptionAt       DateTime?
+  hours                  Decimal?             @db.Decimal(16, 4)
+  priority               NeedPriority         @default(MEDIA)
+  status                 NeedStatus           @default(PENDING)
+  scheduled              Boolean              @default(false)
+  siteReceivedAt         DateTime?
+  siteReceivedBy         String?
+  siteReceivedNotes      String?
   siteReceptionPlannedAt DateTime?
   siteReceptionLocation  String?
-  responsible       String?
-  notes             String?
-  extraRequestId    String?
-  purchaseOrderId   String?
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
-  project           Project?             @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  costCenter        CostCenter?          @relation(fields: [costCenterId], references: [id], onDelete: Cascade)
-  budgetLine        ProjectBudgetLine?   @relation(fields: [budgetLineId], references: [id], onDelete: SetNull)
-  extraRequest      ExtraRequest?        @relation(fields: [extraRequestId], references: [id], onDelete: SetNull)
-  purchaseOrder     PurchaseOrder?       @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
-  payments          CostPayment[]
-  quotes            NeedQuote[]
-  installments      PaymentInstallment[]
+  responsible            String?
+  notes                  String?
+  extraRequestId         String?
+  purchaseOrderId        String?
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+  project                Project?             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  costCenter             CostCenter?          @relation(fields: [costCenterId], references: [id], onDelete: Cascade)
+  budgetLine             ProjectBudgetLine?   @relation(fields: [budgetLineId], references: [id], onDelete: SetNull)
+  extraRequest           ExtraRequest?        @relation(fields: [extraRequestId], references: [id], onDelete: SetNull)
+  purchaseOrder          PurchaseOrder?       @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  payments               CostPayment[]
+  quotes                 NeedQuote[]
+  installments           PaymentInstallment[]
 
   @@index([projectId, costCenterId])
   @@index([budgetLineId])
@@ -1176,51 +1176,51 @@ model WorkNeed {
 }
 
 model CostPayment {
-  id                 String              @id @default(cuid())
-  projectId          String
-  costCenterId       String
-  needId             String?
-  supplierId         String?
-  docNumber          String?
-  paymentDate        DateTime
-  confirmedAt        DateTime?
-  supplier           String?
-  category           PaymentCategory     @default(MATERIAL)
-  description        String
-  budgetedAmount     Decimal             @db.Decimal(16, 2)
-  paidAmount         Decimal             @db.Decimal(16, 2)
-  grossAmount        Decimal?            @db.Decimal(16, 2)
-  vatAmount          Decimal?            @db.Decimal(16, 2)
-  withholdingAmount  Decimal?            @db.Decimal(16, 2)
-  netAmount          Decimal?            @db.Decimal(16, 2)
-  fiscalApplyVat         Boolean         @default(false)
-  fiscalApplyWithholding Boolean         @default(false)
-  fiscalApplyDiscount    Boolean         @default(false)
-  fiscalInputMode        String?         // "base" | "gross"
-  paymentMethod      String?
-  paymentType        String?             @default("PRONTO_PAGAMENTO")
-  week               String?
-  installment        Int?
-  status             CostPayStatus       @default(PENDENTE)
-  notes              String?
-  comprovativoUrl    String?
-  faturaUrl          String?
-  certificationStatus CertificationStatus @default(PENDENTE)
-  certifiedBy        String?
-  certifiedAt        DateTime?
-  certificationNotes String?
-  confirmationStatus CostConfirmationStatus @default(POR_CONFIRMAR)
-  responsible        String?
+  id                     String                 @id @default(cuid())
+  projectId              String
+  costCenterId           String
+  needId                 String?
+  supplierId             String?
+  docNumber              String?
+  paymentDate            DateTime
+  confirmedAt            DateTime?
+  supplier               String?
+  category               PaymentCategory        @default(MATERIAL)
+  description            String
+  budgetedAmount         Decimal                @db.Decimal(16, 2)
+  paidAmount             Decimal                @db.Decimal(16, 2)
+  grossAmount            Decimal?               @db.Decimal(16, 2)
+  vatAmount              Decimal?               @db.Decimal(16, 2)
+  withholdingAmount      Decimal?               @db.Decimal(16, 2)
+  netAmount              Decimal?               @db.Decimal(16, 2)
+  fiscalApplyVat         Boolean                @default(false)
+  fiscalApplyWithholding Boolean                @default(false)
+  fiscalApplyDiscount    Boolean                @default(false)
+  fiscalInputMode        String? // "base" | "gross"
+  paymentMethod          String?
+  paymentType            String?                @default("PRONTO_PAGAMENTO")
+  week                   String?
+  installment            Int?
+  status                 CostPayStatus          @default(PENDENTE)
+  notes                  String?
+  comprovativoUrl        String?
+  faturaUrl              String?
+  certificationStatus    CertificationStatus    @default(PENDENTE)
+  certifiedBy            String?
+  certifiedAt            DateTime?
+  certificationNotes     String?
+  confirmationStatus     CostConfirmationStatus @default(POR_CONFIRMAR)
+  responsible            String?
   sourceType             String? // MERCADORIA_STOCK | PAGAMENTO_DIRETO | ATM | MOVIMENTO_BANCARIO | MANUAL
   bankMovementId         String? // movimento do extrato que originou / reconcilia este custo
   costCategoryId         Int? // categoria/subcategoria do catálogo de custos
-  createdAt          DateTime            @default(now())
-  project            Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  costCenter         CostCenter          @relation(fields: [costCenterId], references: [id], onDelete: Cascade)
-  need               WorkNeed?           @relation(fields: [needId], references: [id], onDelete: SetNull)
-  supplierRef        Supplier?           @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  paymentInstallment PaymentInstallment?
-  freightOrder       FreightOrder?
+  createdAt              DateTime               @default(now())
+  project                Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  costCenter             CostCenter             @relation(fields: [costCenterId], references: [id], onDelete: Cascade)
+  need                   WorkNeed?              @relation(fields: [needId], references: [id], onDelete: SetNull)
+  supplierRef            Supplier?              @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  paymentInstallment     PaymentInstallment?
+  freightOrder           FreightOrder?
 
   @@index([supplierId])
   @@index([projectId, costCenterId])
@@ -1281,9 +1281,9 @@ model PettyCashFund {
   movements             PettyCashMovement[]
   extraRequests         ExtraRequest[]
   reinforcementRequests PettyCashReinforcementRequest[]
+  purchaseOrders        PurchaseOrder[]
 
   @@index([projectId])
-  purchaseOrders PurchaseOrder[]
 }
 
 enum PettyCashCardType {
@@ -1328,18 +1328,18 @@ model PettyCashCard {
 // Histórico auditável de todas as movimentações de um Fundo de Maneio.
 /// T6 Alocação de Cartões: a quem (e a que obra) um cartão está entregue, de/até.
 model CardAllocation {
-  id            String    @id @default(cuid())
-  cardId        String
-  responsible   String
-  projectId     String?
-  startDate     DateTime
-  endDate       DateTime?
+  id          String    @id @default(cuid())
+  cardId      String
+  responsible String
+  projectId   String?
+  startDate   DateTime
+  endDate     DateTime?
   /// Estado em que o cartão foi devolvido: BOM ou ESTRAGADO
-  returnState   String?
-  returnNotes   String?
-  notes         String?
-  createdBy     String?
-  createdAt     DateTime  @default(now())
+  returnState String?
+  returnNotes String?
+  notes       String?
+  createdBy   String?
+  createdAt   DateTime  @default(now())
 
   card    PettyCashCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
   project Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
@@ -1405,16 +1405,16 @@ model PettyCashReinforcementRequest {
 
 // Centros de custo gerais (fora do planeamento de obra).
 model GeneralCostCenter {
-  id          String   @id @default(cuid())
-  code        String   @unique
-  name        String
-  description String?
-  active      Boolean  @default(true)
+  id           String   @id @default(cuid())
+  code         String   @unique
+  name         String
+  description  String?
+  active       Boolean  @default(true)
   /// RG8 do protótipo: SEDE, FROTA ou OUTRO (o A1 separa Sede de Frota por aqui).
   kind         String   @default("SEDE")
   /// Orçamento anual, para comparar com o realizado (RG8).
   annualBudget Decimal? @db.Decimal(16, 2)
-  createdAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
 
   extraRequests ExtraRequest[]
 
@@ -1429,17 +1429,17 @@ enum CostCategoryDomain {
 
 // Catálogo de tipos de custo / subcustos (CENTRO COMPRAS).
 model CostCategory {
-  id                   Int                 @id @default(autoincrement())
-  code                 String              @unique
-  name                 String
-  domain               CostCategoryDomain
-  parentId             Int?
-  level                Int
-  sortOrder            Int                 @default(0)
-  isSelectable         Boolean             @default(true)
-  requiresDetailText   Boolean             @default(false)
-  active               Boolean             @default(true)
-  createdAt            DateTime            @default(now())
+  id                 Int                @id @default(autoincrement())
+  code               String             @unique
+  name               String
+  domain             CostCategoryDomain
+  parentId           Int?
+  level              Int
+  sortOrder          Int                @default(0)
+  isSelectable       Boolean            @default(true)
+  requiresDetailText Boolean            @default(false)
+  active             Boolean            @default(true)
+  createdAt          DateTime           @default(now())
 
   parent        CostCategory?  @relation("CostCategoryTree", fields: [parentId], references: [id], onDelete: Cascade)
   children      CostCategory[] @relation("CostCategoryTree")
@@ -1452,64 +1452,64 @@ model CostCategory {
 // Pedido Extra: da Obra (vinculado) ou Geral (sem vínculo obrigatório).
 // Pode ser pago via Caixa, Banco ou débito num Fundo de Maneio.
 model ExtraRequest {
-  id                  String             @id @default(cuid())
-  type                ExtraRequestType   @default(OBRA)
-  projectId           String?
-  costCenterId        String?
-  generalCostCenterId String?
-  costCategoryId      Int?
-  costDetailDescription String?
-  description    String
+  id                       String             @id @default(cuid())
+  type                     ExtraRequestType   @default(OBRA)
+  projectId                String?
+  costCenterId             String?
+  generalCostCenterId      String?
+  costCategoryId           Int?
+  costDetailDescription    String?
+  description              String
   /// Quantidade pedida (obrigatória para ferramentas/material).
-  quantity       Decimal?           @db.Decimal(16, 4)
+  quantity                 Decimal?           @db.Decimal(16, 4)
   /// Valor pedido tal como foi escrito (em modo "gross" é o bruto, com IVA).
-  amount         Decimal            @db.Decimal(16, 2)
+  amount                   Decimal            @db.Decimal(16, 2)
   /// "base" = valor sem impostos | "gross" = valor já inclui IVA/outros
-  fiscalInputMode        String?  @default("base")
-  fiscalApplyVat         Boolean  @default(false)
-  fiscalApplyWithholding Boolean  @default(false)
-  fiscalApplyDiscount    Boolean  @default(false)
-  fiscalVatPercent         Decimal? @db.Decimal(5, 2)
-  fiscalWithholdingPercent Decimal? @db.Decimal(5, 2)
-  fiscalDiscountPercent    Decimal? @db.Decimal(5, 2)
+  fiscalInputMode          String?            @default("base")
+  fiscalApplyVat           Boolean            @default(false)
+  fiscalApplyWithholding   Boolean            @default(false)
+  fiscalApplyDiscount      Boolean            @default(false)
+  fiscalVatPercent         Decimal?           @db.Decimal(5, 2)
+  fiscalWithholdingPercent Decimal?           @db.Decimal(5, 2)
+  fiscalDiscountPercent    Decimal?           @db.Decimal(5, 2)
   /// Decomposição fiscal gravada (mesma convenção do CostPayment).
   /// O `netAmount` é o que o beneficiário recebe — a retenção fica retida —
   /// e é ele que manda em "Por pagar" e no valor por omissão do pagamento.
-  baseAmount        Decimal? @db.Decimal(16, 2)
-  grossAmount       Decimal? @db.Decimal(16, 2)
-  vatAmount         Decimal? @db.Decimal(16, 2)
-  withholdingAmount Decimal? @db.Decimal(16, 2)
-  discountAmount    Decimal? @db.Decimal(16, 2)
-  netAmount         Decimal? @db.Decimal(16, 2)
-  currency       String             @default("AOA")
-  paymentSource  ExtraPaymentSource @default(CAIXA)
-  fundId         String?
-  cardId         String?
-  status         ExtraRequestStatus @default(PENDENTE)
-  requestedBy    String?
-  requestedAt    DateTime           @default(now())
-  paymentDueDate DateTime?
+  baseAmount               Decimal?           @db.Decimal(16, 2)
+  grossAmount              Decimal?           @db.Decimal(16, 2)
+  vatAmount                Decimal?           @db.Decimal(16, 2)
+  withholdingAmount        Decimal?           @db.Decimal(16, 2)
+  discountAmount           Decimal?           @db.Decimal(16, 2)
+  netAmount                Decimal?           @db.Decimal(16, 2)
+  currency                 String             @default("AOA")
+  paymentSource            ExtraPaymentSource @default(CAIXA)
+  fundId                   String?
+  cardId                   String?
+  status                   ExtraRequestStatus @default(PENDENTE)
+  requestedBy              String?
+  requestedAt              DateTime           @default(now())
+  paymentDueDate           DateTime?
   /// Prioridade do pedido (unificação com Pedido de Compra)
-  priority       PurchasePriority   @default(NORMAL)
+  priority                 PurchasePriority   @default(NORMAL)
   /// Data desejada para entrega/realização (unificação com Pedido de Compra)
-  desiredDate    DateTime?
+  desiredDate              DateTime?
   /// Se requer cotação / requisição formal com proforma
-  requiresQuote  Boolean            @default(true)
-  approvedBy     String?
-  approvedAt     DateTime?
-  rejectedReason String?
-  paidBy         String?
-  paidAt         DateTime?
-  notes          String?
-  proformaUrl    String?
-  comprovativoUrl String?
+  requiresQuote            Boolean            @default(true)
+  approvedBy               String?
+  approvedAt               DateTime?
+  rejectedReason           String?
+  paidBy                   String?
+  paidAt                   DateTime?
+  notes                    String?
+  proformaUrl              String?
+  comprovativoUrl          String?
   // Beneficiário da transferência: fornecedor registado e/ou dados manuais
-  supplierId     String?
-  supplierName   String?
-  supplierNif    String?
-  supplierIban   String?
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
+  supplierId               String?
+  supplierName             String?
+  supplierNif              String?
+  supplierIban             String?
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
 
   project           Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
   costCenter        CostCenter?        @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
@@ -1535,16 +1535,16 @@ model ExtraRequest {
 
 /// Itens de um Pedido Extra (múltiplas linhas, como no Pedido de Compra).
 model ExtraRequestItem {
-  id              String        @id @default(cuid())
-  extraRequestId  String
-  description     String
-  quantity        Decimal       @db.Decimal(16, 4)
-  unit            String?
-  unitPrice       Decimal?      @db.Decimal(16, 4)
-  totalPrice      Decimal?      @db.Decimal(16, 4)
-  notes           String?
-  order           Int           @default(0)
-  createdAt       DateTime      @default(now())
+  id             String   @id @default(cuid())
+  extraRequestId String
+  description    String
+  quantity       Decimal  @db.Decimal(16, 4)
+  unit           String?
+  unitPrice      Decimal? @db.Decimal(16, 4)
+  totalPrice     Decimal? @db.Decimal(16, 4)
+  notes          String?
+  order          Int      @default(0)
+  createdAt      DateTime @default(now())
 
   extraRequest ExtraRequest @relation(fields: [extraRequestId], references: [id], onDelete: Cascade)
 
@@ -1584,38 +1584,38 @@ model Supplier {
   category           String?
   iban               String?
   paymentTerm        String?
-  vatPercent         Decimal? @db.Decimal(5, 2) // % IVA — informativo, não altera orçamento base
-  withholdingPercent Decimal? @db.Decimal(5, 2) // % Retenção na fonte
-  discountPercent    Decimal? @db.Decimal(5, 2) // % Desconto
-  vatRegime          String?  // Regime de IVA (AGT)
-  agtStatus          String?  // Estado no portal do contribuinte (AGT)
-  agtType            String?  // Tipo de contribuinte (AGT)
+  vatPercent         Decimal?     @db.Decimal(5, 2) // % IVA — informativo, não altera orçamento base
+  withholdingPercent Decimal?     @db.Decimal(5, 2) // % Retenção na fonte
+  discountPercent    Decimal?     @db.Decimal(5, 2) // % Desconto
+  vatRegime          String? // Regime de IVA (AGT)
+  agtStatus          String? // Estado no portal do contribuinte (AGT)
+  agtType            String? // Tipo de contribuinte (AGT)
   /// RG3 Terceiros (protótipo): uma só ficha para cliente, fornecedor, empresa do grupo e sócio
   code               String?
   /// CLIENTE, FORNECEDOR, GRUPO, SOCIO
-  roles              String[] @default(["FORNECEDOR"])
-  country            String?  @default("Angola")
+  roles              String[]     @default(["FORNECEDOR"])
+  country            String?      @default("Angola")
   region             String?
   /// [{ nome, cargo, telefone, email }]
-  contacts           Json     @default("[]")
+  contacts           Json         @default("[]")
   /// Condições fiscais / financeiras: { cliente: {...}, fornecedor: {...} }
-  profile            Json     @default("{}")
+  profile            Json         @default("{}")
   /// O registo de cliente que corresponde a este terceiro (quando é cliente)
   clientId           String?
-  active             Boolean  @default(true)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  active             Boolean      @default(true)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 
-  products      SupplierProduct[]
-  quotes        NeedQuote[]
-  bankAccounts  SupplierBankAccount[]
-  payments      CostPayment[]
-  freightOrders FreightOrder[]
-  extraRequests ExtraRequest[]
-  purchaseOrders      PurchaseOrder[]
+  products             SupplierProduct[]
+  quotes               NeedQuote[]
+  bankAccounts         SupplierBankAccount[]
+  payments             CostPayment[]
+  freightOrders        FreightOrder[]
+  extraRequests        ExtraRequest[]
+  purchaseOrders       PurchaseOrder[]
   purchaseRequisitions PurchaseRequisition[]
-  quoteSupplierOrders QuoteSupplierOrder[]
-  bankMovements       BankMovement[]
+  quoteSupplierOrders  QuoteSupplierOrder[]
+  bankMovements        BankMovement[]
 }
 
 enum SupplierType {
@@ -1633,20 +1633,20 @@ enum FreightStatus {
 }
 
 model FreightOrder {
-  id            String         @id @default(cuid())
+  id            String        @id @default(cuid())
   supplierId    String
-  totalAmount   Decimal        @db.Decimal(16, 2)
-  currency      String         @default("AOA")
-  status        FreightStatus  @default(PENDENTE)
+  totalAmount   Decimal       @db.Decimal(16, 2)
+  currency      String        @default("AOA")
+  status        FreightStatus @default(PENDENTE)
   notes         String?
-  costPaymentId String?        @unique
+  costPaymentId String?       @unique
   createdBy     String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
-  supplier     Supplier            @relation(fields: [supplierId], references: [id])
-  costPayment  CostPayment?        @relation(fields: [costPaymentId], references: [id], onDelete: SetNull)
-  allocations  FreightAllocation[]
+  supplier    Supplier            @relation(fields: [supplierId], references: [id])
+  costPayment CostPayment?        @relation(fields: [costPaymentId], references: [id], onDelete: SetNull)
+  allocations FreightAllocation[]
 
   @@index([supplierId])
   @@index([status])
@@ -1673,15 +1673,15 @@ model FreightAllocation {
 }
 
 model SupplierBankAccount {
-  id         String   @id @default(cuid())
-  supplierId String
-  bankName   String
+  id            String   @id @default(cuid())
+  supplierId    String
+  bankName      String
   /// IBAN e/ou n.º de conta (pelo menos um)
-  iban       String?
+  iban          String?
   accountNumber String?
   description   String?
-  isPrimary  Boolean  @default(false)
-  createdAt  DateTime @default(now())
+  isPrimary     Boolean  @default(false)
+  createdAt     DateTime @default(now())
 
   supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
 
@@ -1689,21 +1689,21 @@ model SupplierBankAccount {
 }
 
 model SupplierProduct {
-  id          String    @id @default(cuid())
-  supplierId  String
-  productId   String?
-  name        String
-  description String?
-  unit        String?
-  price       Decimal   @db.Decimal(16, 4)
-  currency    String    @default("AOA")
-  vatPercent         Decimal? @db.Decimal(5, 2)
-  withholdingPercent Decimal? @db.Decimal(5, 2)
-  discountPercent    Decimal? @db.Decimal(5, 2)
-  validUntil  DateTime?
-  notes       String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id                 String    @id @default(cuid())
+  supplierId         String
+  productId          String?
+  name               String
+  description        String?
+  unit               String?
+  price              Decimal   @db.Decimal(16, 4)
+  currency           String    @default("AOA")
+  vatPercent         Decimal?  @db.Decimal(5, 2)
+  withholdingPercent Decimal?  @db.Decimal(5, 2)
+  discountPercent    Decimal?  @db.Decimal(5, 2)
+  validUntil         DateTime?
+  notes              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   supplier Supplier    @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   product  Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
@@ -1714,33 +1714,33 @@ model SupplierProduct {
 }
 
 model NeedQuote {
-  id                String    @id @default(cuid())
-  needId            String
-  supplierId        String
-  supplierProductId String?
-  quotedPrice       Decimal   @db.Decimal(16, 4)
-  quantity          Decimal?  @db.Decimal(16, 4)
-  totalValue        Decimal?  @db.Decimal(16, 4)
-  netTotal          Decimal?  @db.Decimal(16, 2)
-  vatAmount         Decimal?  @db.Decimal(16, 2)
-  withholdingAmount Decimal?  @db.Decimal(16, 2)
-  discountAmount    Decimal?  @db.Decimal(16, 2)
-  fiscalApplyVat         Boolean @default(false)
-  fiscalApplyWithholding Boolean @default(false)
-  fiscalApplyDiscount    Boolean @default(false)
-  vatPercent         Decimal? @db.Decimal(5, 2)
-  withholdingPercent Decimal? @db.Decimal(5, 2)
-  discountPercent    Decimal? @db.Decimal(5, 2)
-  currency          String    @default("AOA")
-  selected          Boolean   @default(false)
-  notes             String?
-  proformaUrl       String?
-  purchaseOrderUrl  String?
-  orderNumber       Int?
-  supplierOrderId   String?
-  poDocumentId      String?
-  poIssuedBy        String?
-  poIssuedAt        DateTime?
+  id                     String    @id @default(cuid())
+  needId                 String
+  supplierId             String
+  supplierProductId      String?
+  quotedPrice            Decimal   @db.Decimal(16, 4)
+  quantity               Decimal?  @db.Decimal(16, 4)
+  totalValue             Decimal?  @db.Decimal(16, 4)
+  netTotal               Decimal?  @db.Decimal(16, 2)
+  vatAmount              Decimal?  @db.Decimal(16, 2)
+  withholdingAmount      Decimal?  @db.Decimal(16, 2)
+  discountAmount         Decimal?  @db.Decimal(16, 2)
+  fiscalApplyVat         Boolean   @default(false)
+  fiscalApplyWithholding Boolean   @default(false)
+  fiscalApplyDiscount    Boolean   @default(false)
+  vatPercent             Decimal?  @db.Decimal(5, 2)
+  withholdingPercent     Decimal?  @db.Decimal(5, 2)
+  discountPercent        Decimal?  @db.Decimal(5, 2)
+  currency               String    @default("AOA")
+  selected               Boolean   @default(false)
+  notes                  String?
+  proformaUrl            String?
+  purchaseOrderUrl       String?
+  orderNumber            Int?
+  supplierOrderId        String?
+  poDocumentId           String?
+  poIssuedBy             String?
+  poIssuedAt             DateTime?
 
   // Crédito — preenchido apenas quando a condição de pagamento do fornecedor é "Crédito"
   creditTermDays      Int?
@@ -1754,12 +1754,12 @@ model NeedQuote {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  need            WorkNeed             @relation(fields: [needId], references: [id], onDelete: Cascade)
-  supplier        Supplier             @relation(fields: [supplierId], references: [id], onDelete: Cascade)
-  supplierProduct SupplierProduct?     @relation(fields: [supplierProductId], references: [id], onDelete: SetNull)
-  supplierOrder   QuoteSupplierOrder?  @relation(fields: [supplierOrderId], references: [id], onDelete: SetNull)
-  installments    PaymentInstallment[]
-  stockMovements  StockMovement[]
+  need               WorkNeed             @relation(fields: [needId], references: [id], onDelete: Cascade)
+  supplier           Supplier             @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplierProduct    SupplierProduct?     @relation(fields: [supplierProductId], references: [id], onDelete: SetNull)
+  supplierOrder      QuoteSupplierOrder?  @relation(fields: [supplierOrderId], references: [id], onDelete: SetNull)
+  installments       PaymentInstallment[]
+  stockMovements     StockMovement[]
   freightAllocations FreightAllocation[]
 
   @@index([orderNumber])
@@ -1783,8 +1783,8 @@ model QuoteSupplierOrder {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  supplier Supplier   @relation(fields: [supplierId], references: [id], onDelete: Cascade)
-  project  Project?   @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  supplier Supplier    @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  project  Project?    @relation(fields: [projectId], references: [id], onDelete: SetNull)
   quotes   NeedQuote[]
 
   @@index([supplierId])
@@ -1937,42 +1937,42 @@ model PurchaseOrder {
   // ─── Pedido de pagamento (Fase 5) ───
   /// Tipo do pedido. Os tipos sem itens (impostos, pessoal, empréstimo) guardam
   /// os seus dados próprios em `typeData`.
-  requestType     PaymentRequestType  @default(SEDE)
-  paymentMode     PaymentMode         @default(FORN)
+  requestType     PaymentRequestType @default(SEDE)
+  paymentMode     PaymentMode        @default(FORN)
   /// Dados próprios de cada tipo: impostos {tipo, mes, rupe, limite, valor},
   /// pessoal {sub, mes, linhas:[{nome, iban, valor}]}, empréstimo {por, modo, valor, iban, fim, prest}
-  typeData        Json                @default("{}")
+  typeData        Json               @default("{}")
   /// Fundo de maneio usado quando `paymentMode` = FM
   pettyCashFundId String?
   /// Condição acordada: PRONTO | CREDITO | PARCIAL
-  paymentTerm     String?             @default("PRONTO")
+  paymentTerm     String?            @default("PRONTO")
   /// Dias de crédito, quando a condição é CREDITO
   creditDays      Int?
   /// Data pretendida de pagamento (pronto) ou vencimento (crédito)
   dueDate         DateTime?
   /// Marcado em pausa pela Direção, sem rejeitar
-  onHold          Boolean             @default(false)
+  onHold          Boolean            @default(false)
   holdReason      String?
   /// Motivo da eliminação, quando o administrador apaga
   deletedReason   String?
   deletedAt       DateTime?
 
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  pettyCashFund PettyCashFund?            @relation(fields: [pettyCashFundId], references: [id], onDelete: SetNull)
-  supplier     Supplier?                 @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  project      Project?                  @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  costCenter   CostCenter?               @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
-  items        PurchaseOrderItem[]
-  requisition  PurchaseRequisition?
+  pettyCashFund        PettyCashFund?        @relation(fields: [pettyCashFundId], references: [id], onDelete: SetNull)
+  supplier             Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  project              Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  costCenter           CostCenter?           @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+  items                PurchaseOrderItem[]
+  requisition          PurchaseRequisition?
   materialRequisitions MaterialRequisition[]
-  approvals    PurchaseApproval[]
-  paymentPlan  PurchasePaymentPlan?
-  history      PurchaseHistoryLog[]
-  workNeeds    WorkNeed[]
+  approvals            PurchaseApproval[]
+  paymentPlan          PurchasePaymentPlan?
+  history              PurchaseHistoryLog[]
+  workNeeds            WorkNeed[]
   /// Obrigação fiscal que este pedido paga (G1 Impostos)
-  taxObligation TaxObligation?
+  taxObligation        TaxObligation?
 
   @@index([status])
   @@index([requestedById])
@@ -1982,23 +1982,23 @@ model PurchaseOrder {
 }
 
 model PurchaseOrderItem {
-  id              String        @id @default(cuid())
+  id              String   @id @default(cuid())
   purchaseOrderId String
   name            String
-  quantity        Decimal       @db.Decimal(16, 4)
+  quantity        Decimal  @db.Decimal(16, 4)
   unit            String?
-  unitPrice       Decimal?      @db.Decimal(16, 4)
-  totalPrice      Decimal?      @db.Decimal(16, 4)
+  unitPrice       Decimal? @db.Decimal(16, 4)
+  totalPrice      Decimal? @db.Decimal(16, 4)
   notes           String?
-  order           Int           @default(0)
+  order           Int      @default(0)
 
   // ─── Fiscalidade da linha (Fase 5) ───
   // Antes vinham escritas em texto nas `notes` ("IVA 14% · Ret. 6,5%") e eram lidas
   // por expressão regular; a retenção era extraída e descartada, o que fazia o
   // sistema mandar pagar mais do que o devido. Agora são colunas.
-  vatPercent         Decimal? @db.Decimal(5, 2)
-  withholdingPercent Decimal? @db.Decimal(5, 2)
-  discountPercent    Decimal? @db.Decimal(5, 2)
+  vatPercent         Decimal?              @db.Decimal(5, 2)
+  withholdingPercent Decimal?              @db.Decimal(5, 2)
+  discountPercent    Decimal?              @db.Decimal(5, 2)
   /// Código do produto do catálogo (o «Código» da requisição de pagamento)
   code               String?
   /// Fornecedor da linha, quando a requisição é por fundo de maneio (TRF INT):
@@ -2015,7 +2015,7 @@ model PurchaseOrderItem {
   dscDocPath         String?
   dscDocName         String?
 
-  createdAt       DateTime      @default(now())
+  createdAt DateTime @default(now())
 
   purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
 
@@ -2023,16 +2023,16 @@ model PurchaseOrderItem {
 }
 
 model PurchaseRequisition {
-  id              String        @id @default(cuid())
-  purchaseOrderId String        @unique
-  quotedValue     Decimal?      @db.Decimal(16, 2)
-  currency        String        @default("AOA")
+  id              String   @id @default(cuid())
+  purchaseOrderId String   @unique
+  quotedValue     Decimal? @db.Decimal(16, 2)
+  currency        String   @default("AOA")
   supplierId      String?
   supplierName    String?
   notes           String?
   rejectionReason String?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   purchaseOrder PurchaseOrder        @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   supplier      Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
@@ -2042,7 +2042,7 @@ model PurchaseRequisition {
 }
 
 model PurchaseAttachment {
-  id                    String              @id @default(cuid())
+  id                    String   @id @default(cuid())
   purchaseRequisitionId String
   fileName              String
   mimeType              String
@@ -2050,7 +2050,7 @@ model PurchaseAttachment {
   url                   String
   uploadedById          String?
   uploadedByName        String?
-  createdAt             DateTime            @default(now())
+  createdAt             DateTime @default(now())
 
   requisition PurchaseRequisition @relation(fields: [purchaseRequisitionId], references: [id], onDelete: Cascade)
 
@@ -2058,13 +2058,13 @@ model PurchaseAttachment {
 }
 
 model PurchaseApproval {
-  id              String        @id @default(cuid())
+  id              String   @id @default(cuid())
   purchaseOrderId String
   approverId      String
   approverName    String
-  decision        String        // "APROVADO" | "NAO_APROVADO"
+  decision        String // "APROVADO" | "NAO_APROVADO"
   observations    String?
-  decidedAt       DateTime      @default(now())
+  decidedAt       DateTime @default(now())
 
   purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
 
@@ -2072,14 +2072,14 @@ model PurchaseApproval {
 }
 
 model PurchasePaymentPlan {
-  id              String                     @id @default(cuid())
-  purchaseOrderId String                     @unique
-  totalValue      Decimal                    @db.Decimal(16, 2)
-  currency        String                     @default("AOA")
-  status          PurchasePaymentStatus      @default(PENDENTE)
+  id              String                @id @default(cuid())
+  purchaseOrderId String                @unique
+  totalValue      Decimal               @db.Decimal(16, 2)
+  currency        String                @default("AOA")
+  status          PurchasePaymentStatus @default(PENDENTE)
   notes           String?
-  createdAt       DateTime                   @default(now())
-  updatedAt       DateTime                   @updatedAt
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
 
   purchaseOrder PurchaseOrder                @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   installments  PurchasePaymentInstallment[]
@@ -2108,7 +2108,7 @@ model PurchasePaymentInstallment {
 }
 
 model PurchaseHistoryLog {
-  id              String        @id @default(cuid())
+  id              String   @id @default(cuid())
   purchaseOrderId String
   action          String
   fromStatus      String?
@@ -2116,7 +2116,7 @@ model PurchaseHistoryLog {
   userId          String?
   userName        String?
   notes           String?
-  createdAt       DateTime      @default(now())
+  createdAt       DateTime @default(now())
 
   purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
 
@@ -2210,20 +2210,20 @@ model Sector {
 }
 
 model Personnel {
-  id            String         @id @default(cuid())
-  firstName     String
-  lastName      String?
-  email         String?
-  phone         String?
-  type          PersonnelType?
-  role          String
+  id           String         @id @default(cuid())
+  firstName    String
+  lastName     String?
+  email        String?
+  phone        String?
+  type         PersonnelType?
+  role         String
   /// Obra principal (primeira da lista). Compatibilidade com código legado que lê um só id.
   /// Fonte da verdade para internos: PersonnelProject.
-  projectId     String?
-  employeeCode  String?
-  category      String?
-  photoUrl      String?
-  active        Boolean        @default(true)
+  projectId    String?
+  employeeCode String?
+  category     String?
+  photoUrl     String?
+  active       Boolean        @default(true)
 
   // ─── Ficha de funcionário (módulo Comercial › Base › Funcionários) ───
   /// Departamento: ver a lista `departamentos` em CompanySetting("budget.lists")
@@ -2237,16 +2237,16 @@ model Personnel {
   emergencyPhone   String?
   notes            String?
 
-  legacyId      String?        @unique
+  legacyId      String?  @unique
   importBatchId String?
   createdById   String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  project             Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  projectAssignments  PersonnelProject[]
-  createdBy           User?                @relation("PersonnelCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  importBatch         RegistryImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  project            Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectAssignments PersonnelProject[]
+  createdBy          User?                @relation("PersonnelCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  importBatch        RegistryImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
 
   @@index([firstName, lastName])
   @@index([projectId])
@@ -2379,12 +2379,12 @@ model Invoice {
   documentUploadedBy String?
 
   // Origem do preenchimento: IA (Gemini) ou MANUAL.
-  scanSource         String?
-  scanModel          String?
-  scanRaw            Json?
+  scanSource String?
+  scanModel  String?
+  scanRaw    Json?
 
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   project     Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
   client      Client?            @relation(fields: [clientId], references: [id], onDelete: SetNull)
@@ -2400,14 +2400,14 @@ model Invoice {
 
 // Recebimento (parcial ou total) de uma fatura.
 model InvoiceReceipt {
-  id           String   @id @default(cuid())
-  invoiceId    String
-  amount       Decimal  @db.Decimal(16, 2)
-  receivedDate DateTime
-  method       String?
-  notes        String?
-  createdBy    String?
-  createdAt    DateTime @default(now())
+  id             String   @id @default(cuid())
+  invoiceId      String
+  amount         Decimal  @db.Decimal(16, 2)
+  receivedDate   DateTime
+  method         String?
+  notes          String?
+  createdBy      String?
+  createdAt      DateTime @default(now())
   // Movimento do extrato (entrada) que trouxe este dinheiro. Um movimento pode
   // pagar várias faturas; a soma dos recebimentos não pode passar o valor dele.
   bankMovementId String?
@@ -2421,19 +2421,19 @@ model InvoiceReceipt {
 
 // Extrato bancário importado para a área financeira.
 model BankStatement {
-  id          String    @id @default(cuid())
-  cardId      String?
-  name        String
-  periodStart DateTime?
-  periodEnd   DateTime?
+  id             String    @id @default(cuid())
+  cardId         String?
+  name           String
+  periodStart    DateTime?
+  periodEnd      DateTime?
   // Saldos impressos no extrato: servem para conferir os movimentos e fixam o
   // saldo da conta na data de fim do período.
   openingBalance Decimal?  @db.Decimal(16, 2)
   closingBalance Decimal?  @db.Decimal(16, 2)
-  fileName    String?
-  notes       String?
-  createdBy   String?
-  createdAt   DateTime  @default(now())
+  fileName       String?
+  notes          String?
+  createdBy      String?
+  createdAt      DateTime  @default(now())
 
   card      PettyCashCard? @relation(fields: [cardId], references: [id], onDelete: SetNull)
   movements BankMovement[]
@@ -2444,38 +2444,38 @@ model BankStatement {
 
 // Movimento de um extrato bancário, classificado pela área financeira.
 model BankMovement {
-  id             String                @id @default(cuid())
-  statementId    String
-  cardId         String?
-  projectId      String?
-  docNumber      String?
-  docType        BankDocType?
-  supplierId     String?
-  movementType   BankMovementType      @default(OUTRO)
+  id              String                @id @default(cuid())
+  statementId     String
+  cardId          String?
+  projectId       String?
+  docNumber       String?
+  docType         BankDocType?
+  supplierId      String?
+  movementType    BankMovementType      @default(OUTRO)
   /// Tipo dado pelas regras de classificação (as regras podem voltar a mudá-lo; um tipo escolhido à mão não)
-  typeAuto       Boolean               @default(false)
+  typeAuto        Boolean               @default(false)
   /// Data em que o dinheiro saiu ou entrou de facto (a «data valor» do extrato)
-  effectiveDate  DateTime?
+  effectiveDate   DateTime?
   /// Transferência interna: a outra conta / cartão da MBT (origem, numa entrada; destino, numa saída)
-  transferCardId String?
+  transferCardId  String?
   /// Conciliação (T2): o pedido do Centro de Pagamentos que esta saída paga
   purchaseOrderId String?
-  costCategoryId String? // Tipo/Categoria de custo
-  subcategoryId  String? // Subcategoria de custo
-  direction      BankMovementDirection
-  amount         Decimal               @db.Decimal(16, 2)
-  movementDate   DateTime
-  description    String?
-  isMerchandise  Boolean               @default(false) // compra de mercadorias (custo via stock)
-  costAssigned   Boolean               @default(false) // já tem custo associado
-  notes          String?
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
+  costCategoryId  String? // Tipo/Categoria de custo
+  subcategoryId   String? // Subcategoria de custo
+  direction       BankMovementDirection
+  amount          Decimal               @db.Decimal(16, 2)
+  movementDate    DateTime
+  description     String?
+  isMerchandise   Boolean               @default(false) // compra de mercadorias (custo via stock)
+  costAssigned    Boolean               @default(false) // já tem custo associado
+  notes           String?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
 
-  statement BankStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
-  card      PettyCashCard? @relation(fields: [cardId], references: [id], onDelete: SetNull)
-  project   Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  supplier  Supplier?      @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  statement BankStatement    @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  card      PettyCashCard?   @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  project   Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  supplier  Supplier?        @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   receipts  InvoiceReceipt[]
 
   @@index([statementId])
@@ -2509,28 +2509,28 @@ model BankBalance {
 /// Configuração global da IA (linha única, id = "default"), gerida no
 /// separador "Inteligência Artificial" da Gestão do Sistema (só admin).
 model AiSettings {
-  id                   String    @id @default("default")
-  enabled              Boolean   @default(true)
+  id                   String   @id @default("default")
+  enabled              Boolean  @default(true)
   /// Adaptador em src/services/ai/providers ("gemini", "openai_compatible").
-  provider             String    @default("gemini")
-  model                String    @default("gemini-3.8-flash")
-  fallbackModels       Json      @default("[]")
+  provider             String   @default("gemini")
+  model                String   @default("gemini-3.8-flash")
+  fallbackModels       Json     @default("[]")
   baseUrl              String?
   /// Chave cifrada (AES-256-GCM com o JWT_SECRET). Nunca sai do servidor.
   apiKeyWrapped        String?
   /// { assistant, chat_mention, digests, alerts, voice, photos, invoice_scan }
-  features             Json      @default("{}")
+  features             Json     @default("{}")
   /// Categoria de dados → "off" | "on" | "anonymize"
-  dataCategories       Json      @default("{}")
-  monthlyBudget        Decimal?  @db.Decimal(12, 2)
-  budgetCurrency       String    @default("USD")
+  dataCategories       Json     @default("{}")
+  monthlyBudget        Decimal? @db.Decimal(12, 2)
+  budgetCurrency       String   @default("USD")
   /// Preço por 1 milhão de tokens (para estimar o custo de cada pedido).
-  inputPricePerMTok    Decimal?  @db.Decimal(12, 4)
-  outputPricePerMTok   Decimal?  @db.Decimal(12, 4)
-  dailyRequestsPerUser Int       @default(50)
+  inputPricePerMTok    Decimal? @db.Decimal(12, 4)
+  outputPricePerMTok   Decimal? @db.Decimal(12, 4)
+  dailyRequestsPerUser Int      @default(50)
   /// "AAAA-MM" do último aviso de 80 % do orçamento (para avisar 1x por mês).
   budgetAlertMonth     String?
-  updatedAt            DateTime  @updatedAt
+  updatedAt            DateTime @updatedAt
   updatedById          String?
 }
 
@@ -2724,7 +2724,7 @@ model Budget {
   /// Folha de despacho (decisão, preparado por, aprovado por, data, observações)
   dispatch      Json @default("{}")
   /// Produção (P1–P8): calendário, tarefas, pessoal indireto, organograma, EPI e alimentação
-  production   Json         @default("{}")
+  production    Json @default("{}")
 
   // Resultados materializados pelo motor de cálculo
   directCost     Decimal? @db.Decimal(16, 2)
@@ -2758,15 +2758,15 @@ model Budget {
 /// Biblioteca de baremes da empresa (custos internos padrão). A ligação às folhas
 /// de custo é pelo NOME do recurso, como no protótipo.
 model BaremItem {
-  id   String    @id @default(cuid())
-  kind BaremKind
-  code String?
-  name String
-  unit String?
+  id           String    @id @default(cuid())
+  kind         BaremKind
+  code         String?
+  name         String
+  unit         String?
   /// Campos próprios de cada tipo (mensal, encargos, consumo, depreciação…)
-  fields Json   @default("{}")
+  fields       Json      @default("{}")
   /// Custo calculado pelas fórmulas, materializado para listas e para as folhas
-  computedCost Decimal? @db.Decimal(16, 4)
+  computedCost Decimal?  @db.Decimal(16, 4)
   /// Data do preço — base do estado Atualizado / Desatualizado
   priceDate    DateTime?
   /// Equipamentos: Próprio | Alugado
@@ -2815,31 +2815,31 @@ model CompanySetting {
 
 /// Proposta ao cliente, gerada a partir do orçamento aprovado em despacho.
 model Proposal {
-  id         String         @id @default(cuid())
+  id             String         @id @default(cuid())
   /// PROP-2026-0001 (sequencial por ano)
-  number     String         @unique
-  budgetId   String
-  status     ProposalStatus @default(RASCUNHO)
-  body       Json           @default("{}")
+  number         String         @unique
+  budgetId       String
+  status         ProposalStatus @default(RASCUNHO)
+  body           Json           @default("{}")
   /// O documento completo da Proposta Tecnica e Comercial (o que o modelo desenha)
-  document   Json           @default("{}")
+  document       Json           @default("{}")
   /// Como a lista de precos se apresenta: fmt, mat, serv
-  docOptions Json           @default("{}")
+  docOptions     Json           @default("{}")
   /// Outros orcamentos, quando a proposta junta varios lotes
-  extraBudgetIds Json       @default("[]")
-  validUntil DateTime?
-  sentAt     DateTime?
-  pdfUrl     String?
+  extraBudgetIds Json           @default("[]")
+  validUntil     DateTime?
+  sentAt         DateTime?
+  pdfUrl         String?
 
   /// Fotografia do orcamento no momento em que a proposta foi criada
-  currency   String    @default("AOA")
-  totalExVat Decimal?  @db.Decimal(16, 2)
-  totalInVat Decimal?  @db.Decimal(16, 2)
-  vatRate    Decimal?  @db.Decimal(7, 4)
+  currency      String    @default("AOA")
+  totalExVat    Decimal?  @db.Decimal(16, 2)
+  totalInVat    Decimal?  @db.Decimal(16, 2)
+  vatRate       Decimal?  @db.Decimal(7, 4)
   /// Condicoes de pagamento propostas ao cliente
-  paymentTerms Json    @default("{}")
-  sentById   String?
-  decidedAt  DateTime?
+  paymentTerms  Json      @default("{}")
+  sentById      String?
+  decidedAt     DateTime?
   decisionNotes String?
 
   createdById String?
@@ -2896,11 +2896,11 @@ enum RequisitionStatus {
 }
 
 model MaterialRequisition {
-  id     String                 @id @default(cuid())
+  id          String                 @id @default(cuid())
   /// RM-2026-0001 (sequencial por ano)
-  number String                 @unique
+  number      String                 @unique
   destination RequisitionDestination @default(ARMAZEM)
-  status RequisitionStatus      @default(RASCUNHO)
+  status      RequisitionStatus      @default(RASCUNHO)
 
   // ─── quem pede ───
   /// Obra que pede. Vazio = um departamento da sede.
@@ -2921,11 +2921,11 @@ model MaterialRequisition {
   targetWarehouseId String?
 
   // ─── decisões ───
-  approvedById   String?
-  approvedByName String?
-  approvedAt     DateTime?
-  refusalReason  String?
-  deliveredAt    DateTime?
+  approvedById    String?
+  approvedByName  String?
+  approvedAt      DateTime?
+  refusalReason   String?
+  deliveredAt     DateTime?
   /// Pedido de compra criado quando o destino passou a COMPRA
   purchaseOrderId String?
 
@@ -2936,13 +2936,13 @@ model MaterialRequisition {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  project         Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  costCenter      CostCenter?    @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
-  requestedBy     User?          @relation("RequisitionRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
-  approvedBy      User?          @relation("RequisitionApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
-  sourceWarehouse Warehouse?     @relation("RequisitionSourceWarehouse", fields: [sourceWarehouseId], references: [id], onDelete: SetNull)
-  targetWarehouse Warehouse?     @relation("RequisitionTargetWarehouse", fields: [targetWarehouseId], references: [id], onDelete: SetNull)
-  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  project         Project?                  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  costCenter      CostCenter?               @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+  requestedBy     User?                     @relation("RequisitionRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  approvedBy      User?                     @relation("RequisitionApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  sourceWarehouse Warehouse?                @relation("RequisitionSourceWarehouse", fields: [sourceWarehouseId], references: [id], onDelete: SetNull)
+  targetWarehouse Warehouse?                @relation("RequisitionTargetWarehouse", fields: [targetWarehouseId], references: [id], onDelete: SetNull)
+  purchaseOrder   PurchaseOrder?            @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
   items           MaterialRequisitionItem[]
   movements       StockMovement[]
 
@@ -2952,19 +2952,19 @@ model MaterialRequisition {
 }
 
 model MaterialRequisitionItem {
-  id            String  @id @default(cuid())
-  requisitionId String
+  id                 String   @id @default(cuid())
+  requisitionId      String
   /// Produto do catálogo. Vazio = escrito à mão (o armazém identifica depois).
-  productId     String?
-  description   String
-  unit          String?
-  quantity      Decimal @db.Decimal(16, 4)
+  productId          String?
+  description        String
+  unit               String?
+  quantity           Decimal  @db.Decimal(16, 4)
   /// Quanto já foi entregue
-  fulfilledQuantity Decimal @default(0) @db.Decimal(16, 4)
+  fulfilledQuantity  Decimal  @default(0) @db.Decimal(16, 4)
   /// Preço estimado, só para dar ideia do valor do pedido
   estimatedUnitPrice Decimal? @db.Decimal(16, 4)
-  notes String?
-  order Int     @default(0)
+  notes              String?
+  order              Int      @default(0)
 
   requisition MaterialRequisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
   product     Product?            @relation(fields: [productId], references: [id], onDelete: SetNull)
@@ -3189,4 +3189,230 @@ model WorkBudget {
 
   @@index([status])
   @@index([projectId])
+}
+
+// ─── Frota (protótipo: área «frota», V1–V13) ─────────────────────────────────
+// Viaturas, máquinas e equipamentos da empresa e o que acontece com eles:
+// abastecimentos, intervenções, ocorrências, documentos e seguros. Os custos
+// por viatura saem destes registos (o protótipo soma-os em `custosLin`).
+
+/// V3 Viaturas e Equipamentos (o `FX.frota` do protótipo).
+model FleetVehicle {
+  id               String    @id @default(cuid())
+  /// FR-001, FR-002…
+  code             String    @unique
+  plate            String    @unique
+  /// Tipo livre (LIGEIRA, PESADA, MÁQUINA, TRAILER…)
+  kind             String
+  brand            String
+  model            String
+  year             Int?
+  /// KM | HORAS | KM_HORAS
+  unit             String    @default("KM")
+  fuel             String?
+  tankCapacity     Decimal?  @db.Decimal(10, 2)
+  /// Consumo de referência: L/100 km (ou L/h nas máquinas)
+  refConsumption   Decimal?  @db.Decimal(10, 2)
+  /// Km ou horas atuais
+  odometer         Decimal?  @db.Decimal(14, 1)
+  odometerAt       DateTime?
+  acquisitionValue Decimal?  @db.Decimal(16, 2)
+  /// PROPRIA | ALUGADA | LEASING
+  ownership        String    @default("PROPRIA")
+  assignedTo       String?
+  projectId        String?
+  driverId         String?
+  /// Operacional, Em obra, Em manutenção, Avariada, Acidentada, Parada, Em reserva, Vendida, Abatida
+  status           String    @default("Operacional")
+  active           Boolean   @default(true)
+  notes            String?
+  /// Planos preventivos: [{ id, nome, km, meses, ultKm, ultData }]
+  maintenancePlans Json      @default("[]")
+  createdById      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  driver        FleetDriver?        @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  fuelLogs      FleetFuel[]
+  interventions FleetIntervention[]
+  incidents     FleetIncident[]
+  documents     FleetDocument[]
+
+  @@index([active])
+  @@index([projectId])
+}
+
+/// V4 Motoristas (o `FX.fmot` do protótipo).
+model FleetDriver {
+  id              String    @id @default(cuid())
+  /// MOT-001…
+  code            String    @unique
+  name            String
+  licenseNumber   String?
+  licenseCategory String?
+  licenseExpiry   DateTime?
+  phone           String?
+  /// Ativo | Inativo
+  status          String    @default("Ativo")
+  department      String?
+  projectId       String?
+  personnelId     String?
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  vehicles  FleetVehicle[]
+  fuelLogs  FleetFuel[]
+  incidents FleetIncident[]
+}
+
+/// V5 Abastecimentos (o `FX.fab` do protótipo).
+model FleetFuel {
+  id            String   @id @default(cuid())
+  /// AB-2026-001…
+  code          String   @unique
+  date          DateTime
+  vehicleId     String
+  driverId      String?
+  odometer      Decimal? @db.Decimal(14, 1)
+  liters        Decimal  @db.Decimal(10, 2)
+  pricePerLiter Decimal? @db.Decimal(12, 2)
+  amount        Decimal  @db.Decimal(16, 2)
+  fuelType      String?
+  fullTank      Boolean  @default(true)
+  station       String?
+  paymentMethod String?
+  receipt       String?
+  projectId     String?
+  /// Justificação de uma anomalia (km abaixo do anterior…)
+  justification String?
+  notes         String?
+  createdById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  vehicle FleetVehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  driver  FleetDriver? @relation(fields: [driverId], references: [id], onDelete: SetNull)
+
+  @@index([vehicleId, date])
+}
+
+/// V6 Manutenções e Reparações (o `FX.fint` do protótipo).
+model FleetIntervention {
+  id           String    @id @default(cuid())
+  /// OS-2026-001…
+  code         String    @unique
+  date         DateTime
+  vehicleId    String
+  odometer     Decimal?  @db.Decimal(14, 1)
+  /// Manutenção Preventiva, Manutenção Correctiva, Reparação…
+  type         String
+  system       String?
+  description  String
+  supplierId   String?
+  workshop     String?
+  technician   String?
+  entryDate    DateTime?
+  exitDate     DateTime?
+  /// Em curso | Concluída
+  status       String    @default("Concluída")
+  laborCost    Decimal?  @db.Decimal(16, 2)
+  partsCost    Decimal?  @db.Decimal(16, 2)
+  otherCost    Decimal?  @db.Decimal(16, 2)
+  warranty     String?
+  nextAction   String?
+  nextDate     DateTime?
+  nextOdometer Decimal?  @db.Decimal(14, 1)
+  /// Planos preventivos cumpridos por esta intervenção (ids de FleetVehicle.maintenancePlans)
+  planIds      String[]  @default([])
+  incidentId   String?
+  notes        String?
+  createdById  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  vehicle FleetVehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId, date])
+}
+
+/// V8 Ocorrências e Acidentes (o `FX.focr` do protótipo).
+model FleetIncident {
+  id             String    @id @default(cuid())
+  /// OC-2026-001…
+  code           String    @unique
+  date           DateTime
+  vehicleId      String
+  driverId       String?
+  type           String
+  /// Baixa | Média | Alta | Crítica
+  severity       String    @default("Média")
+  location       String?
+  description    String
+  action         String?
+  responsible    String?
+  deadline       DateTime?
+  /// Aberta | Em análise | Em reparação | Resolvida | Arquivada
+  status         String    @default("Aberta")
+  closedAt       DateTime?
+  estimatedCost  Decimal?  @db.Decimal(16, 2)
+  cost           Decimal?  @db.Decimal(16, 2)
+  insuranceClaim Boolean   @default(false)
+  injuries       Boolean   @default(false)
+  notes          String?
+  createdById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  vehicle FleetVehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  driver  FleetDriver? @relation(fields: [driverId], references: [id], onDelete: SetNull)
+
+  @@index([vehicleId, date])
+  @@index([status])
+}
+
+/// V9 Documentos da viatura (o `FX.fdoc` do protótipo).
+model FleetDocument {
+  id          String    @id @default(cuid())
+  vehicleId   String
+  /// Livrete / Título de Propriedade, Inspecção Periódica, Taxa de Circulação…
+  type        String
+  number      String?
+  entity      String?
+  issueDate   DateTime?
+  expiryDate  DateTime?
+  cost        Decimal?  @db.Decimal(16, 2)
+  /// Em vigor | Não se aplica | Arquivado
+  situation   String    @default("Em vigor")
+  notes       String?
+  createdById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  vehicle FleetVehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId, type])
+}
+
+/// V10 Seguros (o `FX.seg` do protótipo). Uma apólice cobre uma ou várias viaturas.
+model FleetInsurance {
+  id           String   @id @default(cuid())
+  /// SEG-001…
+  code         String   @unique
+  insurer      String
+  supplierId   String?
+  policyNumber String
+  coverages    String[] @default([])
+  vehicleIds   String[] @default([])
+  startDate    DateTime
+  endDate      DateTime
+  premium      Decimal? @db.Decimal(16, 2)
+  /// ANUAL | SEMESTRAL | TRIMESTRAL | MENSAL
+  periodicity  String   @default("ANUAL")
+  notes        String?
+  createdById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([endDate])
 }

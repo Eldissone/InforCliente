@@ -3009,3 +3009,17 @@ a.fx2-k:hover { background: #f8fafc; }
 .cs-tp--out { background: #fdf1d8; color: #a86800; }
 .cs-tp--neu { background: #eceff3; color: #475569; }
 .cs-tp--bad { background: #fdecea; color: #b42318; }
+
+/* Frota — listas de caixas (coberturas, viaturas cobertas, planos cumpridos) */
+.fr-multi {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 1rem;
+    padding: 0.5rem 0.625rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.625rem;
+    max-height: 9rem;
+    overflow-y: auto;
+    font-size: 0.8rem;
+}
+.fr-multi label { display: inline-flex; gap: 0.35rem; align-items: center; }

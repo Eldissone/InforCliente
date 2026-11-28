@@ -83,6 +83,7 @@ const ACTION_LABELS = {
   nav_comercial: "Menu: Comercial / Orçamentação",
   nav_financeiro: "Menu: Financeiro",
   nav_centros_gerais: "Menu: Compras e Pedidos Extra",
+  nav_frota: "Menu: Frota",
   nav_users: "Menu: Administração / Gestão",
 };
 
@@ -376,6 +377,20 @@ const PERMISSION_GROUPS = [
     actions: ["view", "create", "edit", "delete", "manage", "full_access"],
   },
   {
+    id: "frota",
+    label: "Frota",
+    icon: "local_shipping",
+    pages: [
+      { id: "frota.painel", label: "Painel da Frota e Alertas", route: "/frota/painel" },
+      { id: "frota.viaturas", label: "Viaturas e Equipamentos", route: "/frota/viaturas" },
+      { id: "frota.motoristas", label: "Motoristas", route: "/frota/motoristas" },
+      { id: "frota.operacao", label: "Abastecimentos, Manutenções, Planos e Ocorrências", route: "/frota/abastecimentos" },
+      { id: "frota.controlo", label: "Documentos e Seguros", route: "/frota/documentos" },
+      { id: "frota.custos", label: "Custos por Viatura", route: "/frota/custos" },
+    ],
+    actions: ["view", "create", "edit", "delete", "export", "full_access"],
+  },
+  {
     id: "navlinks",
     label: "Menus & Áreas de Navegação",
     icon: "menu_open",
@@ -390,6 +405,7 @@ const PERMISSION_GROUPS = [
       { id: "navlinks.comercial", label: "Menu: Comercial", route: "/comercial/orcamentos" },
       { id: "navlinks.financeiro", label: "Menu: Financeiro", route: "/Financeiro/overview" },
       { id: "navlinks.centros_gerais", label: "Menu: Compras e Pedidos Extra", route: "/Financeiro/centro-pagamentos" },
+      { id: "navlinks.frota", label: "Menu: Frota", route: "/frota/painel" },
       { id: "navlinks.users", label: "Menu: Gestão / Administração", route: "/Users/index.html" },
     ],
     actions: [
@@ -403,6 +419,7 @@ const PERMISSION_GROUPS = [
       "nav_comercial",
       "nav_financeiro",
       "nav_centros_gerais",
+      "nav_frota",
       "nav_users",
     ],
   },
@@ -455,6 +472,17 @@ const PAGE_ROUTE_GUARDS = [
   { route: "/comercial/base/baremes", module: "comercial", action: "tab_baremes" },
   { route: "/comercial/base/parametros", module: "comercial", action: "tab_parametros" },
   { route: "/comercial/base/funcionarios", module: "comercial", action: "tab_funcionarios" },
+  { route: "/frota/painel", module: "frota", action: "view" },
+  { route: "/frota/alertas", module: "frota", action: "view" },
+  { route: "/frota/viaturas", module: "frota", action: "view" },
+  { route: "/frota/motoristas", module: "frota", action: "view" },
+  { route: "/frota/abastecimentos", module: "frota", action: "view" },
+  { route: "/frota/manutencoes", module: "frota", action: "view" },
+  { route: "/frota/planos", module: "frota", action: "view" },
+  { route: "/frota/ocorrencias", module: "frota", action: "view" },
+  { route: "/frota/documentos", module: "frota", action: "view" },
+  { route: "/frota/seguros", module: "frota", action: "view" },
+  { route: "/frota/custos", module: "frota", action: "view" },
   { route: "/Users/index.html", module: "sistema", action: "view" },
   { route: "/registos/contactos", module: "cadastros", action: "view" },
   { route: "/registos/obras", module: "obras", action: "create" },
@@ -522,7 +550,8 @@ function defaultAllowedFor(role, module, action) {
       pedidosExtras: { view: "true", create: "true", edit: "own", approve: "true", reject: "true", cancel: "true", pay: "false", delete: "true", full_access: "false" },
       fornecedores: { view: "true", create: "true", edit: "true", delete: "false", manage: "true", full_access: "false" },
       cadastros: { view: "true", create: "true", edit: "true", delete: "true", manage: "true", full_access: "false" },
-      navlinks: { nav_dashboard: "true", nav_registos: "true", nav_clientes: "true", nav_obras: "true", nav_logistica: "true", nav_planeamento: "true", nav_cotacao: "true", nav_comercial: "true", nav_financeiro: "true", nav_centros_gerais: "true", nav_users: "false" },
+      frota: { view: "true", create: "true", edit: "true", delete: "false", export: "true", full_access: "false" },
+      navlinks: { nav_dashboard: "true", nav_registos: "true", nav_clientes: "true", nav_obras: "true", nav_logistica: "true", nav_planeamento: "true", nav_cotacao: "true", nav_comercial: "true", nav_financeiro: "true", nav_centros_gerais: "true", nav_frota: "true", nav_users: "false" },
     };
     return map[module]?.[action] ?? "false";
   }
@@ -562,7 +591,8 @@ function defaultAllowedFor(role, module, action) {
       pedidosExtras: { view: "true", create: "true", edit: "own", approve: "false", reject: "false", cancel: "true", pay: "true", delete: "false", full_access: "false" },
       fornecedores: { view: "true", create: "true", edit: "true", delete: "false", manage: "false", full_access: "false" },
       cadastros: { view: "true", create: "true", edit: "true", delete: "false", manage: "false", full_access: "false" },
-      navlinks: { nav_dashboard: "true", nav_registos: "true", nav_clientes: "true", nav_obras: "true", nav_logistica: "true", nav_planeamento: "true", nav_cotacao: "false", nav_comercial: "true", nav_financeiro: "true", nav_centros_gerais: "true", nav_users: "false" },
+      frota: { view: "true", create: "true", edit: "true", delete: "false", export: "true", full_access: "false" },
+      navlinks: { nav_dashboard: "true", nav_registos: "true", nav_clientes: "true", nav_obras: "true", nav_logistica: "true", nav_planeamento: "true", nav_cotacao: "false", nav_comercial: "true", nav_financeiro: "true", nav_centros_gerais: "true", nav_frota: "true", nav_users: "false" },
     };
     return map[module]?.[action] ?? "false";
   }
@@ -605,7 +635,8 @@ function defaultAllowedFor(role, module, action) {
       pedidosExtras: { view: "true", create: "false", edit: "false", approve: "false", reject: "false", cancel: "false", pay: "true", delete: "false", full_access: "false" },
       fornecedores: { view: "true", create: "true", edit: "true", delete: "false", manage: "false", full_access: "false" },
       cadastros: { view: "view", create: "false", edit: "false", delete: "false", manage: "false", full_access: "false" },
-      navlinks: { nav_dashboard: "true", nav_registos: "true", nav_clientes: "false", nav_obras: "true", nav_logistica: "false", nav_planeamento: "false", nav_cotacao: "false", nav_comercial: "true", nav_financeiro: "true", nav_centros_gerais: "true", nav_users: "false" },
+      frota: { view: "view", create: "false", edit: "false", delete: "false", export: "true", full_access: "false" },
+      navlinks: { nav_dashboard: "true", nav_registos: "true", nav_clientes: "false", nav_obras: "true", nav_logistica: "false", nav_planeamento: "false", nav_cotacao: "false", nav_comercial: "true", nav_financeiro: "true", nav_centros_gerais: "true", nav_frota: "true", nav_users: "false" },
     };
     return map[module]?.[action] ?? "false";
   }
@@ -645,7 +676,8 @@ function defaultAllowedFor(role, module, action) {
       pedidosExtras: { view: "true", create: "true", edit: "own", approve: "false", reject: "false", cancel: "false", pay: "false", delete: "false", full_access: "false" },
       fornecedores: { view: "view", create: "false", edit: "false", delete: "false", manage: "false", full_access: "false" },
       cadastros: { view: "view", create: "false", edit: "false", delete: "false", manage: "false", full_access: "false" },
-      navlinks: { nav_dashboard: "true", nav_registos: "true", nav_clientes: "false", nav_obras: "true", nav_logistica: "false", nav_planeamento: "true", nav_cotacao: "false", nav_comercial: "false", nav_financeiro: "false", nav_centros_gerais: "true", nav_users: "false" },
+      frota: { view: "false", create: "false", edit: "false", delete: "false", export: "false", full_access: "false" },
+      navlinks: { nav_dashboard: "true", nav_registos: "true", nav_clientes: "false", nav_obras: "true", nav_logistica: "false", nav_planeamento: "true", nav_cotacao: "false", nav_comercial: "false", nav_financeiro: "false", nav_centros_gerais: "true", nav_frota: "false", nav_users: "false" },
     };
     return map[module]?.[action] ?? "false";
   }

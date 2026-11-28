@@ -103,7 +103,7 @@ export const APP_MENU = [
   {
     type: "group",
     label: "Compras e Stock",
-    icon: "local_shipping",
+    icon: "shopping_cart",
     navPerm: "navlinks:nav_logistica|navlinks:nav_cotacao|navlinks:nav_centros_gerais",
     children: [
       {
@@ -152,6 +152,12 @@ export const APP_MENU = [
             href: "/compras/compromissos",
             perm: "stock:view|logistica:view|financeiro:view",
           },
+          {
+            label: "Conta Corrente de Fornecedores",
+            icon: "account_box",
+            href: "/compras/conta-corrente-fornecedores",
+            perm: "financeiro:view|fornecedores:view|stock:view",
+          },
         ],
       },
       {
@@ -160,7 +166,7 @@ export const APP_MENU = [
         navPerm: "navlinks:nav_logistica",
         children: [
           { label: "Requisições Internas", icon: "assignment_add", href: "/requisicoes", perm: "obras:view|stock:view" },
-          { label: "Entregas por Confirmar", icon: "fact_check", href: "/Stock?tab=deliveries", perm: "logistica:tab_deliveries|logistica:view" },
+          { label: "Movimentos por Confirmar", icon: "fact_check", href: "/Stock?tab=deliveries", perm: "logistica:tab_deliveries|logistica:view" },
           { label: "Stock por Armazém", icon: "inventory", href: "/compras/stock-armazem", perm: "stock:view" },
           { label: "Movimentos de Armazém", icon: "history", href: "/compras/movimentos-armazem", perm: "stock:view" },
           { label: "Ferramentas e Equipamentos", icon: "handyman", href: "/equipamentos", perm: "ferramentas:view|ferramentas:tab_tools" },
@@ -172,6 +178,16 @@ export const APP_MENU = [
             href: "/Stock",
             perm: "stock:view|logistica:view|obras:tab_stock_requests",
           },
+        ],
+      },
+      {
+        label: "Registos",
+        icon: "folder_open",
+        navPerm: "navlinks:nav_logistica|navlinks:nav_cotacao",
+        children: [
+          { label: "Produtos e Serviços", icon: "inventory_2", href: "/produtos", perm: "materiais:view" },
+          { label: "Categorias de Produtos e Serviços", icon: "category", href: "/registos/categorias-produtos", perm: "materiais:view" },
+          { label: "Terceiros", icon: "groups", href: "/registos/terceiros", perm: "fornecedores:view" },
         ],
       },
     ],
@@ -297,6 +313,55 @@ export const APP_MENU = [
           { label: "Categorias de Custo", icon: "account_tree", href: "/registos/categorias-custo", perm: "financeiro:view|pedidosExtras:view" },
           { label: "Subcategorias de Custo", icon: "subdirectory_arrow_right", href: "/registos/subcategorias-custo", perm: "financeiro:view|pedidosExtras:view" },
           { label: "Movimentos Financeiros", icon: "payments", href: "/registos/movimentos", perm: "financeiro:view|fundoManeio:view" },
+        ],
+      },
+    ],
+  },
+  {
+    type: "group",
+    label: "Frota",
+    icon: "local_shipping",
+    navPerm: "navlinks:nav_frota",
+    children: [
+      {
+        label: "Painel",
+        icon: "insights",
+        children: [
+          { label: "Painel da Frota", icon: "insights", href: "/frota/painel", perm: "frota:view" },
+          { label: "Alertas", icon: "notifications_active", href: "/frota/alertas", perm: "frota:view" },
+        ],
+      },
+      {
+        label: "Frota",
+        icon: "airport_shuttle",
+        children: [
+          { label: "Viaturas e Equipamentos", icon: "local_shipping", href: "/frota/viaturas", perm: "frota:view" },
+          { label: "Motoristas", icon: "badge", href: "/frota/motoristas", perm: "frota:view" },
+        ],
+      },
+      {
+        label: "Operação",
+        icon: "build",
+        children: [
+          { label: "Abastecimentos", icon: "local_gas_station", href: "/frota/abastecimentos", perm: "frota:view" },
+          { label: "Manutenções e Reparações", icon: "car_repair", href: "/frota/manutencoes", perm: "frota:view" },
+          { label: "Planos Preventivos", icon: "event_repeat", href: "/frota/planos", perm: "frota:view" },
+          { label: "Ocorrências e Acidentes", icon: "car_crash", href: "/frota/ocorrencias", perm: "frota:view" },
+        ],
+      },
+      {
+        label: "Controlo",
+        icon: "verified",
+        children: [
+          { label: "Documentos", icon: "description", href: "/frota/documentos", perm: "frota:view" },
+          { label: "Seguros", icon: "verified_user", href: "/frota/seguros", perm: "frota:view" },
+        ],
+      },
+      {
+        label: "Custos",
+        icon: "payments",
+        children: [
+          { label: "Custos por Viatura", icon: "price_check", href: "/frota/custos", perm: "frota:view" },
         ],
       },
     ],
