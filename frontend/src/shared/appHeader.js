@@ -6,7 +6,14 @@
 const LINK = "text-sm font-semibold text-slate-400 hover:text-white transition-colors";
 const MOBILE = "flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all";
 
-function renderAppHeader() {
+function renderAppHeader({ showHeaderLogout = false } = {}) {
+  const headerLogout = showHeaderLogout
+    ? `<button data-logout class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold text-white/60 hover:text-white hover:bg-white/10 transition-all" type="button" title="Terminar sessão" aria-label="Terminar sessão">
+          <span class="material-symbols-outlined text-base">logout</span>
+          <span>Sair</span>
+        </button>`
+    : "";
+
   return `<nav class="app-top-nav fixed top-0 w-full z-50 bg-[#212e3e] border-b border-slate-800 transition-all duration-300" data-shared-header>
     <div class="max-w-[1500px] mx-auto px-4 md:px-8 h-16 flex justify-between items-center">
       <div class="flex items-center gap-10">
@@ -29,7 +36,7 @@ function renderAppHeader() {
           <span class="material-symbols-outlined text-sm">person</span>
           <span data-user-role class="hidden"></span>
         </button>
-       
+        ${headerLogout}
         <button id="mobileMenuBtn" aria-expanded="false" class="lg:hidden w-10 h-10 flex items-center justify-center rounded-xl bg-slate-800 text-slate-400 hover:text-white transition-colors" type="button">
           <span class="material-symbols-outlined">menu</span>
         </button>
@@ -55,8 +62,10 @@ export function mountAppHeader() {
   if (document.body?.dataset.shell !== "figma") return;
   if (document.querySelector("nav.app-top-nav[data-shared-header]")) return;
 
+  const showHeaderLogout =
+    document.body?.dataset.appSidebar === "off" || document.body?.dataset.appNav === "off";
   const template = document.createElement("template");
-  template.innerHTML = renderAppHeader().trim();
+  template.innerHTML = renderAppHeader({ showHeaderLogout }).trim();
   const nav = template.content.firstElementChild;
   const existing = document.querySelector("body > nav.app-top-nav");
   const slot = document.getElementById("appHeader");
