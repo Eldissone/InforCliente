@@ -144,29 +144,49 @@
   .app-sidebar-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
+    gap: 0;
     width: 100%;
     height: 2.25rem;
     margin-bottom: 0.35rem;
-    padding: 0 0.35rem;
+    padding: 0;
     flex-shrink: 0;
     box-sizing: border-box;
+  }
+
+  .app-primary-sidebar:is(:hover, :focus-within, .is-pinned) .app-sidebar-header {
+    justify-content: space-between;
+    padding: 0 0.65rem;
   }
 
   .app-sidebar-header-left {
     display: flex;
     align-items: center;
-    gap: 0.65rem;
+    justify-content: center;
+    gap: 0;
     min-width: 0;
   }
 
+  .app-primary-sidebar:is(:hover, :focus-within, .is-pinned) .app-sidebar-header-left {
+    justify-content: flex-start;
+    gap: 0.75rem;
+  }
+
   .app-sidebar-menu-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
     font-size: 1.35rem;
     color: #475569;
     flex-shrink: 0;
   }
 
   .app-sidebar-menu-title {
+    width: 0;
+    max-width: 0;
+    overflow: hidden;
     font-size: 0.85rem;
     font-weight: 700;
     color: #0f172a;
@@ -175,31 +195,40 @@
     white-space: nowrap;
     transform: translateX(-6px);
     transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    pointer-events: none;
   }
 
   .app-primary-sidebar:is(:hover, :focus-within, .is-pinned) .app-sidebar-menu-title {
+    width: auto;
+    max-width: none;
     opacity: 1;
     transform: translateX(0);
+    pointer-events: auto;
   }
 
   .app-sidebar-pin-btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 2rem;
+    width: 0;
     height: 2rem;
+    padding: 0;
+    overflow: hidden;
     border: 0;
     border-radius: 0.6rem;
     background: transparent;
     color: #71717a;
     cursor: pointer;
     opacity: 0;
+    pointer-events: none;
     transition: opacity 0.2s ease, background 0.15s ease, color 0.15s ease;
     flex-shrink: 0;
   }
 
   .app-primary-sidebar:is(:hover, :focus-within, .is-pinned) .app-sidebar-pin-btn {
+    width: 2rem;
     opacity: 1;
+    pointer-events: auto;
   }
 
   .app-sidebar-pin-btn:hover {
@@ -264,6 +293,12 @@
     min-height: 0;
     overflow-x: hidden;
     overflow-y: auto;
+    margin-right: 0;
+    padding-right: 0;
+    scrollbar-width: none;
+  }
+
+  .app-primary-sidebar:is(:hover, :focus-within, .is-pinned) .app-sidebar-scroll {
     margin-right: -0.25rem;
     padding-right: 0.25rem;
     scrollbar-width: thin;
@@ -271,6 +306,10 @@
   }
 
   .app-sidebar-scroll::-webkit-scrollbar {
+    width: 0;
+  }
+
+  .app-primary-sidebar:is(:hover, :focus-within, .is-pinned) .app-sidebar-scroll::-webkit-scrollbar {
     width: 3px;
   }
   .app-sidebar-scroll::-webkit-scrollbar-track {
@@ -296,11 +335,11 @@
   .app-sidebar-subgroup > summary {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0;
     box-sizing: border-box;
     width: 100%;
     height: 2.45rem;
-    padding: 0 0.25rem;
+    padding: 0;
     border-radius: 0.85rem;
     color: #52525b;
     font-size: 0.84rem;
@@ -337,6 +376,7 @@
   .app-primary-sidebar:is(:hover, :focus-within, .is-pinned) .app-sidebar-link,
   .app-primary-sidebar:is(:hover, :focus-within, .is-pinned) .app-sidebar-group > summary {
     justify-content: flex-start;
+    gap: 0.75rem;
     padding: 0 0.65rem;
   }
 
@@ -406,6 +446,8 @@
   .app-sidebar-subgroup-label-wrap,
   .app-sidebar-badge,
   .app-sidebar-group-right {
+    width: 0;
+    max-width: 0;
     opacity: 0;
     white-space: nowrap;
     overflow: hidden;
@@ -420,6 +462,8 @@
   .app-primary-sidebar:is(:hover, :focus-within, .is-pinned) .app-sidebar-subgroup-label-wrap,
   .app-primary-sidebar:is(:hover, :focus-within, .is-pinned) .app-sidebar-badge,
   .app-primary-sidebar:is(:hover, :focus-within, .is-pinned) .app-sidebar-group-right {
+    width: auto;
+    max-width: none;
     opacity: 1;
     transform: translateX(0);
     pointer-events: auto;
@@ -463,13 +507,17 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 0.15rem 0.45rem;
+    padding: 0;
     border-radius: 9999px;
     background: rgba(0, 0, 0, 0.05);
     color: #71717a;
     font-size: 0.68rem;
     font-weight: 600;
     line-height: 1;
+  }
+
+  .app-primary-sidebar:is(:hover, :focus-within, .is-pinned) .app-sidebar-badge {
+    padding: 0.15rem 0.45rem;
   }
 
   .app-sidebar-link.is-active .app-sidebar-badge {
@@ -485,8 +533,14 @@
   .app-sidebar-group-label {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    justify-content: center;
+    gap: 0;
     min-width: 0;
+  }
+
+  .app-primary-sidebar:is(:hover, :focus-within, .is-pinned) .app-sidebar-group-label {
+    justify-content: flex-start;
+    gap: 0.75rem;
   }
 
   .app-sidebar-children {
