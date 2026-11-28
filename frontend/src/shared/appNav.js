@@ -50,7 +50,8 @@ export const APP_MENU = [
           },
         ],
       },
-      { label: "Produtos e Serviços", icon: "inventory_2", href: "/produtos", perm: "materiais:view" },
+      // Mesma lista que Compras › Produtos e Serviços; aqui só fica marcado no formulário de registo
+      { label: "Produtos e Serviços", icon: "inventory_2", href: "/produtos", activePath: "/registos/produtos", perm: "materiais:view" },
       { label: "Categorias de Produtos e Serviços", icon: "category", href: "/registos/categorias-produtos", perm: "materiais:view" },
       { label: "Equipamentos, Maquinarias e Viaturas", icon: "agriculture", href: "/registos/equipamentos", perm: "ferramentas:view" },
       { label: "Pessoal", icon: "badge", href: "/registos/pessoal", perm: "cadastros:view" },
@@ -434,6 +435,7 @@ function createMenuLink(definition, source, variant) {
   } else {
     link.className = "flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all";
   }
+  if (definition.activePath) link.setAttribute("data-active-path", definition.activePath);
   const combinedPerm = [definition.navPerm, definition.perm].filter(Boolean).join("&");
   if (combinedPerm) link.setAttribute("data-nav-perm", combinedPerm);
   if (definition.pending) {
@@ -529,6 +531,9 @@ export function markTopNavActive(nav = getTopNav()) {
 }
 
 function isSidebarLinkActive(link) {
+  // Link com caminho de ativação próprio (ex.: Registos › Produtos e Serviços só no formulário)
+  const activePath = link.getAttribute("data-active-path");
+  if (activePath) return locationMatchesHref(activePath);
   if (locationMatchesHref(link.getAttribute("href"))) return true;
 
   const current = window.location.pathname.replace(/\\/g, "/").toLowerCase();
