@@ -1,0 +1,25 @@
+{
+  "_nota": "Planos preventivos da frota (tabela de 2026-11). «atual» é a leitura de km atual da viatura. LD-15-75-FO → LD-75-15-FO (matrícula da frota). HLU-12-65 é «HINO 300» nesta tabela (completa a marca e o modelo, que estavam N/D).",
+  "corrigirMatricula": { "LD-15-75-FO": "LD-75-15-FO" },
+  "completarViatura": { "HLU-12-65": { "brand": "HINO", "model": "300" } },
+  "planos": [
+    { "plate": "LD-71-97-HZ", "nome": "MUDANÇA DE ÓLEO E FILTROS", "km": 5000, "meses": 6, "ultKm": 62635, "ultData": null, "atual": 69794 },
+    { "plate": "HLU-12-65", "nome": "MUDANÇA DE ÓLEO E FILTROS", "km": 5000, "meses": 6, "ultKm": 88600, "ultData": "2026-11-22", "atual": 88600 },
+    { "plate": "HLU-12-66", "nome": "MUDANÇA DE ÓLEO E FILTROS", "km": 5000, "meses": 3, "ultKm": 95412, "ultData": "2026-10-18", "atual": 98661, "viatura": "HINO 300-3,335-2021" },
+    { "plate": "HLU-12-80", "nome": "MUDANÇA DE ÓLEO E FILTROS", "km": 5000, "meses": 3, "ultKm": 93966, "ultData": "2026-10-10", "atual": 98191 },
+    { "plate": "LD-03-98-ID", "nome": "MUDANÇA DE ÓLEO E FILTROS", "km": 5000, "meses": 6, "ultKm": 146048, "ultData": "2026-10-26", "atual": 146048 },
+    { "plate": "LD-09-64-HI", "nome": "MUDANÇA DE ÓLEO E FILTROS", "km": 5000, "meses": 6, "ultKm": 131551, "ultData": "2026-10-02", "atual": 135665 },
+    { "plate": "LD-15-75-FO", "nome": "MUDANÇA DE ÓLEO E FILTROS", "km": 5000, "meses": 3, "ultKm": 233279, "ultData": "2026-10-25", "atual": 236849 },
+    { "plate": "LD-64-09-HP", "nome": "MUDANÇA DE ÓLEO E FILTROS", "km": 5000, "meses": 6, "ultKm": 83622, "ultData": "2026-11-22", "atual": 83622 },
+    { "plate": "LD-71-96-HZ", "nome": "MUDANÇA DE ÓLEO E FILTROS", "km": 5000, "meses": null, "ultKm": 76430, "ultData": "2026-11-20", "atual": 76666 },
+    { "plate": "LD-71-98-HZ", "nome": "MUDANÇA DE ÓLEO E FILTROS", "km": 5000, "meses": 3, "ultKm": 48818, "ultData": null, "atual": 49865 },
+    { "plate": "LD-72-01-HZ", "nome": "MUDANÇA DE ÓLEO E FILTROS", "km": 5000, "meses": 6, "ultKm": 30089, "ultData": null, "atual": 33628 },
+    { "plate": "LD-72-02-HZ", "nome": "MUDANÇA DE ÓLEO E FILTROS", "km": 5000, "meses": 6, "ultKm": 29531, "ultData": null, "atual": 30000 },
+    { "plate": "LD-72-03-HZ", "nome": "MUDANÇA DE ÓLEO E FILTROS", "km": 5000, "meses": 3, "ultKm": 47633, "ultData": null, "atual": 50282 },
+    { "plate": "LD-86-04-HP", "nome": "MUDANÇA DE ÓLEO E FILTROS", "km": 5000, "meses": 3, "ultKm": 118324, "ultData": null, "atual": 122615 },
+    { "plate": "LD-86-05-HP", "nome": "MUDANÇA DE ÓLEO E FILTROS", "km": 5000, "meses": 3, "ultKm": 87531, "ultData": null, "atual": 89603 },
+    { "plate": "LD-94-63-HQ", "nome": "MUDANÇA DE ÓLEO E FILTROS", "km": 5000, "meses": 6, "ultKm": 140515, "ultData": "2026-10-02", "atual": 144139 },
+    { "plate": "LDA-22-81-AA", "nome": "MUDANÇA DE ÓLEO E FILTROS", "km": 6000, "meses": 6, "ultKm": 90041, "ultData": "2026-11-23", "atual": 90041 },
+    { "plate": "LDA-22-82-AA", "nome": "MUDANÇA DE ÓLEO E FILTROS", "km": 6000, "meses": 3, "ultKm": 76459, "ultData": null, "atual": 79788 }
+  ]
+}
