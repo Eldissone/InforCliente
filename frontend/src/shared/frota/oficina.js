@@ -10,7 +10,8 @@
  */
 
 import { apiRequest } from "../../services/api.js";
-import { openModal, toast } from "../ui.js";
+import { toast } from "../ui.js";
+import { abrirPainel } from "./painel.js";
 import { can } from "../permissions.js";
 import { esc, fmt, fmtData, kpis, vazio, erro } from "../finance/f2Ui.js";
 import { norm, pesquisa } from "../compras/ui.js";
@@ -270,7 +271,7 @@ function formNovo({ dia = "", modo = "of", vehicleId = "" } = {}) {
   const optsV = S.d.viaturas.filter((v) => v.active !== false).map((v) => `<option value="${esc(v.id)}"${v.id === vehicleId ? " selected" : ""}>${esc(`${v.plate} · ${[v.brand, v.model].filter(Boolean).join(" ")}`)}</option>`).join("");
   const sel = (id, opts, val) => `<select id="${id}" class="finance-input">${opts.map(([v, l]) => `<option value="${esc(v)}"${v === val ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
   const campo = (l, html, cls = "") => `<div class="finance-field ${cls}"><label class="finance-label">${esc(l)}</label>${html}</div>`;
-  openModal({
+  abrirPainel({
     title: daOficina ? "Novo Trabalho na Oficina" : "Pedido à Oficina",
     width: 780,
     primaryLabel: daOficina ? "Criar Trabalho" : "Validar e Enviar",
@@ -339,7 +340,7 @@ function fichaOT(x) {
   const ed = podeEditar();
   const passos = S.d.listas.estados.filter((e) => e !== "Cancelado");
   const v = vDe(x);
-  openModal({
+  abrirPainel({
     title: `Ordem de Trabalho ${x.code} · ${matDe(x)}`,
     width: 900,
     primaryLabel: ed ? "Guardar" : "",

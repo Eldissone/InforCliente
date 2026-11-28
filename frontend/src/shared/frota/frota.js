@@ -12,7 +12,8 @@
  */
 
 import { apiRequest, apiUpload, getAssetUrl } from "../../services/api.js";
-import { openModal, toast } from "../ui.js";
+import { toast } from "../ui.js";
+import { abrirPainel } from "./painel.js";
 import { can } from "../permissions.js";
 import { esc, fmt, fmt0, fmtData, kpis, vazio, erro } from "../finance/f2Ui.js";
 import { norm, select, pesquisa, chip } from "../compras/ui.js";
@@ -205,13 +206,25 @@ function ligarFicheiros(panel, col, o) {
 function formRegisto({ col, titulo, campos, o = {}, extraHtml = "", ficheiros = null, botoes = "", onRender, prepararCorpo, depois }) {
   const novo = !o.id;
   const podeGravar = novo ? pode("create") : pode("edit");
-  openModal({
+  abrirPainel({
     title: titulo,
-    width: 860,
+    subtitle: novo ? "Novo registo" : o.code || "",
     primaryLabel: podeGravar ? "Gravar" : "",
-    secondaryLabel: podeGravar ? "Cancelar" : "Fechar",
+    secondaryLabel: "Cancelar",
+    dangerLabel: !novo && pode("delete") ? "Apagar" : "",
     contentHtml: `${camposHtml(campos, o)}${extraHtml}${ficheiros ? ficheiros(o) : ""}
-      <div class="fr-rodape">${!novo && pode("delete") ? `<button type="button" class="finance-btn fr-apagar" data-fr-apagar>Apagar</button>` : ""}${botoes}</div>`,
+      <div class="fr-rodape">${botoes}</div>`,
+    onDanger: async ({ close }) => {
+      if (!confirm("Apagar este registo? Não se pode desfazer.")) return;
+      try {
+        await apiRequest(`/fleet/${col}/${o.id}`, { method: "DELETE" });
+        close();
+        toast("Registo apagado.");
+        carregar();
+      } catch (e) {
+        toast(e.message || "Não foi possível apagar.", { type: "error" });
+      }
+    },
     onRender: ({ panel, close }) => {
       let enviarFicheiros = async () => 0;
       if (ficheiros) enviarFicheiros = ligarFicheiros(panel, col, o);
@@ -240,17 +253,6 @@ function formRegisto({ col, titulo, campos, o = {}, extraHtml = "", ficheiros = 
       panel.addEventListener("input", atualizar);
       panel.addEventListener("change", atualizar);
       atualizar();
-      panel.querySelector("[data-fr-apagar]")?.addEventListener("click", async () => {
-        if (!confirm("Apagar este registo? Não se pode desfazer.")) return;
-        try {
-          await apiRequest(`/fleet/${col}/${o.id}`, { method: "DELETE" });
-          close();
-          toast("Registo apagado.");
-          carregar();
-        } catch (e) {
-          toast(e.message || "Não foi possível apagar.", { type: "error" });
-        }
-      });
       onRender?.({ panel, close, atualizar });
     },
     onPrimary: async ({ panel, close }) => {
