@@ -822,11 +822,25 @@ function wireSidebarInteractions(sidebar) {
 
     e.preventDefault();
 
+    // Clique durante uma animação: inverte já o estado em vez de ignorar o clique
+    if (content._navAnim && content._navAnim.playState === "running") {
+      const wasClosing = details.classList.contains("is-closing");
+      content._navAnim.onfinish = null;
+      content._navAnim.cancel();
+      content._navAnim = null;
+      details.classList.remove("is-closing");
+      content.style.height = "";
+      content.style.opacity = "";
+      content.style.overflow = "";
+      details.open = wasClosing;
+      return;
+    }
+
     if (details.open) {
       details.classList.add("is-closing");
       const startHeight = content.offsetHeight;
       content.style.overflow = "hidden";
-      const anim = content.animate(
+      const anim = content._navAnim = content.animate(
         [
           { height: `${startHeight}px`, opacity: 1 },
           { height: "0px", opacity: 0 }
@@ -845,7 +859,7 @@ function wireSidebarInteractions(sidebar) {
       details.open = true;
       content.style.overflow = "hidden";
       const targetHeight = content.scrollHeight;
-      const anim = content.animate(
+      const anim = content._navAnim = content.animate(
         [
           { height: "0px", opacity: 0 },
           { height: `${targetHeight}px`, opacity: 1 }
@@ -870,8 +884,11 @@ function wireSidebarInteractions(sidebar) {
       } catch {}
     });
   }
-  sidebar.addEventListener("mouseenter", () => ensureActiveLinkVisible(sidebar));
-  sidebar.addEventListener("focusin", () => ensureActiveLinkVisible(sidebar));
+  // Não fazer scroll ao entrar com o rato nem no foco por clique: o item saía de baixo do cursor
+  // entre o mousedown e o mouseup e o clique perdia-se. Só para navegação por teclado.
+  sidebar.addEventListener("focusin", (e) => {
+    if (e.target?.matches?.(":focus-visible") && !e.target.closest(".app-sidebar-scroll")) ensureActiveLinkVisible(sidebar);
+  });
 
   const searchInput = sidebar.querySelector("#sidebarSearchInput");
   if (searchInput) {
