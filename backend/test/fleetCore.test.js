@@ -80,3 +80,24 @@ test("painel conta viaturas ativas e custo do ano", () => {
   assert.equal(p.custoAno, 9000);
   assert.equal(p.litrosAno, 30);
 });
+
+test("painelGestao: mês, 12 meses, grupos e km do mês", () => {
+  const dados = {
+    viaturas: [V1, { ...V1, id: "m1", plate: "MQ-1", kind: "MÁQUINA", unit: "HORAS" }],
+    abastecimentos: [
+      { id: "a1", vehicleId: "v1", date: "2026-11-02", odometer: 50000, liters: 50, amount: 20000 },
+      { id: "a2", vehicleId: "v1", date: "2026-11-20", odometer: 51000, liters: 50, amount: 20000 },
+      { id: "a3", vehicleId: "m1", date: "2026-03-01", odometer: 100, liters: 30, amount: 9000 },
+      { id: "a4", vehicleId: "v1", date: "2025-05-01", odometer: 40000, liters: 30, amount: 9999 },
+    ],
+  };
+  const g = F.painelGestao(dados, HOJE, {});
+  assert.equal(g.mes, "2026-11");
+  assert.equal(g.custoMes, 40000);
+  assert.equal(g.custo12, 49000);
+  assert.equal(g.km, 1000);
+  assert.equal(g.custoPorKm, 40);
+  assert.equal(g.grupos.find((x) => x.k === "M").n, 1);
+  assert.equal(F.painelGestao(dados, HOJE, { grupo: "M" }).custo12, 9000);
+  assert.equal(F.painelGestao(dados, HOJE, { per: "12" }).categorias[0].valor, 49000);
+});

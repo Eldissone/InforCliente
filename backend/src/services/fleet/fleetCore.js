@@ -322,6 +322,81 @@ function painel(dados, hoje) {
   };
 }
 
+/** Grupo da tipologia, como os filtros Viaturas / Máquinas / Equipamentos do protótipo. */
+function grupoDe(kind) {
+  const k = String(kind || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  if (/reboq|trailer|semi/.test(k)) return "R";
+  if (/maquin|escavad|retro|cilindro|grua|empilhad|motoniv|bulldo|pa carreg/.test(k)) return "M";
+  if (/equip|gerador|compressor|betoneir/.test(k)) return "E";
+  return "V";
+}
+const GRUPOS = [["V", "Viaturas"], ["M", "Máquinas"], ["E", "Equipamentos"], ["R", "Reboques"]];
+
+function mesesAte(mes, quantos) {
+  const [a, m] = mes.split("-").map(Number);
+  return Array.from({ length: quantos }, (_, i) => {
+    const d = new Date(Date.UTC(a, m - 1 - (quantos - 1 - i), 1));
+    return d.toISOString().slice(0, 7);
+  });
+}
+
+/** Leitura de km / horas de uma viatura num mês (a maior menos a menor). */
+function percursoMes(vid, dados, mes) {
+  const kms = [
+    ...(dados.abastecimentos || []).filter((a) => a.vehicleId === vid && !vazio(a.odometer) && iso(a.date).slice(0, 7) === mes).map((a) => n(a.odometer)),
+    ...(dados.intervencoes || []).filter((i) => i.vehicleId === vid && !vazio(i.odometer) && iso(i.date).slice(0, 7) === mes).map((i) => n(i.odometer)),
+  ];
+  return kms.length > 1 ? Math.max(...kms) - Math.min(...kms) : 0;
+}
+
+/**
+ * Painel de Gestão da Frota (o `V.frges` do protótipo, v667): quanto custa a
+ * frota no mês e nos últimos 12, por categoria e por viatura, e o volume da
+ * operação. `grupo` filtra por V / M / E / R; `per` é mes | 3 | 12.
+ */
+function painelGestao(dados, hoje, { mes = "", grupo = "", per = "mes" } = {}) {
+  const M = /^\d{4}-\d{2}$/.test(mes) ? mes : iso(hoje).slice(0, 7);
+  const keys = mesesAte(M, 12);
+  const VV = (dados.viaturas || []).filter((v) => ativa(v) && (!grupo || grupoDe(v.kind) === grupo));
+  const ids = new Set(VV.map((v) => v.id));
+  const L = linhasDeCusto(dados).filter((x) => ids.has(x.vid) && keys.includes(x.d.slice(0, 7)));
+  const soma = (f) => L.filter(f).reduce((s, x) => s + x.v, 0);
+  const KP = per === "12" ? keys : per === "3" ? keys.slice(-3) : [M];
+  const linhas = VV.map((v) => {
+    const mine = L.filter((x) => x.vid === v.id);
+    const cat = Object.fromEntries(CATEGORIAS_CUSTO.map((c) => [c, mine.filter((x) => x.cat === c && x.d.slice(0, 7) === M).reduce((s, x) => s + x.v, 0)]));
+    return {
+      vid: v.id,
+      matricula: v.plate,
+      nome: [v.brand, v.model].filter(Boolean).join(" "),
+      cat,
+      mes: Object.values(cat).reduce((s, x) => s + x, 0),
+      doze: mine.reduce((s, x) => s + x.v, 0),
+      km: percursoMes(v.id, dados, M),
+    };
+  }).sort((a, b) => b.mes - a.mes || b.doze - a.doze);
+  const custoMes = linhas.reduce((s, x) => s + x.mes, 0);
+  const km = linhas.reduce((s, x) => s + x.km, 0);
+  const todas = (dados.viaturas || []).filter(ativa);
+  const AL = alertas(dados, hoje);
+  return {
+    mes: M,
+    meses: keys.map((k) => ({ mes: k, valor: soma((x) => x.d.slice(0, 7) === k), porCategoria: Object.fromEntries(CATEGORIAS_CUSTO.map((c) => [c, soma((x) => x.cat === c && x.d.slice(0, 7) === k)])) })),
+    grupos: GRUPOS.map(([k, l]) => ({ k, l, n: todas.filter((v) => grupoDe(v.kind) === k).length })),
+    ativas: VV.length,
+    custoMes,
+    custo12: L.reduce((s, x) => s + x.v, 0),
+    km,
+    viaturasComKm: linhas.filter((x) => x.km).length,
+    custoPorKm: km > 0 ? custoMes / km : null,
+    paradas: VV.filter((v) => /avari|manut|oficina|parad|acident/i.test(v.status || "")).length,
+    categorias: CATEGORIAS_CUSTO.map((c) => ({ categoria: c, valor: soma((x) => x.cat === c && KP.includes(x.d.slice(0, 7))) })).filter((c) => c.valor > 0).sort((a, b) => b.valor - a.valor),
+    linhas,
+    alertas: { total: AL.length, altas: AL.filter((a) => a.p === 1).length },
+    ocorrenciasAbertas: (dados.ocorrencias || []).filter((o) => !OCORRENCIA_FECHADA.includes(o.status || "Aberta")).length,
+  };
+}
+
 /** Custos de uma viatura num período (V13): totais por categoria e as linhas. */
 function custosViatura(vid, dados, { de = "", ate = "" } = {}) {
   const L = linhasDeCusto(dados).filter((x) => x.vid === vid && (!de || x.d >= de) && (!ate || x.d <= ate));
@@ -384,6 +459,9 @@ module.exports = {
   linhasDeCusto,
   alertas,
   painel,
+  painelGestao,
+  grupoDe,
+  GRUPOS,
   custosViatura,
   custosResumo,
   ativa,

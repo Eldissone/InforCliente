@@ -4,15 +4,18 @@
  *   GET  /fleet/overview             V1 Painel e V2 Alertas
  *   GET  /fleet/costs?de=&ate=&viatura=   V13 Custos por Viatura
  *   CRUD /fleet/:colecao[/:id]       vehicles, drivers, fuel, interventions, incidents, documents, insurances
+ *   /fleet/workshop…                 Oficina: Calendário, Ordens de Trabalho, Material, Indicadores
  *
  * Permissões: módulo `frota` (view / create / edit / delete). O menu tem `navlinks:nav_frota`.
+ * A Oficina aceita `oficina` ou `frota` (quem gere a frota faz pedidos à oficina).
  */
 
 const express = require("express");
 const { prisma } = require("../db");
 const { asyncHandler } = require("../utils/http");
-const { authRequired, requirePermission } = require("../middlewares/auth");
+const { authRequired, requirePermission, requireAnyPermission } = require("../middlewares/auth");
 const F = require("../services/fleet/fleetCore");
+const W = require("../services/fleet/workshopCore");
 
 const fleetRoutes = express.Router();
 fleetRoutes.use(authRequired);
@@ -184,7 +187,7 @@ async function atualizarConta(tx, vehicleId, odometer, date) {
 
 /** Intervenção concluída que cumpre planos preventivos: a última execução passa a ser esta. */
 async function cumprirPlanos(tx, intervencao) {
-  if (!intervencao.planIds?.length || intervencao.status !== "Concluída") return;
+  if (!intervencao.vehicleId || !intervencao.planIds?.length || intervencao.status !== "Concluída") return;
   const v = await tx.fleetVehicle.findUnique({ where: { id: intervencao.vehicleId }, select: { maintenancePlans: true } });
   if (!v || !Array.isArray(v.maintenancePlans)) return;
   const data = F.iso(intervencao.date);
@@ -272,13 +275,270 @@ fleetRoutes.get(
   })
 );
 
+/**
+ * Configurações da Frota (o `V.frcfg` do protótipo): oficinas e fornecedores
+ * da frota, e quem a gere — pelo perfil (`role_permissions`) ou por exceção
+ * no utilizador (`user_permissions`) no módulo `frota`.
+ */
+const RE_OFICINA = /oficin|lavag|mec[aâ]nic|auto|pneu|reboq|bate|chapa|pintura/i;
+
+fleetRoutes.get(
+  "/config",
+  verFrota,
+  asyncHandler(async (_req, res) => {
+    const [fornecedores, oficinasUsadas, rolePerms, users, overrides] = await Promise.all([
+      prisma.supplier.findMany({ where: { active: true }, select: { id: true, code: true, name: true, nif: true, category: true, type: true }, orderBy: { name: "asc" } }),
+      prisma.fleetIntervention.groupBy({ by: ["workshop"], where: { workshop: { not: null } }, _count: true, _max: { date: true } }),
+      prisma.rolePermission.findMany({ where: { OR: [{ module: "frota" }, { module: "navlinks", action: "nav_frota" }] } }),
+      prisma.user.findMany({ select: { id: true, name: true, email: true, role: true }, orderBy: { name: "asc" } }),
+      prisma.userPermission.findMany({ where: { OR: [{ module: "frota" }, { module: "navlinks", action: "nav_frota" }] } }),
+    ]);
+    const nivel = (map) => {
+      const ok = (a) => ["true", "own"].includes(map[a]);
+      if (map.full_access === "true" || (ok("create") && ok("edit") && ok("delete"))) return "gere";
+      if (ok("create") || ok("edit")) return "regista";
+      if (["true", "own", "view"].includes(map.view)) return "consulta";
+      return "sem";
+    };
+    const porPerfil = {};
+    rolePerms.forEach((r) => ((porPerfil[r.role] = porPerfil[r.role] || {})[r.action] = r.allowed));
+    const exc = {};
+    overrides.forEach((o) => ((exc[o.userId] = exc[o.userId] || {})[o.action] = o.allowed));
+    const perfis = Object.entries(porPerfil).map(([role, map]) => ({ role, nivel: role === "admin" ? "gere" : nivel(map), menu: role === "admin" || map.nav_frota === "true" }));
+    const responsaveis = users
+      .map((u) => {
+        const base = porPerfil[u.role] || {};
+        const map = { ...base, ...(exc[u.id] || {}) };
+        return { id: u.id, nome: u.name || u.email, perfil: u.role, nivel: u.role === "admin" ? "gere" : nivel(map), excecao: Boolean(exc[u.id]) };
+      })
+      .filter((u) => u.nivel === "gere" || u.nivel === "regista");
+    res.json({
+      oficinas: fornecedores.filter((f) => RE_OFICINA.test(`${f.category || ""} ${f.name}`)),
+      oficinasUsadas: oficinasUsadas.map((o) => ({ nome: o.workshop, intervencoes: o._count, ultima: o._max.date ? o._max.date.toISOString().slice(0, 10) : null })).sort((a, b) => b.intervencoes - a.intervencoes),
+      perfis: perfis.sort((a, b) => ["gere", "regista", "consulta", "sem"].indexOf(a.nivel) - ["gere", "regista", "consulta", "sem"].indexOf(b.nivel)),
+      responsaveis,
+    });
+  })
+);
+
+// ─── Oficina (protótipo v660/v667) ────────────────────────────────────────────
+
+const verOficina = requireAnyPermission([["oficina", "view"], ["frota", "view"]]);
+const criarOficina = requireAnyPermission([["oficina", "create"], ["frota", "create"]]);
+const editarOficina = requireAnyPermission([["oficina", "edit"], ["frota", "edit"]]);
+
+const nomeDe = (req) => req.user?.name || req.user?.email || "—";
+const txt = (v, max = 500) => String(v ?? "").trim().slice(0, max);
+const dataOk = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || "").slice(0, 10)) ? String(v).slice(0, 10) : "");
+const horaOk = (v) => (/^\d{1,2}:\d{2}$/.test(String(v || "")) ? String(v) : "");
+
+function limparLinhas(L, campos, max = 60) {
+  return (Array.isArray(L) ? L : []).slice(0, max).map((r) => Object.fromEntries(campos.map((c) => [c, txt(r?.[c], 300)])));
+}
+
+async function ordensDeTrabalho() {
+  return plano(await prisma.fleetIntervention.findMany({ where: { workOrderStatus: { not: null } }, orderBy: [{ date: "desc" }, { createdAt: "desc" }] }));
+}
+
+fleetRoutes.get(
+  "/workshop",
+  verOficina,
+  asyncHandler(async (_req, res) => {
+    const hoje = hojeIso();
+    const [ots, viaturas, fornecedores] = await Promise.all([
+      ordensDeTrabalho(),
+      prisma.fleetVehicle.findMany({ select: { id: true, code: true, plate: true, brand: true, model: true, kind: true, status: true, active: true, odometer: true, unit: true }, orderBy: { plate: "asc" } }),
+      prisma.supplier.findMany({ where: { active: true }, select: { id: true, name: true, category: true }, orderBy: { name: "asc" } }),
+    ]);
+    const lista = ots.map((x) => ({
+      ...x,
+      workOrder: W.blocoOT(x.workOrder),
+      _dia: W.diaOT(x),
+      _hora: W.horaOT(x),
+      _sit: W.situacao(x, hoje),
+      _horas: W.horasOT(x.workOrder),
+      _atrasada: W.atrasada(x, hoje),
+    }));
+    res.json({
+      hoje,
+      listas: { estados: W.ESTADOS, tiposServico: W.TIPOS_SERVICO, prioridades: W.PRIORIDADES, estadosTrabalho: W.ESTADOS_TRABALHO, estadosMaterial: W.ESTADOS_MATERIAL, oficinaPropria: W.OFICINA_PROPRIA },
+      ots: lista,
+      viaturas: plano(viaturas),
+      oficinas: fornecedores.filter((f) => RE_OFICINA.test(`${f.category || ""} ${f.name}`)),
+      calendario: W.calendario(lista, hoje),
+      indicadores: W.indicadores(lista),
+      materiais: W.materiais(lista),
+    });
+  })
+);
+
+/** Novo pedido à oficina (da frota) ou novo trabalho (da própria oficina, já marcado). */
+fleetRoutes.post(
+  "/workshop",
+  criarOficina,
+  asyncHandler(async (req, res) => {
+    const b = req.body || {};
+    const daOficina = b.modo === "of";
+    const ext = daOficina && b.ext && txt(b.ext.cli) ? { cli: txt(b.ext.cli, 120), mat: txt(b.ext.mat, 40), viat: txt(b.ext.viat, 120), tel: txt(b.ext.tel, 40) } : null;
+    const vehicleId = ext ? null : txt(b.vehicleId, 60) || null;
+    if (!ext && !vehicleId) throw erro(400, "Escolha a viatura (ou indique o cliente externo).");
+    const v = vehicleId ? await prisma.fleetVehicle.findUnique({ where: { id: vehicleId } }) : null;
+    if (vehicleId && !v) throw erro(400, "Viatura não encontrada.");
+    const trab = limparLinhas(b.trab, ["desc"]).filter((t) => t.desc).map((t) => ({ desc: t.desc, est: "", nota: "" }));
+    if (!trab.length) throw erro(400, "Escreva pelo menos um trabalho pedido.");
+    const tipo = W.TIPOS_SERVICO.includes(b.tipoServ) ? b.tipoServ : "Reparação";
+    const dp = dataOk(b.dp) || hojeIso();
+    const hp = horaOk(b.hp);
+    let oficina = W.OFICINA_PROPRIA;
+    let supplierId = null;
+    if (!daOficina && b.supplierId) {
+      const f = await prisma.supplier.findUnique({ where: { id: String(b.supplierId) }, select: { id: true, name: true } });
+      if (!f) throw erro(400, "Fornecedor (oficina) não encontrado.");
+      oficina = f.name;
+      supplierId = f.id;
+    }
+    const now = new Date().toISOString();
+    const matMBT = ["Sim", "Não", "NA"].includes(b.matMBT) ? b.matMBT : "NA";
+    const workOrder = W.blocoOT({
+      origem: daOficina ? "of" : "fr",
+      prio: W.PRIORIDADES.includes(b.prio) ? b.prio : "Normal",
+      dm: daOficina ? dp : "",
+      hm: daOficina ? hp : "",
+      de: dataOk(b.de),
+      tec: txt(b.tec, 120),
+      pedido: { d: now, por: nomeDe(req), porId: req.user.sub, dp, hp, obs: txt(b.obs, 1000) },
+      trab,
+      matMBT,
+      mat: matMBT === "Sim" ? limparLinhas(b.mat, ["desc", "q", "un"]).filter((m) => m.desc).map((m) => ({ ...m, est: "Por entregar", qR: "", qA: "" })) : [],
+      chat: [{ d: now, por: nomeDe(req), t: daOficina ? "Trabalho criado pela oficina" : `Pedido enviado à oficina${b.obs ? `: ${txt(b.obs, 300)}` : ""}` }],
+      ext,
+    });
+    const ano = new Date().getUTCFullYear();
+    const rows = await prisma.fleetIntervention.findMany({ where: { code: { startsWith: `OT-${ano}-` } }, select: { code: true } });
+    const row = await prisma.fleetIntervention.create({
+      data: {
+        code: F.proximoCodigo("OT", rows.map((r) => r.code), { ano }),
+        date: new Date(`${dp}T00:00:00Z`),
+        vehicleId,
+        odometer: v?.odometer ?? null,
+        type: tipo,
+        description: trab.map((t) => t.desc).join("\n"),
+        workshop: oficina,
+        supplierId,
+        technician: workOrder.tec || null,
+        status: "Em curso",
+        workOrderStatus: daOficina ? "Marcado" : "Pedido",
+        workOrder,
+        createdById: req.user.sub,
+      },
+    });
+    res.status(201).json(plano(row));
+  })
+);
+
+async function otOu404(id) {
+  const x = await prisma.fleetIntervention.findUnique({ where: { id } });
+  if (!x || !x.workOrderStatus) throw erro(404, "Ordem de trabalho não encontrada.");
+  return x;
+}
+
+/** Edição da OT: datas, técnico, trabalhos, material, horas e custos. */
+fleetRoutes.patch(
+  "/workshop/:id",
+  editarOficina,
+  asyncHandler(async (req, res) => {
+    const x = await otOu404(req.params.id);
+    const b = req.body || {};
+    const wo = W.blocoOT(x.workOrder);
+    if ("dm" in b) wo.dm = dataOk(b.dm);
+    if ("hm" in b) wo.hm = horaOk(b.hm);
+    if ("de" in b) wo.de = dataOk(b.de);
+    if ("tec" in b) wo.tec = txt(b.tec, 120);
+    if ("prio" in b && W.PRIORIDADES.includes(b.prio)) wo.prio = b.prio;
+    if ("trab" in b) wo.trab = limparLinhas(b.trab, ["desc", "est", "nota"]).filter((t) => t.desc);
+    if ("mat" in b) wo.mat = limparLinhas(b.mat, ["desc", "q", "un", "est", "qR", "qA"]).filter((m) => m.desc).map((m) => ({ ...m, est: W.ESTADOS_MATERIAL.includes(m.est) ? m.est : "Por entregar" }));
+    if ("horas" in b) wo.horas = limparLinhas(b.horas, ["tec", "d", "ini", "fim"]).filter((h) => h.tec || h.ini || h.fim);
+    const num = (v) => (v === "" || v === null || v === undefined ? null : Number(v) || 0);
+    const data = { workOrder: wo, technician: wo.tec || null };
+    if ("laborCost" in b) data.laborCost = num(b.laborCost);
+    if ("partsCost" in b) data.partsCost = num(b.partsCost);
+    if ("otherCost" in b) data.otherCost = num(b.otherCost);
+    if ("odometer" in b) data.odometer = num(b.odometer);
+    if (wo.trab.length) data.description = wo.trab.map((t) => t.desc).join("\n");
+    if (wo.dm) data.date = new Date(`${wo.dm}T00:00:00Z`);
+    const row = await prisma.$transaction(async (tx) => {
+      const r = await tx.fleetIntervention.update({ where: { id: x.id }, data });
+      await atualizarConta(tx, r.vehicleId, r.odometer, r.date);
+      return r;
+    });
+    res.json(plano(row));
+  })
+);
+
+fleetRoutes.post(
+  "/workshop/:id/state",
+  editarOficina,
+  asyncHandler(async (req, res) => {
+    const x = await otOu404(req.params.id);
+    const novo = String(req.body?.estado || "");
+    if (novo === x.workOrderStatus) return res.json(plano(x));
+    const { data, viatura } = W.mudarEstado(plano(x), novo, { hoje: hojeIso(), por: nomeDe(req) });
+    ["entryDate", "exitDate"].forEach((k) => data[k] && (data[k] = new Date(`${data[k]}T00:00:00Z`)));
+    const row = await prisma.$transaction(async (tx) => {
+      const r = await tx.fleetIntervention.update({ where: { id: x.id }, data });
+      if (viatura && r.vehicleId) {
+        const v = await tx.fleetVehicle.findUnique({ where: { id: r.vehicleId }, select: { status: true, active: true } });
+        if (v && v.active !== false && viatura.so(v.status)) await tx.fleetVehicle.update({ where: { id: r.vehicleId }, data: { status: viatura.status } });
+      }
+      if (["Concluído", "Entregue"].includes(novo)) await cumprirPlanos(tx, { ...r, status: "Concluída" });
+      return r;
+    });
+    res.json(plano(row));
+  })
+);
+
+/** Reagendar (arrastar no calendário): um pedido por aceitar passa a marcado. */
+fleetRoutes.post(
+  "/workshop/:id/reschedule",
+  editarOficina,
+  asyncHandler(async (req, res) => {
+    const x = await otOu404(req.params.id);
+    const dm = dataOk(req.body?.dm);
+    if (!dm) throw erro(400, "Data inválida.");
+    const wo = W.blocoOT(x.workOrder);
+    if (wo.dm === dm) return res.json(plano(x));
+    wo.dm = dm;
+    wo.chat = wo.chat.concat([{ d: new Date().toISOString(), por: nomeDe(req), t: `Reagendado para ${dm}` }]);
+    const row = await prisma.fleetIntervention.update({
+      where: { id: x.id },
+      data: { workOrder: wo, date: new Date(`${dm}T00:00:00Z`), ...(x.workOrderStatus === "Pedido" ? { workOrderStatus: "Marcado" } : {}) },
+    });
+    res.json(plano(row));
+  })
+);
+
+fleetRoutes.post(
+  "/workshop/:id/messages",
+  verOficina,
+  asyncHandler(async (req, res) => {
+    const x = await otOu404(req.params.id);
+    const t = txt(req.body?.t, 1000);
+    if (!t) throw erro(400, "Escreva a mensagem.");
+    const wo = W.blocoOT(x.workOrder);
+    wo.chat = wo.chat.concat([{ d: new Date().toISOString(), por: nomeDe(req), t }]);
+    const row = await prisma.fleetIntervention.update({ where: { id: x.id }, data: { workOrder: wo } });
+    res.json(plano(row));
+  })
+);
+
 fleetRoutes.get(
   "/overview",
   verFrota,
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
     const dados = await carregarTudo();
     const hoje = hojeIso();
-    res.json({ hoje, painel: F.painel(dados, hoje), alertas: F.alertas(dados, hoje) });
+    const { mes = "", grupo = "", per = "mes" } = req.query;
+    res.json({ hoje, painel: F.painel(dados, hoje), gestao: F.painelGestao(dados, hoje, { mes: String(mes), grupo: String(grupo), per: String(per) }), alertas: F.alertas(dados, hoje) });
   })
 );
 

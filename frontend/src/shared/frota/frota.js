@@ -18,7 +18,13 @@ import { esc, fmt, fmt0, fmtData, kpis, vazio, erro } from "../finance/f2Ui.js";
 import { norm, select, pesquisa, chip } from "../compras/ui.js";
 
 const root = () => document.getElementById("financeRoot");
-const S = { vista: "painel", d: null, ov: null, custos: null, erro: null, q: "", v: "", e: "", de: "", ate: "", so: "" };
+const S = { vista: "painel", d: null, ov: null, custos: null, erro: null, q: "", v: "", e: "", de: "", ate: "", so: "", g: "", mes: "", per: "mes" };
+
+const urlOverview = () => `/fleet/overview?${new URLSearchParams({ mes: S.mes, grupo: S.g, per: S.per })}`;
+async function recarregarPainel() {
+  S.ov = await apiRequest(urlOverview());
+  desenhar();
+}
 
 const pode = (a) => can("frota", a);
 const pill = (txt, tom) => `<span class="fcal-pill fcal-pill--${tom === "neu" ? "slate" : tom}">${esc(txt)}</span>`;
@@ -355,41 +361,145 @@ function tabela(cab, linhas, vazioTxt, rodape = "") {
 
 const linha = (attr, id, cels) => `<tr data-${attr}="${esc(id)}" style="cursor:pointer" title="Abrir">${cels.join("")}</tr>`;
 
+// ─── Painel de Gestão da Frota (o `V.frges` do protótipo, v667) ───────────────
+
+const MES_CURTO = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+const mesLbl = (k) => `${MES_CURTO[Number(k.slice(5)) - 1]} ${k.slice(0, 4)}`;
+const COR_CAT = {
+  "Combustível": "#1f7a42",
+  "Manutenção e Reparação": "#8a5cc2",
+  "Pneus": "#2b2f2d",
+  "Ocorrências e Sinistros": "#c96b3a",
+  "Multas": "#b8372b",
+  "Documentos e Taxas": "#c9a227",
+};
+const CAT_CURTA = { "Combustível": "Combustível", "Manutenção e Reparação": "Manutenção", "Pneus": "Pneus", "Ocorrências e Sinistros": "Sinistros", "Multas": "Multas", "Documentos e Taxas": "Taxas" };
+
+const REGISTOS = [
+  ["/frota/abastecimentos", "local_gas_station", "Abastecimentos"],
+  ["/frota/manutencoes", "car_repair", "Manutenções e Reparações"],
+  ["/frota/planos", "event_repeat", "Planos Preventivos"],
+  ["/frota/ocorrencias", "car_crash", "Ocorrências e Acidentes"],
+  ["/frota/documentos", "description", "Documentos"],
+  ["/frota/seguros", "verified_user", "Seguros"],
+  ["/frota/custos", "price_check", "Custos por Viatura"],
+  ["/frota/alertas", "notifications_active", "Alertas"],
+];
+
 function vistaPainel() {
-  const P = S.ov?.painel;
-  if (!P) return vazio("A carregar…");
-  const mx = Math.max(1, ...P.meses.map((m) => m.valor));
-  const mesAtual = S.d.hoje.slice(0, 7);
-  const tp = Math.max(1, ...P.topViaturas.map((t) => t.valor));
-  const tc = Math.max(1, ...P.porCategoria.map((t) => t.valor));
-  const estados = Object.entries(P.porEstado);
+  const G = S.ov?.gestao;
+  if (!G) return vazio("A carregar…");
+  const cats = L().categoriasCusto;
+  const mx = Math.max(1, ...G.meses.map((m) => m.valor));
+  const mxC = Math.max(1, ...G.categorias.map((c) => c.valor));
+  const totCat = G.categorias.reduce((s, c) => s + c.valor, 0);
+  const opMeses = G.meses.slice().reverse().map((m) => [m.mes, mesLbl(m.mes)]);
+  const grupos = `<span class="finance-seg"><button type="button" class="${!S.g ? "active" : ""}" data-frg="">Todas</button>${G.grupos
+    .filter((g) => g.n)
+    .map((g) => `<button type="button" class="${S.g === g.k ? "active" : ""}" data-frg="${g.k}">${esc(g.l)} (${g.n})</button>`)
+    .join("")}</span>`;
+  const perSeg = `<span class="finance-seg">${[["mes", MES_CURTO[Number(G.mes.slice(5)) - 1]], ["3", "3 meses"], ["12", "12 meses"]]
+    .map(([k, l]) => `<button type="button" class="${S.per === k ? "active" : ""}" data-frpg="${k}">${esc(l)}</button>`)
+    .join("")}</span>`;
+  const pilha = (m) =>
+    cats.map((c) => (m.porCategoria[c] ? `<i style="height:${((m.porCategoria[c] / mx) * 100).toFixed(1)}%;background:${COR_CAT[c]}"></i>` : "")).join("");
+  const dica = (m) => `${mesLbl(m.mes)}: ${fmt(m.valor)}${cats.filter((c) => m.porCategoria[c]).map((c) => ` · ${CAT_CURTA[c]} ${fmt(m.porCategoria[c])}`).join("")}`;
   return `
+    <div class="fcal-filtros">${select("mes", G.mes, opMeses)}${grupos}
+      ${G.alertas.total ? `<a class="fcal-todos" href="/frota/alertas">${pill(`${G.alertas.total} alerta(s)`, G.alertas.altas ? "bad" : "warn")}</a>` : ""}</div>
     ${kpis([
-      { tom: "blue", titulo: "Viaturas Ativas", valor: String(P.ativas), nota: estados.map(([e, c]) => `${c} ${e.toLowerCase()}`).join(" · ") || "—", acao: "/frota/viaturas" },
-      { tom: P.alertas.altas ? "bad" : P.alertas.total ? "warn" : "good", titulo: "Alertas", valor: String(P.alertas.total), nota: `${P.alertas.altas} de prioridade alta`, acao: "/frota/alertas" },
-      { tom: "neu", titulo: "Custo do Mês", valor: fmt(P.custoMes), nota: "Kz" },
-      { tom: "neu", titulo: `Custo de ${P.ano}`, valor: fmt(P.custoAno), nota: `${fmt0(P.litrosAno)} L de combustível`, acao: "/frota/custos" },
-      { tom: P.ocorrenciasAbertas ? "warn" : "good", titulo: "Ocorrências Abertas", valor: String(P.ocorrenciasAbertas), nota: "por resolver", acao: "/frota/ocorrencias" },
+      { tom: "blue", titulo: "Custo do Mês", valor: fmt(G.custoMes), nota: mesLbl(G.mes) },
+      { tom: "neu", titulo: "Custo 12 Meses", valor: fmt(G.custo12), nota: `média ${fmt(G.custo12 / 12)} / mês` },
+      { tom: "neu", titulo: "Km / Horas no Mês", valor: fmt0(G.km), nota: `${G.viaturasComKm} viatura(s) com leituras` },
+      { tom: "neu", titulo: "Custo Médio por km", valor: G.custoPorKm ? fmt(G.custoPorKm) : "—", nota: "Kz" },
+      { tom: G.paradas ? "warn" : "good", titulo: "Paradas / na Oficina", valor: String(G.paradas), nota: `${G.ativas} ativa(s)`, acao: "/frota/viaturas" },
+      { tom: G.ocorrenciasAbertas ? "warn" : "good", titulo: "Ocorrências Abertas", valor: String(G.ocorrenciasAbertas), nota: "por resolver", acao: "/frota/ocorrencias" },
     ])}
     <div class="fx2-cols">
-      <section class="fx2-blk"><h3>Custos por mês · ${esc(P.ano)}</h3>
-        <div class="fx2-meses">${P.meses
-          .map((m) => `<div class="fx2-mes" title="${esc(m.mes)}: ${fmt(m.valor)}"><span class="fx2-mes-b"><i class="fx2-bar--sa" style="width:60%;height:${((m.valor / mx) * 100).toFixed(1)}%"></i></span><span class="fx2-mes-l${m.mes === mesAtual ? " on" : ""}">${m.mes.slice(5)}</span></div>`)
+      <section class="fx2-blk"><h3>Custos dos Últimos 12 Meses</h3>
+        <div class="fx2-meses">${G.meses
+          .map((m) => `<div class="fx2-mes" title="${esc(dica(m))}"><span class="fx2-mes-b fr-pilha">${pilha(m)}</span><span class="fx2-mes-l${m.mes === G.mes ? " on" : ""}">${MES_CURTO[Number(m.mes.slice(5)) - 1]}</span></div>`)
           .join("")}</div>
+        <div class="fr-legenda">${cats.map((c) => `<span><i style="background:${COR_CAT[c]}"></i>${esc(CAT_CURTA[c])}</span>`).join("")}</div>
       </section>
-      <section class="fx2-blk"><h3>Por categoria · ${esc(P.ano)}</h3>
-        ${P.porCategoria.length ? P.porCategoria.map((c) => `<div class="fx2-lin"><span>${esc(c.categoria)}</span><b>${fmt(c.valor)}</b></div><span class="fx2-bar"><i class="fx2-bar--sa" style="width:${((c.valor / tc) * 100).toFixed(1)}%"></i></span>`).join("") : `<p class="fx2-mut">Sem custos este ano.</p>`}
+      <section class="fx2-blk"><h3 style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">Custos Efetivos por Categoria <span style="margin-left:auto">${perSeg}</span></h3>
+        ${
+          G.categorias.length
+            ? G.categorias
+                .map((c) => `<div class="fx2-lin"><span>${esc(c.categoria)}</span><b>${fmt(c.valor)}</b></div><span class="fx2-bar"><i style="width:${((c.valor / mxC) * 100).toFixed(1)}%;background:${COR_CAT[c.categoria]}"></i></span>`)
+                .join("") + `<div class="fx2-lin" style="border-top:1px solid #e2e8f0;margin-top:.5rem;padding-top:.4rem"><b>Total</b><b>${fmt(totCat)}</b></div>`
+            : `<p class="fx2-mut">Sem custos no período.</p>`
+        }
       </section>
-      <section class="fx2-blk"><h3>Viaturas que mais custam · ${esc(P.ano)}</h3>
-        ${P.topViaturas.length ? P.topViaturas.map((t) => `<div class="fx2-lin"><a href="/frota/custos?viatura=${esc(t.vid)}"><b>${esc(t.matricula)}</b> <span class="fx2-mut">${esc(t.nome)}</span></a><b>${fmt(t.valor)}</b></div><span class="fx2-bar"><i class="fx2-bar--sa" style="width:${((t.valor / tp) * 100).toFixed(1)}%"></i></span>`).join("") : `<p class="fx2-mut">Sem custos este ano.</p>`}
-      </section>
-      <section class="fx2-blk"><h3>Alertas prioritários</h3>
-        ${P.alertas.primeiros.length ? P.alertas.primeiros.map(alertaLinha).join("") + `<p style="margin:.5rem 0 0"><a class="fcal-todos" href="/frota/alertas">Ver todos os alertas →</a></p>` : `<p class="fx2-mut">Sem alertas. A frota está em dia.</p>`}
-      </section>
-    </div>`;
+    </div>
+    <section class="fx2-blk"><h3>Custos Efetivos por Viatura e Máquina · ${esc(mesLbl(G.mes))}</h3>
+      ${tabela(
+        ["Viatura", ...cats.map((c) => [CAT_CURTA[c], "r"]), ["Total do Mês", "r"], ["Total 12 Meses", "r"]],
+        G.linhas.map(
+          (x) =>
+            `<tr data-frcusv="${esc(x.vid)}" style="cursor:pointer" title="Ver os custos desta viatura"><td><b>${esc(x.matricula)}</b> <span class="fx2-mut">${esc(x.nome)}</span></td>${cats
+              .map((c) => `<td class="r">${x.cat[c] ? fmt(x.cat[c]) : '<span class="fx2-mut">—</span>'}</td>`)
+              .join("")}<td class="r"><b>${fmt(x.mes)}</b></td><td class="r">${fmt(x.doze)}</td></tr>`
+        ),
+        "Ainda não há viaturas ativas neste grupo.",
+        G.linhas.length
+          ? `<tfoot><tr><td>Total (${G.linhas.length})</td>${cats.map((c) => `<td class="r">${fmt(G.linhas.reduce((s, x) => s + (x.cat[c] || 0), 0))}</td>`).join("")}<td class="r">${fmt(G.custoMes)}</td><td class="r">${fmt(G.custo12)}</td></tr></tfoot>`
+          : ""
+      )}
+    </section>
+    <section class="fx2-blk"><h3>Registos</h3>
+      <p class="fx2-mut" style="margin:0 0 .6rem">Listas de todas as viaturas, para procurar, registar e exportar.</p>
+      <div class="fr-registos">${REGISTOS.map(([h, ic, l]) => `<a class="fr-registo" href="${h}"><span class="material-symbols-outlined">${ic}</span>${esc(l)}</a>`).join("")}</div>
+    </section>`;
 }
 
 const PRIOR = { 1: ["Alta", "bad"], 2: ["Média", "warn"], 3: ["Informativo", "slate"] };
+
+// ─── Frota (o `V.frgal` do protótipo): as viaturas em cartões ─────────────────
+
+const GRUPOS_V = [["V", "Viaturas"], ["M", "Máquinas"], ["E", "Equipamentos"], ["R", "Reboques"]];
+const ICONE_G = { V: "airport_shuttle", M: "agriculture", E: "construction", R: "rv_hookup" };
+function grupoV(kind) {
+  const k = norm(kind);
+  if (/reboq|trailer|semi/.test(k)) return "R";
+  if (/maquin|escavad|retro|cilindro|grua|empilhad|motoniv|bulldo|pa carreg/.test(k)) return "M";
+  if (/equip|gerador|compressor|betoneir/.test(k)) return "E";
+  return "V";
+}
+
+function vistaViaturas() {
+  const A = S.d.viaturas.filter((v) => (S.so === "inativas" ? !ativa(v) : ativa(v)));
+  const Lx = A.filter((v) => (!S.g || grupoV(v.kind) === S.g) && filtroQ([v.code, v.plate, v.brand, v.model, v.kind, v.assignedTo, mById(v.driverId)?.name].join(" "))).sort((a, b) =>
+    a.plate.localeCompare(b.plate)
+  );
+  const n = (k) => A.filter((v) => grupoV(v.kind) === k).length;
+  const ano = S.d.hoje.slice(0, 4);
+  const cons = new Set(S.d.abastecimentos.filter((a) => (a._calc?.an || []).some(([t]) => t === "warn") && String(a.date).slice(0, 4) === ano).map((a) => a.vehicleId));
+  const cartao = (v) => {
+    const m = mById(v.driverId);
+    const g = grupoV(v.kind);
+    const avisos = [
+      v._planos?.k === "bad" ? pill("manutenção", "bad") : v._planos?.k === "warn" ? pill("manutenção", "warn") : "",
+      v._seguro?.[1] === "bad" ? pill("sem seguro", "bad") : "",
+      cons.has(v.id) ? pill("consumo", "warn") : "",
+    ].join("");
+    return `<div class="fr-card" role="button" tabindex="0" data-frv="${esc(v.id)}">
+      <span class="fr-av fr-av--${g}"><span class="material-symbols-outlined">${ICONE_G[g]}</span></span>
+      <span class="fr-ci"><b>${esc(v.plate)}</b><span>${esc([v.brand, v.model].filter(Boolean).join(" "))}${v.year ? ` (${esc(v.year)})` : ""}</span>
+        <span class="fx2-mut">${esc(v.kind)} · ${esc(v.code)}</span>
+        <span class="fx2-mut"><span class="material-symbols-outlined fr-ic">person</span> ${esc(m?.name || "Sem motorista")}</span>
+        <span class="fr-pills">${pill(v.status, TOM_ESTADO[v.status] || "slate")}${avisos}</span></span>
+    </div>`;
+  };
+  return `
+    <div class="fcal-filtros">${pesquisa(S, "matrícula, marca, motorista…")}
+      <span class="finance-seg"><button type="button" class="${!S.g ? "active" : ""}" data-frg="">Todos (${A.length})</button>${GRUPOS_V.filter(([k]) => n(k))
+        .map(([k, l]) => `<button type="button" class="${S.g === k ? "active" : ""}" data-frg="${k}">${esc(l)} (${n(k)})</button>`)
+        .join("")}</span>
+      <label class="fx2-mut" style="display:inline-flex;gap:.35rem;align-items:center"><input type="checkbox" data-frina${S.so === "inativas" ? " checked" : ""}> Inativas</label></div>
+    ${Lx.length ? `<div class="fr-grid">${Lx.map(cartao).join("")}</div>` : vazio(S.d.viaturas.length ? "Nenhuma viatura encontrada." : "Ainda não há viaturas. Registe a primeira em «+ Nova Viatura / Equipamento».")}`;
+}
+
 const alertaLinha = (a) =>
   `<div class="fx2-lin"><span>${pill(PRIOR[a.p][0], PRIOR[a.p][1])} <b>${esc(a.matricula || "—")}</b> ${esc(a.problema)} <span class="fx2-mut">· ${esc(a.detalhe)}</span></span><a href="${esc(a.link)}">abrir</a></div>`;
 
@@ -406,38 +516,6 @@ function vistaAlertas() {
       ["Prioridade", "Viatura", "Área", "Problema", "Detalhe", ""],
       Lx.map((a) => `<tr><td>${pill(PRIOR[a.p][0], PRIOR[a.p][1])}</td><td><b>${esc(a.matricula || "—")}</b></td><td class="fx2-mut">${esc(a.area)}</td><td>${esc(a.problema)}</td><td class="fx2-mut">${esc(a.detalhe)}</td><td><a href="${esc(a.link)}">abrir →</a></td></tr>`),
       A.length ? "Nenhum alerta com estes filtros." : "Sem alertas. A frota está em dia."
-    )}`;
-}
-
-function vistaViaturas() {
-  const A = S.d.viaturas;
-  const Lx = A.filter((v) => (S.so === "inativas" ? !ativa(v) : ativa(v)) && (!S.e || v.status === S.e) && filtroQ([v.code, v.plate, v.brand, v.model, v.kind, v.assignedTo, mById(v.driverId)?.name].join(" ")));
-  const semSeg = A.filter((v) => ativa(v) && v._seguro?.[1] === "bad");
-  const manut = A.filter((v) => ativa(v) && v._planos?.k === "bad");
-  return `
-    ${kpis([
-      { tom: "blue", titulo: "Ativas", valor: String(A.filter(ativa).length), nota: `${A.length} registadas` },
-      { tom: manut.length ? "bad" : "good", titulo: "Manutenção Ultrapassada", valor: String(manut.length), nota: manut.map((v) => v.plate).slice(0, 4).join(", ") || "nenhuma", acao: "/frota/planos" },
-      { tom: semSeg.length ? "bad" : "good", titulo: "Sem Seguro Válido", valor: String(semSeg.length), nota: semSeg.map((v) => v.plate).slice(0, 4).join(", ") || "todas cobertas", acao: "/frota/seguros" },
-    ])}
-    <div class="fcal-filtros">${pesquisa(S, "matrícula, marca, modelo, tipo, motorista…")}${select("e", S.e, lista(L().estadosViatura), "Todos os estados")}${select("so", S.so, [["inativas", "Inativas (vendidas / abatidas)"]], "Ativas")}<span class="fx2-mut">${Lx.length} de ${A.length}</span></div>
-    ${tabela(
-      ["Código", "Matrícula", "Marca / modelo", "Tipo", ["Km / h", "r"], "Atribuída a", "Motorista", "Estado", "Manutenção", "Seguro"],
-      Lx.map((v) =>
-        linha("frv", v.id, [
-          `<td class="fx2-mut">${esc(v.code)}</td>`,
-          `<td><b>${esc(v.plate)}</b></td>`,
-          `<td>${esc([v.brand, v.model].join(" "))}${v.year ? ` <span class="fx2-mut">(${esc(v.year)})</span>` : ""}</td>`,
-          `<td class="fx2-mut">${esc(v.kind)}</td>`,
-          `<td class="r">${v.odometer === null ? "—" : `${fmt0(v.odometer)} ${un(v)}`}${v.odometerAt ? `<div class="fx2-mut">${fmtData(v.odometerAt)}</div>` : ""}</td>`,
-          `<td class="fx2-mut">${esc(v.assignedTo || "")}${v.projectId ? `<div>${esc(obraLbl(v.projectId))}</div>` : ""}</td>`,
-          `<td class="fx2-mut">${esc(mById(v.driverId)?.name || "—")}</td>`,
-          `<td>${pill(v.status, TOM_ESTADO[v.status] || "slate")}</td>`,
-          `<td>${pill(v._planos?.t || "—", v._planos?.k || "neu")}</td>`,
-          `<td>${pill(v._seguro?.[0] || "—", v._seguro?.[1] || "neu")}</td>`,
-        ])
-      ),
-      A.length ? "Nenhuma viatura com estes filtros." : "Ainda não há viaturas. Registe a primeira em «+ Nova Viatura»."
     )}`;
 }
 
@@ -692,7 +770,111 @@ function vistaCustos() {
     <p class="fcal-nota">Os custos saem dos registos da frota: abastecimentos, intervenções (mão de obra + peças + outros), custo real das ocorrências e custo dos documentos. Clique numa viatura para ver as linhas.</p>`;
 }
 
+// ─── Configurações da Frota (o `V.frcfg` do protótipo) ────────────────────────
+
+const CFG_TABS = [
+  ["mot", "badge", "Motoristas"],
+  ["seg", "verified_user", "Seguros"],
+  ["prev", "event_repeat", "Planos Preventivos"],
+  ["tip", "airport_shuttle", "Tipologias"],
+  ["doc", "description", "Documentos Obrigatórios"],
+  ["ofi", "car_repair", "Oficinas e Fornecedores"],
+  ["resp", "key", "Responsáveis"],
+];
+const CFG_NOVO = {
+  mot: ["+ Novo Motorista", () => formMotorista()],
+  seg: ["+ Nova Apólice", () => formSeguro()],
+  prev: ["+ Registar Manutenção", () => formIntervencao()],
+};
+const DOC_PARA = {
+  "Livrete / Título de Propriedade": "todas as viaturas",
+  "Inspecção Periódica": "viaturas e reboques",
+  "Taxa de Circulação": "viaturas",
+  "Seguro Automóvel": "todas (nos Seguros)",
+  "Licença de Transporte": "viaturas de carga, quando aplicável",
+};
+const NIVEL = { gere: ["Gere a frota", "good"], regista: ["Regista", "blue"], consulta: ["Só consulta", "slate"], sem: ["Sem acesso", "bad"] };
+const PERFIL = { admin: "Admin", supervisor: "Supervisor", operador: "Operador", financeiro: "Financeiro", tecnico: "Técnico", leitura: "Leitura", cliente: "Cliente" };
+
+function grupoDe(kind) {
+  const k = norm(kind);
+  if (/maquin|escavad|retro|cilindro|grua|empilhad/.test(k)) return "Máquinas";
+  if (/equip|gerador|compressor/.test(k)) return "Equipamentos";
+  if (/reboq|trailer|semi/.test(k)) return "Reboques";
+  return "Viaturas";
+}
+
+function cfgTipologias() {
+  const C = {};
+  S.d.viaturas.forEach((v) => {
+    const k = v.kind || "—";
+    const c = (C[k] = C[k] || { ativas: 0, total: 0, un: new Set() });
+    c.total += 1;
+    if (ativa(v)) c.ativas += 1;
+    c.un.add(un(v));
+  });
+  return `<section class="fx2-blk"><h3>Tipologias</h3>
+    ${tabela(["Tipologia", "Grupo", "Unidade", ["Ativas", "r"], ["Registadas", "r"]],
+      Object.keys(C).sort().map((k) => `<tr><td><b>${esc(k)}</b></td><td class="fx2-mut">${esc(grupoDe(k))}</td><td class="fx2-mut">${esc([...C[k].un].join(" / "))}</td><td class="r">${C[k].ativas}</td><td class="r">${C[k].total}</td></tr>`),
+      "Ainda não há viaturas registadas.")}
+    <p class="fcal-nota">A tipologia escreve-se na ficha de cada viatura (ligeira, pesada, máquina, reboque, equipamento…) e define o grupo nos filtros. A unidade (km ou horas) escolhe-se na mesma ficha.</p></section>`;
+}
+
+function cfgDocumentos() {
+  const obr = new Set(L().documentosObrigatorios);
+  return `<section class="fx2-blk"><h3>Documentos Obrigatórios</h3>
+    ${tabela(["Documento", "Para", "Alerta quando falta"],
+      L().tiposDocumento.filter((t) => t !== "Outro").map((t) => `<tr><td><b>${esc(t)}</b></td><td class="fx2-mut">${esc(DOC_PARA[t] || "quando aplicável")}</td><td>${obr.has(t) ? pill("sim", "warn") : pill("não", "slate")}</td></tr>`),
+      "")}
+    <p class="fcal-nota">O alerta aparece 30 dias antes da validade, em Alertas e no Painel da Frota. Os documentos marcados «sim» geram também alerta quando a viatura não os tem registados. Outros documentos: escolha «Outro» e escreva a descrição.</p></section>`;
+}
+
+function cfgOficinas() {
+  const C = S.cfg;
+  if (!C) return vazio("A carregar…");
+  return `<div class="fx2-cols">
+    <section class="fx2-blk"><h3>Oficinas e Fornecedores da Frota</h3>
+      ${tabela(["Fornecedor", "Categoria", "NIF"],
+        C.oficinas.map((f) => `<tr><td><b>${esc(f.name)}</b>${f.code ? ` <span class="fx2-mut">${esc(f.code)}</span>` : ""}</td><td class="fx2-mut">${esc(f.category || "")}</td><td class="fx2-mut">${esc(f.nif || "")}</td></tr>`),
+        "Nenhum fornecedor marcado como oficina.")}
+      <p class="fcal-nota">Entram aqui os terceiros cuja categoria (ou nome) indica oficina, lavagem, mecânica, pneus, bate-chapa ou pintura. <a href="/registos/terceiros">Abrir Terceiros →</a></p>
+    </section>
+    <section class="fx2-blk"><h3>Oficinas usadas nas intervenções</h3>
+      ${tabela(["Oficina", ["Intervenções", "r"], "Última"],
+        C.oficinasUsadas.map((o) => `<tr><td><b>${esc(o.nome)}</b></td><td class="r">${o.intervencoes}</td><td>${o.ultima ? fmtData(o.ultima) : "—"}</td></tr>`),
+        "Ainda não há intervenções com oficina indicada.")}
+    </section></div>`;
+}
+
+function cfgResponsaveis() {
+  const C = S.cfg;
+  if (!C) return vazio("A carregar…");
+  const gerir = can("permissoes", "manage_permissions");
+  return `<div class="fx2-cols">
+    <section class="fx2-blk"><h3>Por perfil</h3>
+      ${tabela(["Perfil", "Na frota", "Menu Frota"],
+        C.perfis.map((p) => `<tr><td><b>${esc(PERFIL[p.role] || p.role)}</b></td><td>${pill(...NIVEL[p.nivel])}</td><td>${p.menu ? pill("visível", "good") : pill("oculto", "slate")}</td></tr>`),
+        "")}
+    </section>
+    <section class="fx2-blk"><h3>Utilizadores que registam ou gerem</h3>
+      ${tabela(["Utilizador", "Perfil", "Na frota", ""],
+        C.responsaveis.map((u) => `<tr><td><b>${esc(u.nome)}</b></td><td class="fx2-mut">${esc(PERFIL[u.perfil] || u.perfil)}</td><td>${pill(...NIVEL[u.nivel])}</td><td>${u.excecao ? pill("exceção no utilizador", "warn") : ""}</td></tr>`),
+        "Nenhum utilizador pode registar na frota.")}
+    </section></div>
+    <p class="fcal-nota">«Gere a frota» cria, edita e apaga; «Regista» cria e edita; «Só consulta» vê os ecrãs. O acesso define-se no módulo <b>Frota</b> e no menu <b>Menu: Frota</b>, por perfil ou com exceções por utilizador${gerir ? `, em <a href="/Users">Gestão › Permissões</a>` : " (Gestão › Permissões, só para administradores)"}.</p>`;
+}
+
+function vistaConfiguracoes() {
+  const t = S.tab || "mot";
+  const novo = CFG_NOVO[t];
+  const corpo = t === "mot" ? vistaMotoristas() : t === "seg" ? vistaSeguros() : t === "prev" ? vistaPlanos() : t === "tip" ? cfgTipologias() : t === "doc" ? cfgDocumentos() : t === "ofi" ? cfgOficinas() : cfgResponsaveis();
+  return `<div class="fr-tabs">${CFG_TABS.map(([k, ic, l]) => `<button type="button" class="fr-tab${t === k ? " on" : ""}" data-frtab="${k}"><span class="material-symbols-outlined">${ic}</span>${esc(l)}</button>`).join("")}
+      ${novo && pode("create") ? `<button type="button" class="finance-btn finance-btn--primary fr-tab-novo" data-frcfgnovo="${t}">${esc(novo[0])}</button>` : ""}</div>
+    ${corpo}`;
+}
+
 const VISTAS = {
+  configuracoes: vistaConfiguracoes,
   painel: vistaPainel,
   alertas: vistaAlertas,
   viaturas: vistaViaturas,
@@ -708,7 +890,7 @@ const VISTAS = {
 
 /** Botão «+ Novo» de cada vista (só com `frota:create`). */
 const NOVO = {
-  viaturas: ["+ Nova Viatura", () => formViatura()],
+  viaturas: ["+ Nova Viatura / Equipamento", () => formViatura()],
   motoristas: ["+ Novo Motorista", () => formMotorista()],
   abastecimentos: ["+ Abastecimento", () => formAbastecimento()],
   manutencoes: ["+ Manutenção / Reparação", () => formIntervencao()],
@@ -716,7 +898,6 @@ const NOVO = {
   ocorrencias: ["+ Ocorrência", () => formOcorrencia()],
   documentos: ["+ Documento", () => formDocumento()],
   seguros: ["+ Nova Apólice", () => formSeguro()],
-  painel: ["+ Abastecimento", () => formAbastecimento()],
 };
 
 function desenhar() {
@@ -744,10 +925,11 @@ async function carregarCustos() {
 async function carregar() {
   try {
     const precisaOv = S.vista === "painel" || S.vista === "alertas";
-    const [d, ov] = await Promise.all([apiRequest("/fleet/bootstrap"), precisaOv ? apiRequest("/fleet/overview") : null]);
+    const [d, ov] = await Promise.all([apiRequest("/fleet/bootstrap"), precisaOv ? apiRequest(urlOverview()) : null]);
     S.d = d;
     if (ov) S.ov = ov;
     if (S.vista === "custos") await carregarCustos();
+    if (S.vista === "configuracoes") S.cfg = await apiRequest("/fleet/config");
     S.erro = null;
   } catch (e) {
     S.erro = e.message;
@@ -770,6 +952,7 @@ export async function render(meta) {
   S.vista = meta?.vista || "painel";
   const qs = new URLSearchParams(window.location.search);
   S.v = qs.get("viatura") || "";
+  S.tab = CFG_TABS.some(([k]) => k === qs.get("tab")) ? qs.get("tab") : "mot";
 
   const acts = document.getElementById("financePageActions");
   const novo = NOVO[S.vista];
@@ -788,6 +971,7 @@ export async function render(meta) {
     const k = e.target.dataset.f;
     if (!k) return;
     S[k] = e.target.value;
+    if (S.vista === "painel" && k === "mes") return recarregarPainel();
     if (S.vista === "custos") {
       S.custos = null;
       desenhar();
@@ -799,6 +983,13 @@ export async function render(meta) {
     }
     desenhar();
   });
+  el.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const c = e.target.closest?.(".fr-card[data-frv]");
+    if (!c) return;
+    e.preventDefault();
+    formViatura(vById(c.dataset.frv));
+  });
   el.addEventListener("click", async (e) => {
     const t = e.target;
     const c = t.closest("[data-chip]");
@@ -807,6 +998,35 @@ export async function render(meta) {
       S[k] = v;
       return desenhar();
     }
+    const grp = t.closest("[data-frg]");
+    if (grp) {
+      S.g = grp.dataset.frg;
+      return S.vista === "painel" ? recarregarPainel() : desenhar();
+    }
+    const pg = t.closest("[data-frpg]");
+    if (pg) {
+      S.per = pg.dataset.frpg;
+      return recarregarPainel();
+    }
+    if (t.matches("[data-frina]")) {
+      S.so = t.checked ? "inativas" : "";
+      return desenhar();
+    }
+    const cv = t.closest("[data-frcusv]");
+    if (cv) {
+      window.location.href = `/frota/custos?viatura=${encodeURIComponent(cv.dataset.frcusv)}`;
+      return;
+    }
+    const tab = t.closest("[data-frtab]");
+    if (tab) {
+      Object.assign(S, { tab: tab.dataset.frtab, q: "", e: "", so: "", v: "" });
+      const u = new URL(window.location.href);
+      u.searchParams.set("tab", S.tab);
+      window.history.replaceState(null, "", u);
+      return desenhar();
+    }
+    const cn = t.closest("[data-frcfgnovo]");
+    if (cn) return CFG_NOVO[cn.dataset.frcfgnovo]?.[1]();
     const per = t.closest("[data-frper]");
     if (per) {
       [S.de, S.ate] = per.dataset.frper.split("|");

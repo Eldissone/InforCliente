@@ -336,6 +336,7 @@ export const ACCESSIBLE_FALLBACK_ROUTES = [
   { spec: "navlinks:nav_cotacao&obras:view", path: "/Projectos/Cotacao/index.html" },
   { spec: "navlinks:nav_centros_gerais&pedidosExtras:view", path: "/Financeiro/centro-pagamentos" },
   { spec: "navlinks:nav_frota&frota:view", path: "/frota/painel" },
+  { spec: "navlinks:nav_oficina&oficina:view", path: "/frota/oficina" },
   { spec: "navlinks:nav_registos&cadastros:view", path: "/registos/contactos" },
   { spec: "navlinks:nav_registos&materiais:view", path: "/registos/produtos" },
   { spec: "navlinks:nav_registos&ferramentas:view", path: "/registos/equipamentos" },

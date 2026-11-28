@@ -107,11 +107,20 @@ export const APP_MENU = [
     navPerm: "navlinks:nav_logistica|navlinks:nav_cotacao|navlinks:nav_centros_gerais",
     children: [
       {
+        // Protótipo v669: Pedidos · Cotações e Mapas · Encomendas · Receções · Fornecedores · Produtos e Serviços · Base de Preços
         label: "Compras",
         icon: "shopping_cart",
         children: [
           {
-            label: "Pedidos de Cotação",
+            label: "Pedidos de Compra",
+            icon: "inbox",
+            selector: LOGISTICS_SELECTOR,
+            href: "/Stock",
+            navPerm: "navlinks:nav_logistica",
+            perm: "stock:view|logistica:view|obras:tab_stock_requests",
+          },
+          {
+            label: "Cotações",
             icon: "request_quote",
             selector: "[data-nav-cotacao]",
             href: "/Projectos/Cotacao",
@@ -126,68 +135,54 @@ export const APP_MENU = [
             perm: "stock:view|logistica:view|financeiro:view",
           },
           {
-            label: "Base de Preços",
-            icon: "sell",
-            href: "/compras/base-precos",
+            label: "Encomendas",
+            icon: "receipt_long",
+            href: "/compras/compromissos",
             navPerm: "navlinks:nav_logistica|navlinks:nav_cotacao",
             perm: "stock:view|logistica:view|financeiro:view",
           },
           {
-            label: "Fornecedores",
+            label: "Receções",
             icon: "local_shipping",
+            href: "/Stock?tab=deliveries",
+            navPerm: "navlinks:nav_logistica",
+            perm: "logistica:tab_deliveries|logistica:view",
+          },
+          {
+            label: "Fornecedores",
+            icon: "storefront",
             href: "/fornecedores",
             navPerm: "navlinks:nav_logistica|navlinks:nav_cotacao|navlinks:nav_financeiro",
             perm: "fornecedores:view|stock:view|financeiro:view",
           },
-        ],
-      },
-      {
-        label: "Encomendas",
-        icon: "assignment",
-        navPerm: "navlinks:nav_logistica|navlinks:nav_cotacao",
-        children: [
           {
-            label: "Compromissos Pendentes",
-            icon: "pending_actions",
-            href: "/compras/compromissos",
+            label: "Produtos e Serviços",
+            icon: "sell",
+            href: "/produtos",
+            navPerm: "navlinks:nav_logistica|navlinks:nav_cotacao",
+            perm: "materiais:view",
+          },
+          {
+            label: "Base de Preços",
+            icon: "price_change",
+            href: "/compras/base-precos",
+            navPerm: "navlinks:nav_logistica|navlinks:nav_cotacao",
             perm: "stock:view|logistica:view|financeiro:view",
           },
-          {
-            label: "Conta Corrente de Fornecedores",
-            icon: "account_box",
-            href: "/compras/conta-corrente-fornecedores",
-            perm: "financeiro:view|fornecedores:view|stock:view",
-          },
         ],
       },
       {
+        // Protótipo v669/v671: Stock por Armazém · Movimentos · Requisições Internas · Ferramentas e Equipamentos · Configurar Armazéns
         label: "Stock",
         icon: "warehouse",
         navPerm: "navlinks:nav_logistica",
         children: [
-          { label: "Requisições Internas", icon: "assignment_add", href: "/requisicoes", perm: "obras:view|stock:view" },
-          { label: "Movimentos por Confirmar", icon: "fact_check", href: "/Stock?tab=deliveries", perm: "logistica:tab_deliveries|logistica:view" },
           { label: "Stock por Armazém", icon: "inventory", href: "/compras/stock-armazem", perm: "stock:view" },
-          { label: "Movimentos de Armazém", icon: "history", href: "/compras/movimentos-armazem", perm: "stock:view" },
+          { label: "Movimentos", icon: "sync_alt", href: "/compras/movimentos-armazem", perm: "stock:view" },
+          { label: "Requisições Internas", icon: "assignment_add", href: "/requisicoes", perm: "obras:view|stock:view" },
           { label: "Ferramentas e Equipamentos", icon: "handyman", href: "/equipamentos", perm: "ferramentas:view|ferramentas:tab_tools" },
-          { label: "Armazéns", icon: "warehouse", href: "/registos/armazens", perm: "stock:tab_warehouses|stock:view" },
-          {
-            label: "Pedidos de Logística",
-            icon: "inventory_2",
-            selector: LOGISTICS_SELECTOR,
-            href: "/Stock",
-            perm: "stock:view|logistica:view|obras:tab_stock_requests",
-          },
-        ],
-      },
-      {
-        label: "Registos",
-        icon: "folder_open",
-        navPerm: "navlinks:nav_logistica|navlinks:nav_cotacao",
-        children: [
-          { label: "Produtos e Serviços", icon: "inventory_2", href: "/produtos", perm: "materiais:view" },
-          { label: "Categorias de Produtos e Serviços", icon: "category", href: "/registos/categorias-produtos", perm: "materiais:view" },
-          { label: "Terceiros", icon: "groups", href: "/registos/terceiros", perm: "fornecedores:view" },
+          { label: "Configurar Armazéns", icon: "settings", href: "/registos/armazens", perm: "stock:tab_warehouses|stock:view" },
+          { label: "Categorias de Produtos", icon: "category", href: "/registos/categorias-produtos", perm: "materiais:view" },
         ],
       },
     ],
@@ -321,47 +316,21 @@ export const APP_MENU = [
     type: "group",
     label: "Frota",
     icon: "local_shipping",
-    navPerm: "navlinks:nav_frota",
+    navPerm: "navlinks:nav_frota|navlinks:nav_oficina",
     children: [
+      { label: "Frota", icon: "airport_shuttle", href: "/frota/viaturas", navPerm: "navlinks:nav_frota", perm: "frota:view" },
+      { label: "Painel de Gestão", icon: "insights", href: "/frota/painel", navPerm: "navlinks:nav_frota", perm: "frota:view" },
+      { label: "Configurações", icon: "settings", href: "/frota/configuracoes", navPerm: "navlinks:nav_frota", perm: "frota:view" },
       {
-        label: "Painel",
-        icon: "insights",
+        // Protótipo v667: Oficina (Calendário · Ordens de Trabalho · Material · Indicadores)
+        label: "Oficina",
+        icon: "car_repair",
+        navPerm: "navlinks:nav_oficina|navlinks:nav_frota",
         children: [
-          { label: "Painel da Frota", icon: "insights", href: "/frota/painel", perm: "frota:view" },
-          { label: "Alertas", icon: "notifications_active", href: "/frota/alertas", perm: "frota:view" },
-        ],
-      },
-      {
-        label: "Frota",
-        icon: "airport_shuttle",
-        children: [
-          { label: "Viaturas e Equipamentos", icon: "local_shipping", href: "/frota/viaturas", perm: "frota:view" },
-          { label: "Motoristas", icon: "badge", href: "/frota/motoristas", perm: "frota:view" },
-        ],
-      },
-      {
-        label: "Operação",
-        icon: "build",
-        children: [
-          { label: "Abastecimentos", icon: "local_gas_station", href: "/frota/abastecimentos", perm: "frota:view" },
-          { label: "Manutenções e Reparações", icon: "car_repair", href: "/frota/manutencoes", perm: "frota:view" },
-          { label: "Planos Preventivos", icon: "event_repeat", href: "/frota/planos", perm: "frota:view" },
-          { label: "Ocorrências e Acidentes", icon: "car_crash", href: "/frota/ocorrencias", perm: "frota:view" },
-        ],
-      },
-      {
-        label: "Controlo",
-        icon: "verified",
-        children: [
-          { label: "Documentos", icon: "description", href: "/frota/documentos", perm: "frota:view" },
-          { label: "Seguros", icon: "verified_user", href: "/frota/seguros", perm: "frota:view" },
-        ],
-      },
-      {
-        label: "Custos",
-        icon: "payments",
-        children: [
-          { label: "Custos por Viatura", icon: "price_check", href: "/frota/custos", perm: "frota:view" },
+          { label: "Calendário", icon: "calendar_month", href: "/frota/oficina", perm: "oficina:view|frota:view" },
+          { label: "Ordens de Trabalho", icon: "build", href: "/frota/ordens", perm: "oficina:view|frota:view" },
+          { label: "Material", icon: "inventory_2", href: "/frota/material", perm: "oficina:view|frota:view" },
+          { label: "Indicadores", icon: "monitoring", href: "/frota/indicadores", perm: "oficina:view|frota:view" },
         ],
       },
     ],
@@ -565,6 +534,11 @@ function isSidebarLinkActive(link) {
   const current = window.location.pathname.replace(/\\/g, "/").toLowerCase();
   const href = (link.getAttribute("href") || "").replace(/\/+$/, "").toLowerCase();
   if (href === "/orcamentacao") return current.startsWith("/orcamentacao/");
+  // Frota: os registos (abastecimentos, documentos…) abrem-se a partir do Painel de Gestão
+  if (href === "/frota/painel") {
+    const registos = ["painel", "alertas", "abastecimentos", "manutencoes", "planos", "ocorrencias", "documentos", "seguros", "motoristas", "custos"];
+    return registos.some((r) => current.replace(/\/+$/, "") === `/frota/${r}`);
+  }
   if (link.matches("[data-nav-obras]")) {
     return current.includes("/projectos/")
       && !current.includes("/projectos/centrocustos")

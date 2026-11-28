@@ -3299,41 +3299,49 @@ model FleetFuel {
 
 /// V6 Manutenções e Reparações (o `FX.fint` do protótipo).
 model FleetIntervention {
-  id           String    @id @default(cuid())
+  id              String    @id @default(cuid())
   /// OS-2026-001…
-  code         String    @unique
-  date         DateTime
-  vehicleId    String
-  odometer     Decimal?  @db.Decimal(14, 1)
+  code            String    @unique
+  date            DateTime
+  /// Vazia nas ordens de trabalho de clientes externos (workOrder.ext)
+  vehicleId       String?
+  odometer        Decimal?  @db.Decimal(14, 1)
   /// Manutenção Preventiva, Manutenção Correctiva, Reparação…
-  type         String
-  system       String?
-  description  String
-  supplierId   String?
-  workshop     String?
-  technician   String?
-  entryDate    DateTime?
-  exitDate     DateTime?
+  type            String
+  system          String?
+  description     String
+  supplierId      String?
+  workshop        String?
+  technician      String?
+  entryDate       DateTime?
+  exitDate        DateTime?
   /// Em curso | Concluída
-  status       String    @default("Concluída")
-  laborCost    Decimal?  @db.Decimal(16, 2)
-  partsCost    Decimal?  @db.Decimal(16, 2)
-  otherCost    Decimal?  @db.Decimal(16, 2)
-  warranty     String?
-  nextAction   String?
-  nextDate     DateTime?
-  nextOdometer Decimal?  @db.Decimal(14, 1)
+  status          String    @default("Concluída")
+  laborCost       Decimal?  @db.Decimal(16, 2)
+  partsCost       Decimal?  @db.Decimal(16, 2)
+  otherCost       Decimal?  @db.Decimal(16, 2)
+  warranty        String?
+  nextAction      String?
+  nextDate        DateTime?
+  nextOdometer    Decimal?  @db.Decimal(14, 1)
   /// Planos preventivos cumpridos por esta intervenção (ids de FleetVehicle.maintenancePlans)
-  planIds      String[]  @default([])
-  incidentId   String?
-  notes        String?
-  createdById  String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  planIds         String[]  @default([])
+  incidentId      String?
+  notes           String?
+  /// Oficina (protótipo v660): estado da ordem de trabalho — Pedido, Marcado, Recebida, Em Trabalho,
+  /// Concluído, Entregue, Cancelado. Vazio numa intervenção registada sem passar pela oficina.
+  workOrderStatus String?
+  /// { origem, prio, dm, hm, de, tec, pedido:{d,por,porId,dp,hp,obs}, trab:[{desc,est,nota}], matMBT,
+  ///   mat:[{desc,q,un,est,qR,qA}], horas:[{tec,d,ini,fim}], chat:[{d,por,t}], ext:{cli,mat,viat,tel} }
+  workOrder       Json?
+  createdById     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  vehicle FleetVehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  vehicle FleetVehicle? @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
 
   @@index([vehicleId, date])
+  @@index([workOrderStatus])
 }
 
 /// V8 Ocorrências e Acidentes (o `FX.focr` do protótipo).
